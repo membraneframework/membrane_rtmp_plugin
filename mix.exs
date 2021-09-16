@@ -1,24 +1,25 @@
-defmodule Membrane.Template.Mixfile do
+defmodule Membrane.RTMP.Mixfile do
   use Mix.Project
 
   @version "0.1.0"
-  @github_url "https://github.com/membraneframework/membrane_template_plugin"
+  @github_url "https://github.com/membraneframework/membrane_rtmp_plugin"
 
   def project do
     [
-      app: :membrane_template_plugin,
+      app: :membrane_rtmp_plugin,
       version: @version,
       elixir: "~> 1.12",
       elixirc_paths: elixirc_paths(Mix.env()),
+      compilers: [:unifex, :bundlex] ++ Mix.compilers(),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
 
       # hex
-      description: "Template Plugin for Membrane Multimedia Framework",
+      description: "RTMP Plugin for Membrane Multimedia Framework",
       package: package(),
 
       # docs
-      name: "Membrane Template plugin",
+      name: "Membrane RTMP plugin",
       source_url: @github_url,
       homepage_url: "https://membraneframework.org",
       docs: docs()
@@ -37,9 +38,11 @@ defmodule Membrane.Template.Mixfile do
   defp deps do
     [
       {:membrane_core, "~> 0.7.0"},
+      {:unifex, "~> 0.7.0"},
       {:ex_doc, "~> 0.24", only: :dev, runtime: false},
       {:dialyxir, "~> 1.1", only: :dev, runtime: false},
-      {:credo, "~> 1.5", only: :dev, runtime: false}
+      {:credo, "~> 1.5", only: :dev, runtime: false},
+      {:membrane_file_plugin, "~> 0.6.0"},
     ]
   end
 
