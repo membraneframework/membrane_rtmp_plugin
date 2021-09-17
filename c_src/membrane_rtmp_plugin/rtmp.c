@@ -7,6 +7,8 @@ static int64_t IOSeekFunc (void *opaque, int64_t offset, int whence);
 UNIFEX_TERM create(UnifexEnv* env, char* url) {
     State* s = unifex_alloc_state(env);
     s->input_ctx = avformat_alloc_context();
+    s->ready = false;
+
     unifex_self(env, &s->target);
     AVDictionary *d = NULL;
     av_dict_set(&d, "rtmp_listen", "1", 0);
@@ -56,22 +58,20 @@ UNIFEX_TERM create(UnifexEnv* env, char* url) {
     return create_result_ok(env, s);
 }
 
-UNIFEX_TERM get_frame(UnifexEnv* env, State* state) {
-    state->env = env;
-    if(!state || !state->input_ctx || !state->output_ctx) {
-        return get_frame_result_error(env, "Invalid state");
+void* get_frame(void* opaque) {
+    State* state = (State*) opaque;
+
+    if(!state || !state->input_ctx || !state->output_ctx || state->ready) {
+        printf("Tried to stream with invalid state, terminating the process");
+        return NULL;
     }
 
+    UnifexEnv* env = unifex_alloc_env(NULL);
     AVPacket packet; 
-    UNIFEX_TERM res;
-    
-
-    if(av_read_frame(state->input_ctx, &packet) >= 0) {
-        bool is_valid = packet.stream_index >= state->number_of_streams || state->streams_index[packet.stream_index] < 0;
-        if (is_valid) {
-            res = get_frame_result_error(env, "Invalid stream index");
-            av_packet_unref(&packet);
-        } else {
+    state->ready = true;
+ 
+    while(state->ready && av_read_frame(state->input_ctx, &packet) >= 0) {
+        if(!(packet.stream_index >= state->number_of_streams || state->streams_index[packet.stream_index] < 0)) {
             AVStream* in_stream  = state->input_ctx->streams[packet.stream_index];
             packet.stream_index = state->streams_index[packet.stream_index];
             AVStream* out_stream = state->output_ctx->streams[packet.stream_index];
@@ -83,19 +83,44 @@ UNIFEX_TERM get_frame(UnifexEnv* env, State* state) {
             packet.pos = -1;
             
             av_interleaved_write_frame(state->output_ctx, &packet);
-            av_packet_unref(&packet);
-
-            res = get_frame_result_ok(env);
         }
-    } else {
-        res = get_frame_result_error(env, "stream finished");
+
+        av_packet_unref(&packet); // always unref that packet or bad things will happen
     }
-    
-    return res;
+
+    state->ready = false; 
+    av_write_trailer(state->output_ctx);
+    send_end_of_stream(env, state->target, UNIFEX_SEND_THREADED);
+    unifex_free_env(env);
+    env = NULL;
+
+    return NULL;
+}
+
+UNIFEX_TERM stream_frames(UnifexEnv* env, State* state) {
+    if(!state || !state->input_ctx || !state->output_ctx || state->ready) {
+        return stream_frames_result_error(env, "Already streaming");
+    }
+
+    unifex_thread_create(NULL, &state->thread, get_frame, state);
+    return stream_frames_result_ok(env); 
+}
+
+UNIFEX_TERM stop_streaming(UnifexEnv* env, State* state) {
+    if(!state || !state->ready) {
+        return stop_streaming_result_error(env, "Already stopped");
+    }
+
+    // mark the process as not ready to stream.The thread will finish processing the current frame and exit. Some data might be lost :'(
+    // the thread will also write the format trailer before exiting, depending on the format
+    state->ready = false; 
+    unifex_thread_join(state->thread, NULL); // join ignoring return value
+    return stop_streaming_result_ok(env);
 }
 
 void handle_destroy_state(UnifexEnv* env, State* s) {
     UNIFEX_UNUSED(env);
+    stop_streaming(env, s);
     if(s->input_ctx) {
         avformat_close_input(&s->input_ctx);
     }
@@ -112,17 +137,19 @@ static int IOWriteFunc(void *opaque, uint8_t *buf, int buf_size) {
     unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, buf_size, payload);
     memcpy(payload->data, buf, buf_size);
     
-    if(!send_data(env, s->target, UNIFEX_SEND_THREADED, payload)) {       
+    if(!send_frame(env, s->target, UNIFEX_SEND_THREADED, payload)) {       
         printf("Error sending data\n");
     }
     unifex_payload_release(payload);
     unifex_free(payload);
+    unifex_free_env(env);
+    env = NULL;
     payload = NULL;
     
     return buf_size;
 }
 
-static int64_t IOSeekFunc (void *opaque, int64_t offset, int whence) {
+static int64_t IOSeekFunc (void *, int64_t, int whence) {
     switch(whence){
         case SEEK_SET:
             return 1;

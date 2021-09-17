@@ -14,9 +14,10 @@ struct State
     uint8_t *buffer;
     int* streams_index;
     int number_of_streams;
+    bool ready;
     
     UnifexPid target;
-    UnifexEnv* env;
+    UnifexTid thread;
 };
 
 #include "_generated/rtmp.h"
