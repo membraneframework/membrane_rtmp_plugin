@@ -5,9 +5,9 @@ defmodule Functions do
     callback.()
     receive do
       {:data, data} ->
-        IO.inspect(data, label: :dupa)
+        File.write!("output.flv", data, [:binary, :append])
         recv(callback)
-      after 1000 ->
+      after 100 ->
         IO.puts("Let's get more data")
         recv(callback)
     end

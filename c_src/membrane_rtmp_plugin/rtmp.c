@@ -21,13 +21,13 @@ UNIFEX_TERM create(UnifexEnv* env, char* url) {
     }
     
     // Setup custom IO to not write to not write to a freaking file
-    s->buffer = (uint8_t *) unifex_alloc(1024);
+    s->buffer = (uint8_t *) unifex_alloc(4096);
     AVOutputFormat * const output_format = av_guess_format("flv", NULL, NULL);
 
     avformat_alloc_output_context2(&s->output_ctx, output_format,
                 NULL, NULL);
 
-    s->output_ctx->pb = avio_alloc_context( s->buffer, 1024, 1, s, 0, &IOWriteFunc, &IOSeekFunc);
+    s->output_ctx->pb = avio_alloc_context( s->buffer, 4096, 1, s, 0, &IOWriteFunc, &IOSeekFunc);
     s->output_ctx->flags |= AVFMT_FLAG_CUSTOM_IO; 
     s->output_ctx->oformat = output_format;
     
@@ -58,12 +58,13 @@ UNIFEX_TERM create(UnifexEnv* env, char* url) {
 
 UNIFEX_TERM get_frame(UnifexEnv* env, State* state) {
     state->env = env;
-    if(!state || !state->input_ctx) {
+    if(!state || !state->input_ctx || !state->output_ctx) {
         return get_frame_result_error(env, "Invalid state");
     }
 
     AVPacket packet; 
     UNIFEX_TERM res;
+    
 
     if(av_read_frame(state->input_ctx, &packet) >= 0) {
         bool is_valid = packet.stream_index >= state->number_of_streams || state->streams_index[packet.stream_index] < 0;
@@ -105,17 +106,15 @@ void handle_destroy_state(UnifexEnv* env, State* s) {
 
 //// IO Functions
 static int IOWriteFunc(void *opaque, uint8_t *buf, int buf_size) {
-    printf("IOWriteFunc: %d\n", buf_size);
     State* s = (State*) opaque;
     UnifexEnv* env = unifex_alloc_env(NULL);
     UnifexPayload* payload = unifex_alloc(sizeof(UnifexPayload));
     unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, buf_size, payload);
     memcpy(payload->data, buf, buf_size);
-    printf("Payload allocated\n");
     
     if(!send_data(env, s->target, UNIFEX_SEND_THREADED, payload)) {       
         printf("Error sending data\n");
-    } else { printf("Sent data\n"); }
+    }
     unifex_payload_release(payload);
     unifex_free(payload);
     payload = NULL;
