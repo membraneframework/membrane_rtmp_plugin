@@ -54,6 +54,7 @@ defmodule Membrane.FLV.Parser do
       case acc_packet_type do
         0 -> :aac_audio_specific_config
         1 -> :aac_frame
+        2 -> :aac_end_of_sequence
       end
 
     %{
@@ -73,6 +74,7 @@ defmodule Membrane.FLV.Parser do
       case avc_packet_type do
         0 -> :avc_decoder_configuration_record
         1 -> :avc_frame
+        2 -> :avc_end_of_sequence
       end
 
     %{

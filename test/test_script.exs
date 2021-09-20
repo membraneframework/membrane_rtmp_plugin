@@ -6,7 +6,7 @@ defmodule Membrane.RTMP.TestPipeline do
   def handle_init(_opts) do
     spec = %ParentSpec{
       children: %{
-        src: Membrane.RTMP,
+        src: %Membrane.File.Source{location: "sample.flv"},
         demuxer: Membrane.FLV.Demuxer,
         audio_sink: %Membrane.File.Sink{location: "output.aac"},
 
