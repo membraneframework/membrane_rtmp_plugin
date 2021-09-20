@@ -7,10 +7,16 @@ defmodule Membrane.RTMP.TestPipeline do
     spec = %ParentSpec{
       children: %{
         src: Membrane.RTMP,
-        sink: %Membrane.File.Sink{location: "output.flv"}
+        demuxer: Membrane.FLV.Demuxer,
+        audio_sink: %Membrane.File.Sink{location: "output.aac"},
+
+        video_parser: %Membrane.H264.FFmpeg.Parser{skip_until_keyframe?: true, framerate: {30, 1}, alignment: :au},
+        video_sink: %Membrane.File.Sink{location: "output.avc"},
       },
       links: [
-        link(:src) |> to(:sink)
+        link(:src) |> to(:demuxer),
+        link(:demuxer) |> via_out(:audio) |> to(:audio_sink),
+        link(:demuxer) |> via_out(:video) |> to(:video_parser) |> to(:video_sink)
       ]
     }
 

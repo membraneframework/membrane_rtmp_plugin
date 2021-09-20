@@ -23,13 +23,13 @@ UNIFEX_TERM create(UnifexEnv* env, char* url) {
     }
     
     // Setup custom IO to not write to not write to a freaking file
-    s->buffer = (uint8_t *) unifex_alloc(4096);
+    s->buffer = (uint8_t *) unifex_alloc(8192);
     AVOutputFormat * const output_format = av_guess_format("flv", NULL, NULL);
 
     avformat_alloc_output_context2(&s->output_ctx, output_format,
                 NULL, NULL);
 
-    s->output_ctx->pb = avio_alloc_context( s->buffer, 4096, 1, s, 0, &IOWriteFunc, &IOSeekFunc);
+    s->output_ctx->pb = avio_alloc_context( s->buffer, 8192, 1, s, 0, &IOWriteFunc, &IOSeekFunc);
     s->output_ctx->flags |= AVFMT_FLAG_CUSTOM_IO; 
     s->output_ctx->oformat = output_format;
     

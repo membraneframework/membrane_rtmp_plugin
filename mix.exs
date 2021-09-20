@@ -42,7 +42,10 @@ defmodule Membrane.RTMP.Mixfile do
       {:ex_doc, "~> 0.24", only: :dev, runtime: false},
       {:dialyxir, "~> 1.1", only: :dev, runtime: false},
       {:credo, "~> 1.5", only: :dev, runtime: false},
-      {:membrane_file_plugin, "~> 0.6.0"},
+      {:membrane_file_plugin, "~> 0.6"},
+      {:membrane_aac_format, "~> 0.3"},
+      {:membrane_element_fake, "~> 0.5"},
+      {:membrane_h264_ffmpeg_plugin, "~> 0.12"}
     ]
   end
 
