@@ -45,7 +45,12 @@ defmodule Membrane.RTMP.Mixfile do
       {:membrane_file_plugin, "~> 0.6"},
       {:membrane_aac_format, "~> 0.3"},
       {:membrane_element_fake, "~> 0.5"},
-      {:membrane_h264_ffmpeg_plugin, "~> 0.12"}
+      {:membrane_h264_ffmpeg_plugin,
+       github: "membraneframework/membrane_h264_ffmpeg_plugin", override: true},
+      {:membrane_http_adaptive_stream_plugin,
+       github: "membraneframework/membrane_http_adaptive_stream_plugin"},
+      {:membrane_mp4_plugin, github: "membraneframework/membrane_mp4_plugin", override: true},
+      {:membrane_aac_plugin, "~> 0.6"}
     ]
   end
 

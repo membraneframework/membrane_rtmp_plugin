@@ -34,7 +34,7 @@ defmodule Membrane.FLV.Parser do
 
     packet = %{
       type: resolve_type(type),
-      timestamp_extended: (timestamp_extended <<< 24) + timestamp,
+      timestamp: timestamp,
       stream_id: stream_id,
       payload: parse_packet_payload(type, payload)
     }
@@ -69,7 +69,7 @@ defmodule Membrane.FLV.Parser do
   defp parse_packet_payload(
          9,
          <<frame_type::4, 7::4, avc_packet_type::8, composition_time::24, data::binary>>
-       ) when frame_type in [1,2,5] do
+       ) do
     packet_type =
       case avc_packet_type do
         0 -> :avc_decoder_configuration_record
@@ -80,18 +80,23 @@ defmodule Membrane.FLV.Parser do
     %{
       codec: :AVC,
       packet_type: packet_type,
-      payload: data,
-      composition_time: composition_time
+      payload: if(packet_type == :avc_frame, do: to_annex_b(data), else: data),
+      composition_time: composition_time,
+      frame_type: frame_type
     }
   end
 
-  defp parse_packet_payload(9, _else), do: %{packet_type: :video, payload: :unknown_variation}
+  defp parse_packet_payload(9, _payload), do: %{packet_type: :video, payload: :unknown_variation}
 
-  defp parse_packet_payload(18, _whatever),
+  defp parse_packet_payload(18, _payload),
     do: %{packet_type: :script_data, payload: :unknown_variation}
 
   defp resolve_type(8), do: :audio
   defp resolve_type(9), do: :video
   defp resolve_type(18), do: :script_data
-  defp resolve_type(other), do: {:unknown, other}
+
+  defp to_annex_b(<<length::32, data::binary-size(length), rest::binary>>),
+    do: <<0, 0, 1>> <> data <> to_annex_b(rest)
+
+  defp to_annex_b(_otherwise), do: <<>>
 end
