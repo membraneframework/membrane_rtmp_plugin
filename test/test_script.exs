@@ -6,7 +6,7 @@ defmodule Membrane.RTMP.TestPipeline do
   def handle_init(_opts) do
     spec = %ParentSpec{
       children: %{
-        src: Membrane.RTMP,
+        src: %Membrane.RTMP.Source{port: 9009},
         demuxer: Membrane.FLV.Demuxer,
         video_parser: %Membrane.H264.FFmpeg.Parser{
           framerate: {30, 1},

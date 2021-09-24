@@ -16,7 +16,7 @@ defmodule Membrane.AAC.Timestamper do
 
   @impl true
   def handle_init(_opts) do
-    {:ok, %{timestamp: 0, partial: <<>>}}
+    {:ok, %{timestamp: 0}}
   end
 
   @impl true

@@ -176,3 +176,4 @@ $RECYCLE.BIN/
 # End of https://www.gitignore.io/api/c,vim,linux,macos,elixir,windows,visualstudiocode
 
 *.flv
+output/*
