@@ -14,7 +14,7 @@ defmodule Membrane.RTMP.TestPipeline do
           attach_nalus?: true,
           skip_until_keyframe?: true
         },
-        audio_parser: Membrane.AAC.Timestamper,
+        audio_parser: %Membrane.AAC.Parser{in_encapsulation: :none, out_encapsulation: :none},
         video_sink: %Membrane.HTTPAdaptiveStream.SinkBin{
           manifest_module: Membrane.HTTPAdaptiveStream.HLS,
           target_window_duration: 20 |> Membrane.Time.seconds(),

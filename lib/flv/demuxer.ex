@@ -1,10 +1,13 @@
 defmodule Membrane.FLV.Demuxer do
+  @moduledoc """
+  Element for demuxing FLV streams into audio and video streams
+  """
   use Membrane.Filter
-
-  require Membrane.Logger
 
   alias Membrane.FLV.Parser
   alias Membrane.{Buffer, AAC}
+
+  require Membrane.Logger
 
   def_input_pad :input,
     availability: :always,
@@ -28,13 +31,8 @@ defmodule Membrane.FLV.Demuxer do
 
   @impl true
   def handle_process(:input, %Buffer{payload: payload}, _ctx, state) do
-    case parse(state.partial <> payload) do
-      {:error, _reason, leftover} ->
-        {:ok, %{state | partial: leftover}}
-
-      {:ok, packets, leftover} ->
-        {{:ok, get_actions(packets)}, %{state | partial: leftover}}
-    end
+    {:ok, packets, leftover} = parse(state.partial <> payload)
+    {{:ok, get_actions(packets)}, %{state | partial: leftover}}
   end
 
   defp parse(data) do
@@ -45,9 +43,6 @@ defmodule Membrane.FLV.Demuxer do
 
       {:ok, {:packets, packets}, leftover} ->
         {:ok, packets, leftover}
-
-      {:error, reason} ->
-        {:error, reason, data}
     end
   end
 
@@ -58,7 +53,6 @@ defmodule Membrane.FLV.Demuxer do
     |> Enum.reject(&(&1.payload.payload == :unknown_variation))
     |> Enum.flat_map(fn %{
                           payload: %{payload: payload, packet_type: payload_type},
-                          type: type,
                           timestamp: timestamp
                         } ->
       case payload_type do
@@ -74,6 +68,12 @@ defmodule Membrane.FLV.Demuxer do
 
         :avc_frame ->
           [buffer: {:video, %Buffer{payload: payload}}]
+
+        :avc_end_of_sequence ->
+          [end_of_stream: :video]
+
+        :aac_end_of_sequence ->
+          [end_of_stream: :audio]
       end
     end)
   end

@@ -1,4 +1,27 @@
 defmodule Membrane.AVC.Configuration do
+  @moduledoc """
+  Utility functions for parsing AVC Configuration Record
+  """
+  @enforce_keys [
+    :sps,
+    :pps,
+    :avc_profile_indication,
+    :avc_level,
+    :profile_compatibility,
+    :length_size
+  ]
+  defstruct @enforce_keys
+
+  @type t() :: %__MODULE__{
+          sps: [binary()],
+          pps: [binary()],
+          avc_profile_indication: non_neg_integer(),
+          profile_compatibility: non_neg_integer(),
+          avc_level: non_neg_integer(),
+          length_size: non_neg_integer()
+        }
+
+  @spec parse(binary()) :: t()
   def parse(
         <<1::8, avc_profile_indication::8, profile_compatibility::8, avc_level::8, 0b111111::6,
           length_size::2, 0b111::3, rest::bitstring>>
@@ -6,7 +29,7 @@ defmodule Membrane.AVC.Configuration do
     {sps, rest} = parse_sps(rest)
     {pps, _rest} = parse_pps(rest)
 
-    %{
+    %__MODULE__{
       sps: sps,
       pps: pps,
       avc_profile_indication: avc_profile_indication,

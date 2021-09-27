@@ -1,4 +1,9 @@
 defmodule Membrane.RTMP.Source do
+  @moduledoc """
+  This module provides a Membrane Source capable of reading RTMP Streams.
+
+  Implementation based on FFmpeg
+  """
   use Membrane.Source
   alias __MODULE__.Native
   require Membrane.Logger
@@ -9,7 +14,7 @@ defmodule Membrane.RTMP.Source do
     mode: :push
 
   def_options port: [
-                spec: port(),
+                spec: 1..65535,
                 description: "Port on which the server will listen"
               ],
               local_ip: [
@@ -40,6 +45,7 @@ defmodule Membrane.RTMP.Source do
     # Native.create is blocking. Hence, the element will only go from prepared to playing when a new connection is established.
     # This might not be desirable, but unfortunately this is caused by the fact that FFmpeg's create_input_stream is awaiting a new connection from the client before returning.
     rtmp_address = "rtmp://#{state.local_ip}:#{state.port}"
+
     with {:ok, native} <- Native.create(rtmp_address),
          :ok <- Native.stream_frames(native) do
       Membrane.Logger.debug("Connection estabilished")

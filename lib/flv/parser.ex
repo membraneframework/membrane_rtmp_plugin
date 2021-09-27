@@ -1,4 +1,7 @@
 defmodule Membrane.FLV.Parser do
+  @moduledoc false
+
+  @spec parse(binary()) :: {:ok, {:header, map()} | {:packets, [map()]}, rest :: binary()}
   def parse(data) do
     case parse_header(data) do
       {:ok, _, _} = return -> return
@@ -6,6 +9,8 @@ defmodule Membrane.FLV.Parser do
     end
   end
 
+  @spec parse_header(binary()) ::
+          {:ok, {:header, header :: map()}, rest :: binary()} | {:error, any()}
   def parse_header(
         <<"FLV", 0x01::8, 0::5, audio_present?::1, 0::1, video_present?::1, data_offset::32,
           _rest::binary>> = frame
@@ -22,12 +27,13 @@ defmodule Membrane.FLV.Parser do
 
   def parse_header(_else), do: {:error, :invalid_header}
 
-  def flag_to_boolean(1), do: true
-  def flag_to_boolean(0), do: false
+  defp flag_to_boolean(1), do: true
+  defp flag_to_boolean(0), do: false
 
+  @spec parse_packets(any) :: {:ok, {:packets, [map()]}, any}
   def parse_packets(
         <<_previous_tag_size::32, _reserved::2, 0::1, type::5, data_size::24, timestamp::24,
-          timestamp_extended::8, stream_id::24, payload::binary-size(data_size), rest::binary>>
+          _timestamp_extended::8, stream_id::24, payload::binary-size(data_size), rest::binary>>
       ) do
     use Bitwise
     {:ok, {:packets, packets}, leftover} = parse_packets(rest)

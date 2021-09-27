@@ -50,7 +50,8 @@ defmodule Membrane.RTMP.Mixfile do
       {:membrane_http_adaptive_stream_plugin,
        github: "membraneframework/membrane_http_adaptive_stream_plugin"},
       {:membrane_mp4_plugin, github: "membraneframework/membrane_mp4_plugin", override: true},
-      {:membrane_aac_plugin, "~> 0.6"}
+      {:membrane_aac_plugin,
+       github: "membraneframework/membrane_aac_plugin", branch: "support-none-encapsulation"}
     ]
   end
 
