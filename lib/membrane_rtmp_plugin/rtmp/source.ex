@@ -14,7 +14,7 @@ defmodule Membrane.RTMP.Source do
     mode: :push
 
   def_options port: [
-                spec: 1..65535,
+                spec: 1..65_535,
                 description: "Port on which the server will listen"
               ],
               local_ip: [
