@@ -1,4 +1,4 @@
-module Membrane.RTMP.Source.Native
+module Membrane.RTMP.Source.Element.Native
 
 state_type "State"
 interface ["NIF"]

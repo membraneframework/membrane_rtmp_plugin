@@ -49,7 +49,6 @@ defmodule Membrane.RTMP.Mixfile do
        github: "membraneframework/membrane_h264_ffmpeg_plugin", override: true},
       {:membrane_http_adaptive_stream_plugin,
        github: "membraneframework/membrane_http_adaptive_stream_plugin"},
-      {:membrane_mp4_plugin, github: "membraneframework/membrane_mp4_plugin", override: true},
       {:membrane_aac_plugin,
        github: "membraneframework/membrane_aac_plugin", branch: "support-none-encapsulation"}
     ]
