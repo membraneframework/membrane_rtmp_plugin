@@ -1,6 +1,6 @@
-defmodule Membrane.RTMP.Source do
+defmodule Membrane.RTMP.Source.Element do
   @moduledoc """
-  This module provides a Membrane Source capable of reading RTMP Streams.
+  Membrane Element being a server-side source of RTMP streams.
 
   Implementation based on FFmpeg
   """
@@ -21,7 +21,8 @@ defmodule Membrane.RTMP.Source do
               local_ip: [
                 spec: binary(),
                 default: "127.0.0.1",
-                description: "IP address on which the server will listen"
+                description:
+                  "IP address on which the server will listen. This is useful if you have more than one network interface"
               ],
               timeout: [
                 spec: Time.t() | :infinity,

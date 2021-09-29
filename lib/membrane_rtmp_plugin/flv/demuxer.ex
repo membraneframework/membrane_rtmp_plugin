@@ -21,7 +21,6 @@ defmodule Membrane.FLV.Demuxer do
 
   def_output_pad :video,
     availability: :always,
-    # FIXME: this pad needs to be connected to H.264 Parser. Preferably, just create a bin for RTMP
     caps: :any,
     mode: :push
 
