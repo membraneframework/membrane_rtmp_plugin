@@ -6,11 +6,12 @@ defmodule Membrane.RTMP.Source do
   """
   use Membrane.Source
   alias __MODULE__.Native
+  alias Membrane.{FLV, Time}
   require Membrane.Logger
 
   def_output_pad :output,
     availability: :always,
-    caps: :any,
+    caps: {FLV, mode: :packets},
     mode: :push
 
   def_options port: [
@@ -23,16 +24,13 @@ defmodule Membrane.RTMP.Source do
                 description: "IP address on which the server will listen"
               ],
               timeout: [
-                spec: Membrane.Time.t() | :infinity,
+                spec: Time.t() | :infinity,
                 default: :infinity,
-                description:
-                  "Currently unsupported. Time during which the connection with the client must be established"
-              ],
-              server?: [
-                spec: bool(),
-                default: false,
-                description:
-                  "Currently unsupported. Defines whether the source should act like a server or connect to a server and stream directly from it"
+                description: """
+                Time during which the connection with the client must be established before handle_prepared_to_playing fails.
+
+                Duration given must be a multiply of one second.
+                """
               ]
 
   @impl true
@@ -46,20 +44,19 @@ defmodule Membrane.RTMP.Source do
     # This might not be desirable, but unfortunately this is caused by the fact that FFmpeg's create_input_stream is awaiting a new connection from the client before returning.
     rtmp_address = "rtmp://#{state.local_ip}:#{state.port}"
 
-    with {:ok, native} <- Native.create(rtmp_address),
+    with {:ok, native} <- Native.create(rtmp_address, state.timeout),
          :ok <- Native.stream_frames(native) do
-      Membrane.Logger.debug("Connection estabilished")
+      Membrane.Logger.debug("Connection established @ #{rtmp_address}")
       {:ok, %{state | native: native}}
     else
       {:error, reason} ->
-        Membrane.Logger.error("Connection failed: #{reason}")
-        {{:error, reason}, state}
+        raise("Transition to state playing failed because of: `#{reason}`")
     end
   end
 
   @impl true
   def handle_playing_to_prepared(_ctx, state) do
-    Native.stop_streaming(state.native)
+    if not is_nil(state.native), do: Native.stop_streaming(state.native)
     {:ok, %{state | native: nil}}
   end
 

@@ -4,22 +4,27 @@
 static int IOWriteFunc(void *opaque, uint8_t *buf, int buf_size);
 static int64_t IOSeekFunc (void *opaque, int64_t offset, int whence);
 
-UNIFEX_TERM create(UnifexEnv* env, char* url) {
+UNIFEX_TERM native_create(UnifexEnv* env, char* url, char* timeout) {
     State* s = unifex_alloc_state(env);
     s->input_ctx = avformat_alloc_context();
     s->ready = false;
 
     unifex_self(env, &s->target);
     AVDictionary *d = NULL;
-    av_dict_set(&d, "rtmp_listen", "1", 0);
+    av_dict_set(&d, "listen", "1", 0);
+    
+    if(strcmp(timeout, "0") != 0) { // 0 indicates that timeout should be infinity
+        printf("Setting timeout to %s\n", timeout);
+        av_dict_set(&d, "timeout", timeout, 0);
+    }
+
     if(avformat_open_input(&s->input_ctx, url, NULL, &d) < 0) {
-        unifex_free(s);
-        return create_result_error(env, "Cannot open input");
+        return native_create_result_error(env, "Couldn't open input. This might be caused by invalid address, occupied port or connection timeout");
     }
 
     if(avformat_find_stream_info(s->input_ctx, NULL) < 0) {
         unifex_free(s);
-        return create_result_error(env, "Couldn't get stream info");
+        return native_create_result_error(env, "Couldn't get stream info");
     }
     
     // Setup custom IO to not write to not write to a freaking file
@@ -55,7 +60,7 @@ UNIFEX_TERM create(UnifexEnv* env, char* url) {
     av_dump_format(s->output_ctx, 0, NULL, 1);
     avformat_write_header(s->output_ctx, NULL);
 
-    return create_result_ok(env, s);
+    return native_create_result_ok(env, s);
 }
 
 void* get_frame(void* opaque) {
@@ -76,7 +81,7 @@ void* get_frame(void* opaque) {
             packet.stream_index = state->streams_index[packet.stream_index];
             AVStream* out_stream = state->output_ctx->streams[packet.stream_index];
 
-            /* copy packet */
+            // copy packet and rescale timestamps 
             packet.pts = av_rescale_q_rnd(packet.pts, in_stream->time_base, out_stream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
             packet.dts = av_rescale_q_rnd(packet.dts, in_stream->time_base, out_stream->time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
             packet.duration = av_rescale_q(packet.duration, in_stream->time_base, out_stream->time_base);
@@ -111,8 +116,8 @@ UNIFEX_TERM stop_streaming(UnifexEnv* env, State* state) {
         return stop_streaming_result_error(env, "Already stopped");
     }
 
-    // mark the process as not ready to stream.The thread will finish processing the current frame and exit. Some data might be lost :'(
-    // the thread will also write the format trailer before exiting, depending on the format
+    // mark the process as not ready to stream.The thread will finish processing the current frame and exit. Some data might be lost
+    // the thread might also write the format trailer before exiting, depending on the format
     state->ready = false; 
     unifex_thread_join(state->thread, NULL); // join ignoring return value
     return stop_streaming_result_ok(env);
