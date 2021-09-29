@@ -5,22 +5,23 @@ defmodule Membrane.FLV.Demuxer do
   use Membrane.Filter
 
   alias Membrane.FLV.Parser
-  alias Membrane.{Buffer, AAC}
+  alias Membrane.{Buffer, AAC, FLV}
 
   require Membrane.Logger
 
   def_input_pad :input,
     availability: :always,
-    caps: :any,
+    caps: {FLV, mode: :packets},
     mode: :push
 
   def_output_pad :audio,
     availability: :always,
-    caps: :any,
+    caps: {AAC, encapsulation: :none},
     mode: :push
 
   def_output_pad :video,
     availability: :always,
+    # FIXME: this pad needs to be connected to H.264 Parser. Preferably, just create a bin for RTMP
     caps: :any,
     mode: :push
 
