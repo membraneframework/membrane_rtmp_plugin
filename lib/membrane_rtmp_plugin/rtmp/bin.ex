@@ -35,29 +35,18 @@ defmodule Membrane.RTMP.Source do
                 description: """
                 Time during which the connection with the client must be established before handle_prepared_to_playing fails.
 
-                Duration given must be a multiply of one second.
+                Duration given must be a multiply of one second or atom `:infinity`.
                 """
-              ],
-              audio_out_encapsulation: [
-                spec: AAC.encapsulation_t(),
-                default: :none,
-                description: "Encapsulation of the audio output"
               ]
 
   @impl true
   def handle_init(%__MODULE__{} = options) do
-    source =
-      options
-      |> Map.take([:port, :local_ip, :timeout])
-      |> then(&Kernel.struct!(RTMP.Source.Element, &1))
+    url = "rtmp://#{options.local_ip}:#{options.port}"
+    source = %RTMP.Source.Element{url: url, timeout: options.timeout}
 
     spec = %ParentSpec{
       children: %{
         src: source,
-        audio_parser: %Membrane.AAC.Parser{
-          in_encapsulation: :none,
-          out_encapsulation: options.audio_out_encapsulation
-        },
         video_parser: %Membrane.H264.FFmpeg.Parser{
           framerate: {30, 1},
           alignment: :au,

@@ -14,15 +14,11 @@ defmodule Membrane.RTMP.Source.Element do
     caps: {FLV, mode: :packets},
     mode: :push
 
-  def_options port: [
-                spec: 1..65_535,
-                description: "Port on which the server will listen"
-              ],
-              local_ip: [
+  def_options url: [
                 spec: binary(),
-                default: "127.0.0.1",
-                description:
-                  "IP address on which the server will listen. This is useful if you have more than one network interface"
+                description: """
+                URL on which the FFmpeg instance will be created
+                """
               ],
               timeout: [
                 spec: Time.t() | :infinity,
@@ -43,11 +39,10 @@ defmodule Membrane.RTMP.Source.Element do
   def handle_prepared_to_playing(_ctx, state) do
     # Native.create is blocking. Hence, the element will only go from prepared to playing when a new connection is established.
     # This might not be desirable, but unfortunately this is caused by the fact that FFmpeg's create_input_stream is awaiting a new connection from the client before returning.
-    rtmp_address = "rtmp://#{state.local_ip}:#{state.port}"
 
-    with {:ok, native} <- Native.create(rtmp_address, state.timeout),
+    with {:ok, native} <- Native.create(state.url, state.timeout),
          :ok <- Native.stream_frames(native) do
-      Membrane.Logger.debug("Connection established @ #{rtmp_address}")
+      Membrane.Logger.debug("Connection established @ #{state.url}")
       {:ok, %{state | native: native}}
     else
       {:error, reason} ->
