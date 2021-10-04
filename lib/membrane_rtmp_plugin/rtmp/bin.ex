@@ -68,7 +68,7 @@ defmodule Membrane.RTMP.Source do
       },
       links: [
         link(:src) |> to(:demuxer),
-        link(:demuxer) |> via_out(:audio) |> to(:audio_parser) |> to_bin_output(:audio),
+        link(:demuxer) |> via_out(:audio) |> to_bin_output(:audio),
         link(:demuxer) |> via_out(:video) |> to(:video_parser) |> to_bin_output(:video)
       ]
     }

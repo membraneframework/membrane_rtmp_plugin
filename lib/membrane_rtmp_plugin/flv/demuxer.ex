@@ -55,6 +55,8 @@ defmodule Membrane.FLV.Demuxer do
                           payload: %{payload: payload, packet_type: payload_type},
                           timestamp: timestamp
                         } ->
+      timestamp = Membrane.Time.milliseconds(timestamp)
+
       case payload_type do
         :aac_audio_specific_config ->
           [caps: {:audio, get_aac_caps(payload)}]
@@ -67,7 +69,7 @@ defmodule Membrane.FLV.Demuxer do
           [buffer: {:audio, %Buffer{metadata: %{timestamp: timestamp}, payload: payload}}]
 
         :avc_frame ->
-          [buffer: {:video, %Buffer{payload: payload}}]
+          [buffer: {:video, %Buffer{metadata: %{timestamp: timestamp}, payload: payload}}]
 
         :avc_end_of_sequence ->
           [end_of_stream: :video]
