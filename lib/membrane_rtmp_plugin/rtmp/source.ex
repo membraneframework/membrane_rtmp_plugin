@@ -30,7 +30,7 @@ defmodule Membrane.RTMP.Source.Element do
                 description: """
                 Time during which the connection with the client must be established before handle_prepared_to_playing fails.
 
-                Duration given must be a multiply of one second.
+                Duration given must be a multiply of one second or atom `:infinity`.
                 """
               ]
 
@@ -51,7 +51,7 @@ defmodule Membrane.RTMP.Source.Element do
       {:ok, %{state | native: native}}
     else
       {:error, reason} ->
-        raise("Transition to state playing failed because of: `#{reason}`")
+        raise("Transition to state `playing` failed because of: `#{reason}`")
     end
   end
 
@@ -68,7 +68,6 @@ defmodule Membrane.RTMP.Source.Element do
   end
 
   def handle_other(:end_of_stream, _ctx, state) do
-    Membrane.Logger.debug("Received end of stream")
     {{:ok, end_of_stream: :output}, state}
   end
 

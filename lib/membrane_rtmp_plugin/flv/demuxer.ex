@@ -5,7 +5,7 @@ defmodule Membrane.FLV.Demuxer do
   use Membrane.Filter
 
   alias Membrane.FLV.Parser
-  alias Membrane.{Buffer, AAC, FLV}
+  alias Membrane.{Buffer, AAC, FLV, Time}
 
   require Membrane.Logger
 
@@ -55,15 +55,11 @@ defmodule Membrane.FLV.Demuxer do
                           payload: %{payload: payload, packet_type: payload_type},
                           timestamp: timestamp
                         } ->
-      timestamp = Membrane.Time.milliseconds(timestamp)
+      timestamp = Time.milliseconds(timestamp)
 
       case payload_type do
         :aac_audio_specific_config ->
           [caps: {:audio, get_aac_caps(payload)}]
-
-        :avc_decoder_configuration_record ->
-          %{sps: [sps], pps: [pps]} = Membrane.AVC.Configuration.parse(payload)
-          [buffer: {:video, %Buffer{payload: <<0, 0, 1>> <> sps <> <<0, 0, 1>> <> pps}}]
 
         :aac_frame ->
           [buffer: {:audio, %Buffer{metadata: %{timestamp: timestamp}, payload: payload}}]
@@ -76,8 +72,16 @@ defmodule Membrane.FLV.Demuxer do
 
         :aac_end_of_sequence ->
           [end_of_stream: :audio]
+
+        _other ->
+          []
       end
     end)
+  end
+
+  @impl true
+  def handle_end_of_stream(:input, _ctx, state) do
+    {{:ok, end_of_stream: :audio, end_of_stream: :video}, state}
   end
 
   defp get_aac_caps(
