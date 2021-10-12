@@ -19,15 +19,18 @@ UNIFEX_TERM native_create(UnifexEnv* env, char* url, char* timeout) {
     }
 
     if(avformat_open_input(&s->input_ctx, url, NULL, &d) < 0) {
+        avformat_free_context(s->input_ctx);
+        unifex_release_state(env, s);
         return native_create_result_error(env, "Couldn't open input. This might be caused by invalid address, occupied port or connection timeout");
     }
 
     if(avformat_find_stream_info(s->input_ctx, NULL) < 0) {
-        unifex_free(s);
+        avformat_free_context(s->input_ctx);
+        unifex_release_state(env, s);
         return native_create_result_error(env, "Couldn't get stream info");
     }
     
-    // Setup custom IO to not write to not write to a freaking file
+    // Setup custom IO to not write to not write to a file
     s->buffer = (uint8_t *) unifex_alloc(8192);
     AVOutputFormat * const output_format = av_guess_format("flv", NULL, NULL);
 
@@ -58,7 +61,11 @@ UNIFEX_TERM native_create(UnifexEnv* env, char* url, char* timeout) {
     }
     
     av_dump_format(s->output_ctx, 0, NULL, 1);
-    avformat_write_header(s->output_ctx, NULL);
+    if(avformat_write_header(s->output_ctx, NULL) < 0) {
+        avformat_free_context(s->output_ctx); avformat_free_context(s->input_ctx);
+        unifex_release_state(env, s);
+        return native_create_result_error(env, "Couldn't write header");
+    }
 
     return native_create_result_ok(env, s);
 }
@@ -135,7 +142,7 @@ void handle_destroy_state(UnifexEnv* env, State* s) {
 }
 
 //// IO Functions
-static int IOWriteFunc(void *opaque, uint8_t *buf, int buf_size) {
+static int IOWriteFunc(void* opaque, uint8_t *buf, int buf_size) {
     State* s = (State*) opaque;
     UnifexEnv* env = unifex_alloc_env(NULL);
     UnifexPayload* payload = unifex_alloc(sizeof(UnifexPayload));
@@ -148,13 +155,11 @@ static int IOWriteFunc(void *opaque, uint8_t *buf, int buf_size) {
     unifex_payload_release(payload);
     unifex_free(payload);
     unifex_free_env(env);
-    env = NULL;
-    payload = NULL;
     
     return buf_size;
 }
 
-static int64_t IOSeekFunc (void *, int64_t, int whence) {
+static int64_t IOSeekFunc (void * __attribute__((__unused__)) opaque, int64_t __attribute__((__unused__)) size, int whence) {
     switch(whence){
         case SEEK_SET:
             return 1;
