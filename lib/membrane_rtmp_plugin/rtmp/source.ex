@@ -65,8 +65,4 @@ defmodule Membrane.RTMP.Source.Element do
   def handle_other(:end_of_stream, _ctx, state) do
     {{:ok, end_of_stream: :output}, state}
   end
-
-  def handle_other(msg, _ctx, state) do
-    {:ok, state}
-  end
 end

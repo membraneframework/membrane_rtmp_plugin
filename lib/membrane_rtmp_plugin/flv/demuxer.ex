@@ -24,15 +24,20 @@ defmodule Membrane.FLV.Demuxer do
     caps: :any,
     mode: :push
 
+  def_options output_avc_configuration: [
+                spec: boolean(),
+                default: true
+              ]
+
   @impl true
-  def handle_init(_opts) do
-    {:ok, %{partial: <<>>}}
+  def handle_init(%__MODULE__{} = opts) do
+    {:ok, Map.from_struct(opts) |> Map.merge(%{partial: <<>>})}
   end
 
   @impl true
   def handle_process(:input, %Buffer{payload: payload}, _ctx, state) do
     {:ok, packets, leftover} = parse(state.partial <> payload)
-    {{:ok, get_actions(packets)}, %{state | partial: leftover}}
+    {{:ok, get_actions(packets, state)}, %{state | partial: leftover}}
   end
 
   defp parse(data) do
@@ -46,9 +51,9 @@ defmodule Membrane.FLV.Demuxer do
     end
   end
 
-  defp get_actions([]), do: []
+  defp get_actions([], _state), do: []
 
-  defp get_actions(packets) do
+  defp get_actions(packets, state) do
     packets
     |> Enum.reject(&(&1.payload.payload == :unknown_variation))
     |> Enum.flat_map(fn %{
@@ -61,27 +66,28 @@ defmodule Membrane.FLV.Demuxer do
         :aac_audio_specific_config ->
           [caps: {:audio, get_aac_caps(payload)}]
 
+        :avc_decoder_configuration_record when state.output_avc_configuration ->
+          %{pps: [pps], sps: [sps]} = Membrane.AVC.Configuration.parse(payload)
+
+          [
+            buffer:
+              {:video,
+               %Buffer{
+                 metadata: %{timestamp: timestamp},
+                 payload: <<0, 0, 1>> <> sps <> <<0, 0, 1>> <> pps
+               }}
+          ]
+
         :aac_frame ->
           [buffer: {:audio, %Buffer{metadata: %{timestamp: timestamp}, payload: payload}}]
 
         :avc_frame ->
           [buffer: {:video, %Buffer{metadata: %{timestamp: timestamp}, payload: payload}}]
 
-        :avc_end_of_sequence ->
-          [end_of_stream: :video]
-
-        :aac_end_of_sequence ->
-          [end_of_stream: :audio]
-
         _other ->
           []
       end
     end)
-  end
-
-  @impl true
-  def handle_end_of_stream(:input, _ctx, state) do
-    {{:ok, end_of_stream: :audio, end_of_stream: :video}, state}
   end
 
   defp get_aac_caps(
