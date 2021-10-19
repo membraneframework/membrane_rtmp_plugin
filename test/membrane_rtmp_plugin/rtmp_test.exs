@@ -1,22 +1,39 @@
 defmodule Membrane.RTMP.Source.Test do
   use ExUnit.Case
-  use Bunch
-
   import Membrane.Testing.Assertions
+
   alias Membrane.Testing
   alias Membrane.Testing.{Pipeline}
+
+  require Logger
 
   @input_file "test/fixtures/testsrc.flv"
   @port 9009
   @output_path "rtmp://localhost:#{@port}"
 
-  test "Check if the stream started and that it ends" do
-    spawn(&start_ffmpeg/0)
-    {:ok, pid} = get_testing_pipeline()
-    start_ffmpeg()
-    assert_pipeline_playback_changed(pid, :prepared, :playing)
+  setup do
+    pipeline_pid = get_testing_pipeline() |> start_supervised!()
+    Membrane.Testing.Pipeline.play(pipeline_pid)
+
+    ffmpeg = %{
+      pid: pipeline_pid,
+      ffmpeg:
+        start_supervised!(%{
+          id: :ffmpeg,
+          start: {__MODULE__, :start_ffmpeg, []}
+        })
+    }
+  end
+
+  test "Check if the stream started and that it ends", %{pid: pid} do
+    assert_pipeline_playback_changed(pid, :prepared, :playing, 10_000)
     assert_sink_buffer(pid, :video_sink, %Membrane.Buffer{})
     refute_sink_buffer(pid, :audio_sink, %Membrane.Buffer{})
+    assert_end_of_stream(pid, :src, :input, 5_000)
+
+    # Cleanup
+    stop_supervised(:test_pipeline)
+    stop_supervised(:ffmpeg)
   end
 
   defp get_testing_pipeline() do
@@ -31,16 +48,44 @@ defmodule Membrane.RTMP.Source.Test do
       links: [
         link(:src) |> via_out(:audio) |> to(:audio_sink),
         link(:src) |> via_out(:video) |> to(:video_sink)
-      ]
+      ],
+      test_process: self()
     }
 
-    {:ok, pid} = Pipeline.start_link(options)
-    :ok = Pipeline.play(pid)
-    {:ok, pid}
+    %{
+      id: :test_pipeline,
+      start: {Pipeline, :start_link, [options]}
+    }
   end
 
-  defp start_ffmpeg() do
-    Process.sleep(200)
-    System.shell("ffmpeg -re -i #{@input_file} -f flv -c:v copy #{@output_path}", cd: File.cwd!())
+  @spec start_ffmpeg() :: {:ok, pid()}
+  def start_ffmpeg() do
+    spawn_link(&execute_loop/0)
+    |> then(&{:ok, &1})
+  end
+
+  defp execute_loop() do
+    import FFmpex
+    use FFmpex.Options
+    Logger.debug("Starting ffmpeg")
+
+    command =
+      FFmpex.new_command()
+      |> add_global_option(option_y())
+      |> add_input_file(@input_file)
+      |> add_file_option(option_re())
+      |> add_output_file(@output_path)
+      |> add_file_option(option_f("flv"))
+      |> add_file_option(option_vcodec("copy"))
+      |> add_file_option(option_acodec("copy"))
+
+    case FFmpex.execute(command) do
+      :ok ->
+        :ok
+
+      error ->
+        Logger.error(inspect(error))
+        execute_loop()
+    end
   end
 end
