@@ -7,16 +7,15 @@
 
 typedef struct State State;
 
-struct State
-{
-    AVFormatContext *input_ctx;
-    int number_of_streams;
-    bool ready;
-    
-    AVBSFContext* h264_bsf_ctx;
-    
-    UnifexPid target;
-    UnifexTid thread;
+struct State {
+  AVFormatContext *input_ctx;
+  int number_of_streams;
+  bool ready;
+
+  AVBSFContext *h264_bsf_ctx;
+
+  UnifexPid target;
+  UnifexTid thread;
 };
 
 #include "_generated/rtmp.h"
