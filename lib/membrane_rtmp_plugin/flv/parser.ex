@@ -4,7 +4,7 @@ defmodule Membrane.FLV.Parser do
   @spec parse(binary()) :: {:ok, {:header, map()} | {:packets, [map()]}, rest :: binary()}
   def parse(data) do
     case parse_header(data) do
-      {:ok, _, _} = return -> return
+      {:ok, _, _} = header -> header
       _else -> parse_packets(data)
     end
   end

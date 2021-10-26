@@ -28,8 +28,9 @@ defmodule Membrane.RTMP.Source.Test do
   test "Check if the stream started and that it ends", %{pid: pid} do
     assert_pipeline_playback_changed(pid, :prepared, :playing, 10_000)
     assert_sink_buffer(pid, :video_sink, %Membrane.Buffer{})
-    refute_sink_buffer(pid, :audio_sink, %Membrane.Buffer{})
-    assert_end_of_stream(pid, :src, :input, 5_000)
+    assert_sink_buffer(pid, :audio_sink, %Membrane.Buffer{})
+    assert_end_of_stream(pid, :audio_sink, :input, 5_000)
+    assert_end_of_stream(pid, :video_sink, :input, 5_000)
 
     # Cleanup
     stop_supervised(:test_pipeline)

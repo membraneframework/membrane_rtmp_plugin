@@ -6,12 +6,17 @@ defmodule Membrane.RTMP.Source.Element do
   """
   use Membrane.Source
   alias __MODULE__.Native
-  alias Membrane.{FLV, Time}
+  alias Membrane.{FLV, Time, AAC, Buffer}
   require Membrane.Logger
 
-  def_output_pad :output,
+  def_output_pad :audio,
     availability: :always,
-    caps: {FLV, mode: :packets},
+    caps: {AAC, encapsulation: :none},
+    mode: :push
+
+  def_output_pad :video,
+    availability: :always,
+    caps: :any,
     mode: :push
 
   def_options url: [
@@ -46,7 +51,7 @@ defmodule Membrane.RTMP.Source.Element do
       {:ok, %{state | native: native}}
     else
       {:error, reason} ->
-        raise("Transition to state `playing` failed because of: `#{reason}`")
+        raise("Transition to state `playing` failed. Reason: `#{reason}`")
     end
   end
 
@@ -57,12 +62,36 @@ defmodule Membrane.RTMP.Source.Element do
   end
 
   @impl true
-  def handle_other({:frame, data}, _ctx, state) do
-    buffer = %Membrane.Buffer{payload: data}
-    {{:ok, buffer: {:output, buffer}}, state}
+  def handle_other(:end_of_stream, _ctx, state) do
+    {{:ok, end_of_stream: :audio, end_of_stream: :video}, state}
   end
 
-  def handle_other(:end_of_stream, _ctx, state) do
-    {{:ok, end_of_stream: :output}, state}
+  def handle_other({:video_params, config}, _ctx, state) do
+    %{pps: [pps], sps: [sps]} = Membrane.AVC.Configuration.parse(config)
+    payload = <<0, 0, 1>> <> sps <> <<0, 0, 1>> <> pps
+    {{:ok, buffer: {:video, %Buffer{payload: payload}}}, state}
   end
+
+  def handle_other({:audio_params, asc}, _ctx, state) do
+    caps = FLV.Demuxer.get_aac_caps(asc)
+    {{:ok, caps: {:audio, caps}}, state}
+  end
+
+  def handle_other({:audio, audio}, _ctx, state) do
+    {{:ok, buffer: {:audio, %Buffer{payload: audio}}}, state}
+  end
+
+  def handle_other({:video, payload}, _ctx, state) do
+    {{:ok, buffer: {:video, %Buffer{payload: to_annex_b(payload)}}}, state}
+  end
+
+  def handle_other(msg, _ctx, state) do
+    raise("Unhandled message #{inspect(msg)}")
+  end
+
+  # TODO: Kick it out to membrane_h264_format
+  defp to_annex_b(<<length::32, data::binary-size(length), rest::binary>>),
+    do: <<0, 0, 1>> <> data <> to_annex_b(rest)
+
+  defp to_annex_b(_otherwise), do: <<>>
 end

@@ -12,17 +12,18 @@ defmodule Membrane.FLV.Demuxer do
   def_input_pad :input,
     availability: :always,
     caps: {FLV, mode: :packets},
-    mode: :push
+    mode: :pull,
+    demand_unit: :buffers
 
   def_output_pad :audio,
     availability: :always,
     caps: {AAC, encapsulation: :none},
-    mode: :push
+    mode: :pull
 
   def_output_pad :video,
     availability: :always,
     caps: :any,
-    mode: :push
+    mode: :pull
 
   def_options output_avc_configuration: [
                 spec: boolean(),
@@ -35,9 +36,14 @@ defmodule Membrane.FLV.Demuxer do
   end
 
   @impl true
+  def handle_demand(_pad, size, :buffers, _ctx, state) do
+    {{:ok, demand: {:input, size}}, state}
+  end
+
+  @impl true
   def handle_process(:input, %Buffer{payload: payload}, _ctx, state) do
     {:ok, packets, leftover} = parse(state.partial <> payload)
-    {{:ok, get_actions(packets, state)}, %{state | partial: leftover}}
+    {{:ok, get_actions(packets, state) ++ [redemand: :video]}, %{state | partial: leftover}}
   end
 
   defp parse(data) do
@@ -90,17 +96,17 @@ defmodule Membrane.FLV.Demuxer do
     end)
   end
 
-  defp get_aac_caps(
-         <<profile::5, sr_index::4, channel_configuration::4, frame_length_flag::1,
-           _extension_flag::1, _extension_flag3::1>> = _audio_specific_config
-       ) do
-    %AAC{
-      profile: AAC.aot_id_to_profile(profile),
-      mpeg_version: 4,
-      sample_rate: AAC.sampling_frequency_id_to_sample_rate(sr_index),
-      channels: AAC.channel_config_id_to_channels(channel_configuration),
-      encapsulation: :none,
-      samples_per_frame: if(frame_length_flag == 1, do: 1024, else: 960)
-    }
-  end
+  @spec get_aac_caps(binary()) :: AAC.t()
+  def get_aac_caps(
+        <<profile::5, sr_index::4, channel_configuration::4, frame_length_flag::1, _rest::bits>> =
+          _audio_specific_config
+      ),
+      do: %AAC{
+        profile: AAC.aot_id_to_profile(profile),
+        mpeg_version: 4,
+        sample_rate: AAC.sampling_frequency_id_to_sample_rate(sr_index),
+        channels: AAC.channel_config_id_to_channels(channel_configuration),
+        encapsulation: :none,
+        samples_per_frame: if(frame_length_flag == 1, do: 1024, else: 960)
+      }
 end

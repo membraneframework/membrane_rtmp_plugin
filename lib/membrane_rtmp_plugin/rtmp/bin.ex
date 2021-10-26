@@ -52,13 +52,11 @@ defmodule Membrane.RTMP.Source do
           alignment: :au,
           attach_nalus?: true,
           skip_until_keyframe?: true
-        },
-        demuxer: FLV.Demuxer
+        }
       },
       links: [
-        link(:src) |> to(:demuxer),
-        link(:demuxer) |> via_out(:audio) |> to_bin_output(:audio),
-        link(:demuxer) |> via_out(:video) |> to(:video_parser) |> to_bin_output(:video)
+        link(:src) |> via_out(:audio) |> to_bin_output(:audio),
+        link(:src) |> via_out(:video) |> to(:video_parser) |> to_bin_output(:video)
       ]
     }
 
