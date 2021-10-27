@@ -11,7 +11,7 @@ jobs:
     steps:
       - checkout
       - run: mix deps.get
-      - run: mix compile --force
+      - run: mix compile --force --warnings-as-errors
       - run: mix test
 
   lint:
@@ -26,7 +26,7 @@ jobs:
       - checkout
       - run: mix deps.get
       - run: mix format --check-formatted
-      - run: mix compile --warnings-as-errors
+      - run: mix compile
       - run: mix credo
       - run: mix docs && mix docs 2>&1 | (! grep -q "warning:")
 
