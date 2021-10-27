@@ -27,7 +27,10 @@ defmodule Membrane.FLV.Demuxer do
 
   def_options output_avc_configuration: [
                 spec: boolean(),
-                default: true
+                default: true,
+                description: """
+                Flag defining whether to output the PPS and SPS from the demuxer
+                """
               ]
 
   @impl true

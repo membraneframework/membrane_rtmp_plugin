@@ -1,4 +1,4 @@
-defmodule Membrane.RTMP.Source.Element do
+defmodule Membrane.RTMP.Source do
   @moduledoc """
   Membrane Element being a server-side source of RTMP streams.
 
@@ -6,7 +6,7 @@ defmodule Membrane.RTMP.Source.Element do
   """
   use Membrane.Source
   alias __MODULE__.Native
-  alias Membrane.{FLV, Time, AAC, Buffer}
+  alias Membrane.{FLV, AVC, Time, AAC, Buffer}
   require Membrane.Logger
 
   def_output_pad :audio,
@@ -82,16 +82,10 @@ defmodule Membrane.RTMP.Source.Element do
   end
 
   def handle_other({:video, payload}, _ctx, state) do
-    {{:ok, buffer: {:video, %Buffer{payload: to_annex_b(payload)}}}, state}
+    {{:ok, buffer: {:video, %Buffer{payload: AVC.Utils.to_annex_b(payload)}}}, state}
   end
 
-  def handle_other(msg, _ctx, state) do
+  def handle_other(msg, _ctx, _state) do
     raise("Unhandled message #{inspect(msg)}")
   end
-
-  # TODO: Kick it out to membrane_h264_format
-  defp to_annex_b(<<length::32, data::binary-size(length), rest::binary>>),
-    do: <<0, 0, 1>> <> data <> to_annex_b(rest)
-
-  defp to_annex_b(_otherwise), do: <<>>
 end

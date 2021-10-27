@@ -1,11 +1,13 @@
-defmodule Membrane.RTMP.Source do
+defmodule Membrane.RTMP.Bin do
   @moduledoc """
-  Bin providing an abstraction layer for Real Time Messaging Protocol source.
-  It handles demuxing of FLV and parsing of RTMP packets so that they are ready for further processing with Membrane Elements.
+  Bin responsible for spawning new RTMP server.
+
+  It will receive RTMP stream from the client, parse it and demux FLV outputing single audio and video which are ready for further processing with Membrane Elements.
+  At this moment only AAC and H264 codecs are support
   """
   use Membrane.Bin
 
-  alias Membrane.{AAC, H264, RTMP, FLV}
+  alias Membrane.{AAC, H264, RTMP}
 
   def_output_pad :video,
     caps: H264,
@@ -42,7 +44,7 @@ defmodule Membrane.RTMP.Source do
   @impl true
   def handle_init(%__MODULE__{} = options) do
     url = "rtmp://#{options.local_ip}:#{options.port}"
-    source = %RTMP.Source.Element{url: url, timeout: options.timeout}
+    source = %RTMP.Source{url: url, timeout: options.timeout}
 
     spec = %ParentSpec{
       children: %{

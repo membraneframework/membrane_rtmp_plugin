@@ -42,7 +42,7 @@ defmodule Membrane.RTMP.Source.Test do
 
     options = %Membrane.Testing.Pipeline.Options{
       elements: [
-        src: %Membrane.RTMP.Source{port: @port},
+        src: %Membrane.RTMP.Bin{port: @port},
         audio_sink: Testing.Sink,
         video_sink: Testing.Sink
       ],

@@ -47,10 +47,10 @@ defmodule Membrane.AVC.Configuration do
 
   defp parse_pps(<<num_of_pps::8, rest::bitstring>>), do: do_parse_array(num_of_pps, rest)
 
-  defp do_parse_array(0, anything), do: {[], anything}
+  defp do_parse_array(0, rest), do: {[], rest}
 
   defp do_parse_array(remaining, <<size::16, data::binary-size(size), rest::bitstring>>) do
-    {pps, rest} = do_parse_array(remaining - 1, rest)
-    {[data | pps], rest}
+    {acc, rest} = do_parse_array(remaining - 1, rest)
+    {[data | acc], rest}
   end
 end

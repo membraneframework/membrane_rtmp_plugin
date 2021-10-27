@@ -26,9 +26,9 @@ jobs:
       - checkout
       - run: mix deps.get
       - run: mix format --check-formatted
-      - run: mix compile
+      - run: mix compile --warnings-as-errors
       - run: mix credo
-      - run: mix docs && mix docs 2>&1
+      - run: mix docs && mix docs 2>&1 | (! grep -q "warning:")
 
 workflows:
   version: 2

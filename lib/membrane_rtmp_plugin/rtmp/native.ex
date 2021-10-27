@@ -1,4 +1,4 @@
-defmodule Membrane.RTMP.Source.Element.Native do
+defmodule Membrane.RTMP.Source.Native do
   @moduledoc false
   use Unifex.Loader
 

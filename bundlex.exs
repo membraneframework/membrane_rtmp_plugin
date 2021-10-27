@@ -14,7 +14,7 @@ defmodule Membrane.RTMP.BundlexProject do
         deps: [unifex: :unifex],
         interface: [:nif],
         preprocessor: Unifex,
-        libs: ["avformat", "avutil"]
+        pkg_configs: ["libavformat", "libavutil"]
       ]
     ]
   end
