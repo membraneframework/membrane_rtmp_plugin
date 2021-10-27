@@ -2,7 +2,7 @@ defmodule Membrane.RTMP.Bin do
   @moduledoc """
   Bin responsible for spawning new RTMP server.
 
-  It will receive RTMP stream from the client, parse it and demux FLV outputing single audio and video which are ready for further processing with Membrane Elements.
+  It will receive RTMP stream from the client, parse it and demux it, outputting single audio and video which are ready for further processing with Membrane Elements.
   At this moment only AAC and H264 codecs are support
   """
   use Membrane.Bin
