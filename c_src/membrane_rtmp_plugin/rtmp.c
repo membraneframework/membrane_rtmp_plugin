@@ -10,26 +10,28 @@ UNIFEX_TERM native_create(UnifexEnv *env, char *url, char *timeout) {
   AVDictionary *d = NULL;
   av_dict_set(&d, "listen", "1", 0);
 
-  if (strcmp(timeout, "0") !=
-      0) { // 0 indicates that timeout should be infinity
-    printf("Setting timeout to %s\n", timeout);
+  // 0 indicates that timeout should be infinity
+  if (strcmp(timeout, "0") != 0) {
     av_dict_set(&d, "timeout", timeout, 0);
   }
 
   if (avformat_open_input(&s->input_ctx, url, NULL, &d) < 0) {
     unifex_release_state(env, s);
     return native_create_result_error(
-        env, "Couldn't open input. This might be caused by invalid address, "
-             "occupied port or connection timeout");
+        env, "Couldn't open input. This might be caused by invalid address, occupied port or connection timeout");
   }
 
   if (avformat_find_stream_info(s->input_ctx, NULL) < 0) {
-    avformat_close_input(&s->input_ctx);
     unifex_release_state(env, s);
     return native_create_result_error(env, "Couldn't get stream info");
   }
 
   s->number_of_streams = s->input_ctx->nb_streams;
+  
+  if(s->number_of_streams == 0) {
+    unifex_release_state(env, s);
+    return native_create_result_error(env, "No streams found - at least one stream is required");
+  }
 
   for (int i = 0; i < s->number_of_streams; i++) {
     AVStream *in_stream = s->input_ctx->streams[i];
@@ -41,18 +43,14 @@ UNIFEX_TERM native_create(UnifexEnv *env, char *url, char *timeout) {
 
     if (in_codecpar->codec_id != AV_CODEC_ID_H264 &&
         in_codecpar->codec_id != AV_CODEC_ID_AAC) {
-      avformat_close_input(&s->input_ctx);
+      s->ready = false;
       unifex_release_state(env, s);
 
-      char error_message[150];
-      sprintf(error_message, "Unsupported codec: %s",
-              avcodec_get_name(in_codecpar->codec_id));
-      return native_create_result_error(env, &error_message);
+      return native_create_result_error(env, "Unsupported codec. Only H264 and AAC are supported");
     }
 
     UnifexPayload payload;
-    unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY,
-                         in_codecpar->extradata_size, &payload);
+    unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, in_codecpar->extradata_size, &payload);
     memcpy(payload.data, in_codecpar->extradata, in_codecpar->extradata_size);
 
     int (*write_func)(UnifexEnv *, UnifexPid, int, UnifexPayload *) = NULL;
@@ -101,7 +99,7 @@ void *get_frame(void *opaque) {
       write_func = &send_audio;
       break;
     default:
-      continue;
+      unifex_raise(env, "Unsupported stream type");
     }
 
     UnifexPayload payload;
@@ -153,7 +151,7 @@ void handle_init_state(UnifexEnv *env, State *s) {
   av_bsf_alloc(h264_filter, &s->h264_bsf_ctx);
   av_bsf_init(s->h264_bsf_ctx);
   if (s->h264_bsf_ctx == NULL) {
-    avformat_close_input(&s->input_ctx);
+    unifex_release_state(env, s);
     unifex_raise(env, "Could not find h264_mp4toannexb");
   }
   unifex_self(env, &s->target);
@@ -162,6 +160,11 @@ void handle_init_state(UnifexEnv *env, State *s) {
 void handle_destroy_state(UnifexEnv *env, State *s) {
   UNIFEX_UNUSED(env);
   stop_streaming(env, s);
+
+  if(s->h264_bsf_ctx) {
+    av_bsf_free(&s->h264_bsf_ctx);
+  }
+
   if (s->input_ctx) {
     avformat_close_input(&s->input_ctx);
   }
