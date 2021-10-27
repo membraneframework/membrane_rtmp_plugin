@@ -73,7 +73,7 @@ defmodule Membrane.RTMP.Source do
   end
 
   def handle_other({:audio_params, asc}, _ctx, state) do
-    caps = FLV.Demuxer.get_aac_caps(asc)
+    caps = get_aac_caps(asc)
     {{:ok, caps: {:audio, caps}}, state}
   end
 
@@ -88,4 +88,17 @@ defmodule Membrane.RTMP.Source do
   def handle_other(msg, _ctx, _state) do
     raise("Unhandled message #{inspect(msg)}")
   end
+
+  defp get_aac_caps(
+         <<profile::5, sr_index::4, channel_configuration::4, frame_length_flag::1, _rest::bits>> =
+           _audio_specific_config
+       ),
+       do: %AAC{
+         profile: AAC.aot_id_to_profile(profile),
+         mpeg_version: 4,
+         sample_rate: AAC.sampling_frequency_id_to_sample_rate(sr_index),
+         channels: AAC.channel_config_id_to_channels(channel_configuration),
+         encapsulation: :none,
+         samples_per_frame: if(frame_length_flag == 1, do: 1024, else: 960)
+       }
 end
