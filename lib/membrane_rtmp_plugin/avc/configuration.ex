@@ -21,7 +21,7 @@ defmodule Membrane.AVC.Configuration do
           length_size: non_neg_integer()
         }
 
-  @spec parse(binary()) :: t()
+  @spec parse(binary()) :: {:ok, t()} | {:error, any()}
   def parse(
         <<1::8, avc_profile_indication::8, profile_compatibility::8, avc_level::8, 0b111111::6,
           length_size::2, 0b111::3, rest::bitstring>>
@@ -37,9 +37,10 @@ defmodule Membrane.AVC.Configuration do
       avc_level: avc_level,
       length_size: length_size
     }
+    |> then(&{:ok, &1})
   end
 
-  def parse(data), do: {:error, data}
+  def parse(data), do: {:error, :pattern_unknown}
 
   defp parse_sps(<<num_of_sps::5, rest::bitstring>>) do
     do_parse_array(num_of_sps, rest)

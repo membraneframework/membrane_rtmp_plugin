@@ -41,107 +41,99 @@ UNIFEX_TERM native_create(UnifexEnv *env, char *url, char *timeout) {
       continue;
     }
 
-    if (in_codecpar->codec_id != AV_CODEC_ID_H264 &&
-        in_codecpar->codec_id != AV_CODEC_ID_AAC) {
-      s->ready = false;
+    if (in_codecpar->codec_id != AV_CODEC_ID_H264 && in_codecpar->codec_id != AV_CODEC_ID_AAC) {
       unifex_release_state(env, s);
-
       return native_create_result_error(env, "Unsupported codec. Only H264 and AAC are supported");
     }
-
-    UnifexPayload payload;
-    unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, in_codecpar->extradata_size, &payload);
-    memcpy(payload.data, in_codecpar->extradata, in_codecpar->extradata_size);
-
-    int (*write_func)(UnifexEnv *, UnifexPid, int, UnifexPayload *) = NULL;
-
-    if (in_stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
-      write_func = &send_video_params;
-    } else if (in_stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-      write_func = &send_audio_params;
-    }
-
-    if (!write_func(env, s->target, 0, &payload)) {
-      printf("Error sending data\n");
-    }
-    unifex_payload_release(&payload);
   }
 
   return native_create_result_ok(env, s);
 }
 
-void *get_frame(void *opaque) {
-  State *state = (State *)opaque;
-  UnifexEnv *env = unifex_alloc_env(NULL);
-
-  if (!state || !state->input_ctx || state->ready) {
-    unifex_raise(env, "Tried to stream with invalid state");
+UNIFEX_TERM get_audio_params(UnifexEnv* env, State* s) {
+  for(int i = 0; i < s->number_of_streams; i++) {
+    if(s->input_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+      UnifexPayload payload;
+      unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, s->input_ctx->streams[i]->codecpar->extradata_size, &payload);
+      memcpy(payload.data, s->input_ctx->streams[i]->codecpar->extradata, s->input_ctx->streams[i]->codecpar->extradata_size);
+      UNIFEX_TERM result = get_audio_params_result_ok(env, &payload);
+      unifex_payload_release(&payload);
+      return result;
+    }
   }
+  
+  return get_audio_params_result_error(env);
+}
 
+UNIFEX_TERM get_video_params(UnifexEnv* env, State* s) {
+  for(int i = 0; i < s->number_of_streams; i++) {
+      if(s->input_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+        UnifexPayload payload;
+        unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, s->input_ctx->streams[i]->codecpar->extradata_size, &payload);
+        memcpy(payload.data, s->input_ctx->streams[i]->codecpar->extradata, s->input_ctx->streams[i]->codecpar->extradata_size);
+        UNIFEX_TERM result = get_video_params_result_ok(env, &payload);
+        unifex_payload_release(&payload);
+        return result;
+      }
+    }
+
+  return get_video_params_result_error(env);
+}
+
+UNIFEX_TERM fetch_frame(UnifexEnv* env, State* s) {
   AVPacket packet;
-  state->ready = true;
+  AVStream* in_stream;
+  enum AVMediaType codec_type;
+  UNIFEX_TERM result;
 
-  while (state->ready && av_read_frame(state->input_ctx, &packet) >= 0) {
-    if (packet.stream_index >= state->number_of_streams)
-      continue;
+  while(true) {
+    if(av_read_frame(s->input_ctx, &packet) < 0) {
+      result = fetch_frame_result_end_of_stream(env);
+      goto end;
+    }
 
-    AVStream *in_stream = state->input_ctx->streams[packet.stream_index];
+    if(packet.stream_index >= s->number_of_streams) {
+      result = fetch_frame_result_error(env, "Invalid stream index");
+      goto end;
+    }
+    
+    in_stream = s->input_ctx->streams[packet.stream_index];
+    codec_type = in_stream->codecpar->codec_type;
 
-    int (*write_func)(UnifexEnv *, UnifexPid, int, UnifexPayload *) = NULL;
-
-    switch (in_stream->codecpar->codec_type) {
+    if(codec_type != AVMEDIA_TYPE_AUDIO && codec_type != AVMEDIA_TYPE_VIDEO) {
+      av_packet_unref(&packet);
+    } else {
+      break;
+    }
+  }
+  
+  UNIFEX_TERM (*result_func)(UnifexEnv*, UnifexPayload*) = NULL;
+  
+  switch(codec_type) {
     case AVMEDIA_TYPE_VIDEO:
-      av_bsf_send_packet(state->h264_bsf_ctx, &packet);
-      av_bsf_receive_packet(state->h264_bsf_ctx, &packet);
-      write_func = &send_video;
+      av_bsf_send_packet(s->h264_bsf_ctx, &packet);
+      av_bsf_receive_packet(s->h264_bsf_ctx, &packet);
+      result_func = &fetch_frame_result_video;
       break;
+    
     case AVMEDIA_TYPE_AUDIO:
-      write_func = &send_audio;
+      result_func = &fetch_frame_result_audio;
       break;
+
     default:
-      unifex_raise(env, "Unsupported stream type");
-    }
-
-    UnifexPayload payload;
-    unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, packet.size, &payload);
-    memcpy(payload.data, packet.data, packet.size);
-
-    if (!write_func(env, state->target, UNIFEX_SEND_THREADED, &payload)) {
-      printf("Error sending data\n");
-    }
-    unifex_payload_release(&payload);
-
-    av_packet_unref(&packet);
+      unifex_raise(env, "Unsupported frame type");
   }
 
-  state->ready = false;
-  send_end_of_stream(env, state->target, UNIFEX_SEND_THREADED);
-  unifex_free_env(env);
-  env = NULL;
-
-  return NULL;
-}
-
-UNIFEX_TERM stream_frames(UnifexEnv *env, State *state) {
-  if (!state || !state->input_ctx || state->ready) {
-    return stream_frames_result_error(env, "Already streaming");
-  }
-
-  unifex_thread_create(NULL, &state->thread, get_frame, state);
-  return stream_frames_result_ok(env);
-}
-
-UNIFEX_TERM stop_streaming(UnifexEnv *env, State *state) {
-  if (!state || !state->ready) {
-    return stop_streaming_result_error(env, "Already stopped");
-  }
-
-  // mark the process as not ready to stream.The thread will finish processing
-  // the current frame and exit. Some data might be lost the thread might also
-  // write the format trailer before exiting, depending on the format
-  state->ready = false;
-  unifex_thread_join(state->thread, NULL); // join ignoring return value
-  return stop_streaming_result_ok(env);
+  UnifexPayload payload;
+  unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, packet.size, &payload);
+  memcpy(payload.data, packet.data, packet.size);
+  av_packet_unref(&packet);
+  result = result_func(env, &payload);
+  unifex_payload_release(&payload);
+  
+end:
+  av_packet_unref(&packet);
+  return result;
 }
 
 void handle_init_state(UnifexEnv *env, State *s) {
@@ -159,7 +151,6 @@ void handle_init_state(UnifexEnv *env, State *s) {
 
 void handle_destroy_state(UnifexEnv *env, State *s) {
   UNIFEX_UNUSED(env);
-  stop_streaming(env, s);
 
   if(s->h264_bsf_ctx) {
     av_bsf_free(&s->h264_bsf_ctx);

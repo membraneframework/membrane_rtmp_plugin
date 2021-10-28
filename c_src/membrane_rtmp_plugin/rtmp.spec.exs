@@ -4,13 +4,7 @@ state_type "State"
 interface [NIF]
 
 spec native_create(string, timeout :: string) :: {:ok :: label, state} | {:error :: label, reason :: string}
-spec stop_streaming(state) :: (:ok :: label) | {:error :: label, reason :: string}
-spec stream_frames(state) :: (:ok :: label) | {:error :: label, reason :: string}
 
-sends {:audio_params :: label, data :: payload}
-sends {:audio :: label, data :: payload}
-
-sends {:video_params :: label, data :: payload}
-sends {:video :: label, data :: payload}
-
-sends (:end_of_stream :: label)
+spec get_video_params(state) :: {:ok :: label, params :: payload} | {:error :: label, :no_stream}
+spec get_audio_params(state) :: {:ok :: label, params :: payload} | {:error :: label, :no_stream}
+spec fetch_frame(state) :: {:ok, :audio :: label, frame :: payload} | {:ok, :video :: label, frame :: payload} | {:error :: label, reason :: string} | (:end_of_stream :: label)
