@@ -40,7 +40,7 @@ defmodule Membrane.AVC.Configuration do
     |> then(&{:ok, &1})
   end
 
-  def parse(data), do: {:error, :pattern_unknown}
+  def parse(_data), do: {:error, :pattern_unknown}
 
   defp parse_sps(<<num_of_sps::5, rest::bitstring>>) do
     do_parse_array(num_of_sps, rest)

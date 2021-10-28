@@ -69,12 +69,6 @@ defmodule Membrane.RTMP.Source do
     end
   end
 
-  @impl true
-  def handle_playing_to_prepared(_ctx, state) do
-    if not is_nil(state.native), do: Native.stop_streaming(state.native)
-    {:ok, %{state | native: nil}}
-  end
-
   defp prepare_payload(:video, payload), do: AVC.Utils.to_annex_b(payload)
   defp prepare_payload(:audio, payload), do: payload
 
