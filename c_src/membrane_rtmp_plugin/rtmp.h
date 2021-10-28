@@ -13,9 +13,6 @@ struct State {
   bool ready;
 
   AVBSFContext *h264_bsf_ctx;
-
-  UnifexPid target;
-  UnifexTid thread;
 };
 
 #include "_generated/rtmp.h"

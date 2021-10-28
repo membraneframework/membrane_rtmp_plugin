@@ -1,11 +1,18 @@
 #include "rtmp.h"
 #include <stdbool.h>
 
-void handle_init_state(UnifexEnv *, State *);
+void handle_init_state(State *);
 
 UNIFEX_TERM native_create(UnifexEnv *env, char *url, char *timeout) {
   State *s = unifex_alloc_state(env);
-  handle_init_state(env, s);
+  handle_init_state(s);
+
+  if (s->h264_bsf_ctx == NULL) {
+    unifex_release_state(env, s);
+    return unifex_raise(env, "Could not find h264_mp4toannexb");
+  }
+
+  UNIFEX_TERM ret;
 
   AVDictionary *d = NULL;
   av_dict_set(&d, "listen", "1", 0);
@@ -16,21 +23,21 @@ UNIFEX_TERM native_create(UnifexEnv *env, char *url, char *timeout) {
   }
 
   if (avformat_open_input(&s->input_ctx, url, NULL, &d) < 0) {
-    unifex_release_state(env, s);
-    return native_create_result_error(
+    ret = native_create_result_error(
         env, "Couldn't open input. This might be caused by invalid address, occupied port or connection timeout");
+    goto err;
   }
 
   if (avformat_find_stream_info(s->input_ctx, NULL) < 0) {
-    unifex_release_state(env, s);
-    return native_create_result_error(env, "Couldn't get stream info");
+    ret = native_create_result_error(env, "Couldn't get stream info");
+    goto err;
   }
 
   s->number_of_streams = s->input_ctx->nb_streams;
   
   if(s->number_of_streams == 0) {
-    unifex_release_state(env, s);
-    return native_create_result_error(env, "No streams found - at least one stream is required");
+    ret = native_create_result_error(env, "No streams found - at least one stream is required");
+    goto err;
   }
 
   for (int i = 0; i < s->number_of_streams; i++) {
@@ -42,12 +49,15 @@ UNIFEX_TERM native_create(UnifexEnv *env, char *url, char *timeout) {
     }
 
     if (in_codecpar->codec_id != AV_CODEC_ID_H264 && in_codecpar->codec_id != AV_CODEC_ID_AAC) {
-      unifex_release_state(env, s);
-      return native_create_result_error(env, "Unsupported codec. Only H264 and AAC are supported");
+      ret = native_create_result_error(env, "Unsupported codec. Only H264 and AAC are supported");
+      goto err;
     }
   }
 
   return native_create_result_ok(env, s);
+err:
+  unifex_release_state(env, s);
+  return ret;
 }
 
 UNIFEX_TERM get_audio_params(UnifexEnv* env, State* s) {
@@ -80,7 +90,7 @@ UNIFEX_TERM get_video_params(UnifexEnv* env, State* s) {
   return get_video_params_result_error(env);
 }
 
-UNIFEX_TERM fetch_frame(UnifexEnv* env, State* s) {
+UNIFEX_TERM read_frame(UnifexEnv* env, State* s) {
   AVPacket packet;
   AVStream* in_stream;
   enum AVMediaType codec_type;
@@ -88,12 +98,12 @@ UNIFEX_TERM fetch_frame(UnifexEnv* env, State* s) {
 
   while(true) {
     if(av_read_frame(s->input_ctx, &packet) < 0) {
-      result = fetch_frame_result_end_of_stream(env);
+      result = read_frame_result_end_of_stream(env);
       goto end;
     }
 
     if(packet.stream_index >= s->number_of_streams) {
-      result = fetch_frame_result_error(env, "Invalid stream index");
+      result = read_frame_result_error(env, "Invalid stream index");
       goto end;
     }
     
@@ -113,15 +123,15 @@ UNIFEX_TERM fetch_frame(UnifexEnv* env, State* s) {
     case AVMEDIA_TYPE_VIDEO:
       av_bsf_send_packet(s->h264_bsf_ctx, &packet);
       av_bsf_receive_packet(s->h264_bsf_ctx, &packet);
-      result_func = &fetch_frame_result_video;
+      result_func = &read_frame_result_video;
       break;
     
     case AVMEDIA_TYPE_AUDIO:
-      result_func = &fetch_frame_result_audio;
+      result_func = &read_frame_result_audio;
       break;
 
     default:
-      unifex_raise(env, "Unsupported frame type");
+      return unifex_raise(env, "Unsupported frame type");
   }
 
   UnifexPayload payload;
@@ -136,17 +146,12 @@ end:
   return result;
 }
 
-void handle_init_state(UnifexEnv *env, State *s) {
+void handle_init_state(State *s) {
   s->input_ctx = avformat_alloc_context();
   s->ready = false;
   const AVBitStreamFilter *h264_filter = av_bsf_get_by_name("h264_mp4toannexb");
   av_bsf_alloc(h264_filter, &s->h264_bsf_ctx);
   av_bsf_init(s->h264_bsf_ctx);
-  if (s->h264_bsf_ctx == NULL) {
-    unifex_release_state(env, s);
-    unifex_raise(env, "Could not find h264_mp4toannexb");
-  }
-  unifex_self(env, &s->target);
 }
 
 void handle_destroy_state(UnifexEnv *env, State *s) {

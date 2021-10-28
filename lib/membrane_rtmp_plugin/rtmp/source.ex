@@ -29,7 +29,7 @@ defmodule Membrane.RTMP.Source do
                 spec: Time.t() | :infinity,
                 default: :infinity,
                 description: """
-                Time during which the connection with the client must be established before handle_prepared_to_playing fails.
+                Time the server will wait for connection from the client
 
                 Duration given must be a multiply of one second or atom `:infinity`.
                 """
@@ -57,7 +57,7 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_demand(pad, _size, :buffers, _ctx, state) do
-    with {:ok, type, frame} <- Native.fetch_frame(state.native) do
+    with {:ok, type, frame} <- Native.read_frame(state.native) do
       payload = prepare_payload(type, frame)
       {{:ok, buffer: {type, %Buffer{payload: payload}}, redemand: pad}, state}
     else
