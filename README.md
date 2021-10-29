@@ -58,7 +58,7 @@ Example.Server.play(pid)
 After this run ffmpeg which will connect to the running server:
 
 ```bash
-ffmpeg -re -i testsrc.flv -f flv -c:v copy rtmp://localhost:5000
+ffmpeg -re -i testsrc.flv -f flv -c:v copy -c:a copy rtmp://localhost:5000
 ```
 
 `testsrc.flv` can be downloaded from our [tests](test/fixtures/testsrc.flv).

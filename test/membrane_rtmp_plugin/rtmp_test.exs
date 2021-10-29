@@ -33,7 +33,7 @@ defmodule Membrane.RTMP.Source.Test do
     assert_end_of_stream(pid, :video_sink, :input, 5_000)
 
     # Cleanup
-    stop_supervised(:test_pipeline)
+    Membrane.Testing.Pipeline.stop_and_terminate(pid, blocking?: true)
     stop_supervised(:ffmpeg)
   end
 

@@ -9,7 +9,7 @@ UNIFEX_TERM native_create(UnifexEnv *env, char *url, char *timeout) {
 
   if (s->h264_bsf_ctx == NULL) {
     unifex_release_state(env, s);
-    return unifex_raise(env, "Could not find h264_mp4toannexb");
+    return unifex_raise(env, "Could not find filter h264_mp4toannexb");
   }
 
   UNIFEX_TERM ret;
@@ -54,6 +54,7 @@ UNIFEX_TERM native_create(UnifexEnv *env, char *url, char *timeout) {
     }
   }
 
+  av_bsf_init(s->h264_bsf_ctx);
   return native_create_result_ok(env, s);
 err:
   unifex_release_state(env, s);
@@ -151,7 +152,6 @@ void handle_init_state(State *s) {
   s->ready = false;
   const AVBitStreamFilter *h264_filter = av_bsf_get_by_name("h264_mp4toannexb");
   av_bsf_alloc(h264_filter, &s->h264_bsf_ctx);
-  av_bsf_init(s->h264_bsf_ctx);
 }
 
 void handle_destroy_state(UnifexEnv *env, State *s) {
