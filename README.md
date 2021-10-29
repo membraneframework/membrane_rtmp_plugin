@@ -24,6 +24,7 @@ end
 
 ## Usage
 Example Server pipeline can look like this:
+
 ```elixir
 defmodule Example.Server do
   use Membrane.Pipeline
@@ -32,21 +33,39 @@ defmodule Example.Server do
 
   @impl true
   def handle_init(_opts) do
+    directory = "hls_output"
+    File.rm_rf(directory)
+    File.mkdir_p!(directory)
+
     spec = %ParentSpec{
       children: %{
         :rtmp_server => %Membrane.RTMP.Bin{port: @port},
-        :audio_file => %Membrane.File.Sink{location: "./audio.aac"},
-        :video_file => %Membrane.File.Sink{location: "./video.h264"}
+        :hls => %Membrane.HTTPAdaptiveStream.SinkBin{
+          manifest_module: Membrane.HTTPAdaptiveStream.HLS,
+          target_window_duration: 20 |> Membrane.Time.seconds(),
+          target_segment_duration: 2 |> Membrane.Time.seconds(),
+          persist?: false,
+          storage: %Membrane.HTTPAdaptiveStream.Storages.FileStorage{directory: directory}
+        }
       },
       links: [
-        link(:rtmp_server) |> via_out(:audio) |> to(:audio_file),
-        link(:rtmp_server) |> via_out(:video) |> to(:video_file)
+        link(:rtmp_server)
+        |> via_out(:audio)
+        |> via_in(Pad.ref(:input, :audio), options: [encoding: :AAC])
+        |> to(:hls),
+        link(:rtmp_server)
+        |> via_out(:video)
+        |> via_in(Pad.ref(:input, :video), options: [encoding: :H264])
+        |> to(:hls)
       ]
     }
+
     {{:ok, spec: spec}, %{}}
   end
 end
 ```
+
+It will listen to a connection from a client and convert RTMP stream into HLS playlist.
 
 Run it with:
 
@@ -62,6 +81,12 @@ ffmpeg -re -i testsrc.flv -f flv -c:v copy -c:a copy rtmp://localhost:5000
 ```
 
 `testsrc.flv` can be downloaded from our [tests](test/fixtures/testsrc.flv).
+
+To run this example you will need following extra dependency
+
+```elixir
+{:membrane_http_adaptive_stream_plugin, github: "membraneframework/membrane_http_adaptive_stream_plugin"}
+```
 
 ## Copyright and License
 
