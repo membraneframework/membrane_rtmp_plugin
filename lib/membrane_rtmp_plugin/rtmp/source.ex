@@ -56,7 +56,7 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_demand(pad, _size, :buffers, _ctx, state) do
+  def handle_demand(pad, _size, _unit, _ctx, state) do
     with {:ok, type, frame} <- Native.read_frame(state.native) do
       payload = prepare_payload(type, frame)
       {{:ok, buffer: {type, %Buffer{payload: payload}}, redemand: pad}, state}

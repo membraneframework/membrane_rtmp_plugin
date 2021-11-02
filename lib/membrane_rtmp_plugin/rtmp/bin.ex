@@ -54,10 +54,14 @@ defmodule Membrane.RTMP.Bin do
           alignment: :au,
           attach_nalus?: true,
           skip_until_keyframe?: true
+        },
+        audio_parser: %Membrane.AAC.Parser{
+          in_encapsulation: :none,
+          out_encapsulation: :none
         }
       },
       links: [
-        link(:src) |> via_out(:audio) |> to_bin_output(:audio),
+        link(:src) |> via_out(:audio) |> to(:audio_parser) |> to_bin_output(:audio),
         link(:src) |> via_out(:video) |> to(:video_parser) |> to_bin_output(:video)
       ]
     }

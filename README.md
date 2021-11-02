@@ -43,7 +43,7 @@ defmodule Example.Server do
         :hls => %Membrane.HTTPAdaptiveStream.SinkBin{
           manifest_module: Membrane.HTTPAdaptiveStream.HLS,
           target_window_duration: 20 |> Membrane.Time.seconds(),
-          target_segment_duration: 2 |> Membrane.Time.seconds(),
+          muxer_segment_duration: 2 |> Membrane.Time.seconds(),
           persist?: false,
           storage: %Membrane.HTTPAdaptiveStream.Storages.FileStorage{directory: directory}
         }
