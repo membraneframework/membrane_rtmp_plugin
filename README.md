@@ -22,6 +22,9 @@ def deps do
 end
 ```
 
+### Prerequisites
+In order to successfully build and install the plugin, you need to have **ffmpeg >= 4.4** installed on your system
+
 ## Usage
 Example Server pipeline can look like this:
 
