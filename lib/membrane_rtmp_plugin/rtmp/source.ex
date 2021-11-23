@@ -45,11 +45,12 @@ defmodule Membrane.RTMP.Source do
     # Native.create is blocking. Hence, the element will only go from prepared to playing when a new connection is established.
     # This might not be desirable, but unfortunately this is caused by the fact that FFmpeg's create_input_stream is awaiting a new connection from the client before returning.
 
-    with {:ok, native} <- Native.create(state.url, state.timeout) do
-      Membrane.Logger.debug("Connection established @ #{state.url}")
-      state = Map.put(state, :native, native)
-      {{:ok, get_params(native)}, state}
-    else
+    case Native.create(state.url, state.timeout) do
+      {:ok, native} ->
+        Membrane.Logger.debug("Connection established @ #{state.url}")
+        state = Map.put(state, :native, native)
+        {{:ok, get_params(native)}, state}
+
       {:error, reason} ->
         raise("Transition to state `playing` failed. Reason: `#{reason}`")
     end
@@ -57,10 +58,11 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_demand(pad, _size, _unit, _ctx, state) do
-    with {:ok, type, frame} <- Native.read_frame(state.native) do
-      payload = prepare_payload(type, frame)
-      {{:ok, buffer: {type, %Buffer{payload: payload}}, redemand: pad}, state}
-    else
+    case Native.read_frame(state.native) do
+      {:ok, type, frame} ->
+        payload = prepare_payload(type, frame)
+        {{:ok, buffer: {type, %Buffer{payload: payload}}, redemand: pad}, state}
+
       :end_of_stream ->
         {{:ok, end_of_stream: :audio, end_of_stream: :video}, state}
 
