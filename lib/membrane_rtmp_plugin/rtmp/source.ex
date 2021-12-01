@@ -88,11 +88,16 @@ defmodule Membrane.RTMP.Source do
   def handle_other({:result, result}, ctx, state) when ctx.playback_state == :playing do
     case result do
       {:ok, type, timestamp, frame} ->
+        other = if type == :video, do: :audio, else: :video
         timestamp = Membrane.Time.microseconds(timestamp)
         payload = prepare_payload(type, frame)
         buffer = %Buffer{pts: timestamp, metadata: %{timestamp: timestamp}, payload: payload}
         state = update_in(state, [:buffers, type], &Qex.push(&1, buffer))
-        other = if type == :video, do: :audio, else: :video
+
+        if Enum.count(get_in(state, [:buffers, type])) > state.max_buffer_size,
+          do: raise("Buffer limit exceeded on pad #{inspect(type)}. Check your demands")
+
+        {{:ok, []}, state}
 
         {{:ok, redemand: other}, state}
 
