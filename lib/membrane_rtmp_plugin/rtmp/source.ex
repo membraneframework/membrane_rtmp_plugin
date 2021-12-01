@@ -67,9 +67,14 @@ defmodule Membrane.RTMP.Source do
   @impl true
   def handle_other({:result, result}, ctx, state) when ctx.playback_state == :playing do
     case result do
-      {:ok, type, frame} ->
+      {:ok, type, timestamp, frame} ->
+        timestamp = Membrane.Time.microseconds(timestamp)
         payload = prepare_payload(type, frame)
-        {{:ok, buffer: {type, %Buffer{payload: payload}}, redemand: type}, state}
+
+        {{:ok,
+          buffer:
+            {type, %Buffer{pts: timestamp, metadata: %{timestamp: timestamp}, payload: payload}},
+          redemand: type}, state}
 
       :end_of_stream ->
         {{:ok, end_of_stream: :audio, end_of_stream: :video}, state}
