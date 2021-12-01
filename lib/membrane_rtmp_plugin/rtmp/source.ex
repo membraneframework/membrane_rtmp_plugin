@@ -33,11 +33,17 @@ defmodule Membrane.RTMP.Source do
 
                 Duration given must be a multiply of one second or atom `:infinity`.
                 """
+              ],
+              max_buffer_size: [
+                spec: non_neg_integer(),
+                default: 1024
               ]
 
   @impl true
   def handle_init(%__MODULE__{} = opts) do
-    {:ok, Map.from_struct(opts) |> Map.merge(%{native: nil, provider: nil})}
+    {:ok,
+     Map.from_struct(opts)
+     |> Map.merge(%{native: nil, provider: nil, buffers: %{video: Qex.new(), audio: Qex.new()}})}
   end
 
   @impl true
@@ -59,9 +65,23 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_demand(_pad, _size, _unit, _ctx, state) do
+  def handle_demand(pad, _size, _unit, _ctx, state) do
+    {actions, state} = maybe_provide_frame(pad, state)
     send(state.provider, :get_frame)
-    {:ok, state}
+    {{:ok, actions}, state}
+  end
+
+  defp maybe_provide_frame(type, state) do
+    buffer = get_in(state, [:buffers, type])
+
+    {actions, queue} =
+      case Qex.pop(buffer) do
+        {:empty, queue} -> {[], queue}
+        {{:value, buffer}, queue} -> {[buffer: {type, buffer}, redemand: type], queue}
+      end
+
+    state = put_in(state, [:buffers, type], queue)
+    {actions, state}
   end
 
   @impl true
@@ -70,11 +90,11 @@ defmodule Membrane.RTMP.Source do
       {:ok, type, timestamp, frame} ->
         timestamp = Membrane.Time.microseconds(timestamp)
         payload = prepare_payload(type, frame)
+        buffer = %Buffer{pts: timestamp, metadata: %{timestamp: timestamp}, payload: payload}
+        state = update_in(state, [:buffers, type], &Qex.push(&1, buffer))
+        other = if type == :video, do: :audio, else: :video
 
-        {{:ok,
-          buffer:
-            {type, %Buffer{pts: timestamp, metadata: %{timestamp: timestamp}, payload: payload}},
-          redemand: type}, state}
+        {{:ok, redemand: other}, state}
 
       :end_of_stream ->
         {{:ok, end_of_stream: :audio, end_of_stream: :video}, state}
