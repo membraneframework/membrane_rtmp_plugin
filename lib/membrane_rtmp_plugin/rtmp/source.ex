@@ -37,7 +37,7 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_init(%__MODULE__{} = opts) do
-    {:ok, Map.from_struct(opts) |> Map.merge(%{native: nil})}
+    {:ok, Map.from_struct(opts) |> Map.merge(%{native: nil, provider: nil})}
   end
 
   @impl true
@@ -49,7 +49,9 @@ defmodule Membrane.RTMP.Source do
       {:ok, native} ->
         Membrane.Logger.debug("Connection established @ #{state.url}")
         state = Map.put(state, :native, native)
-        {{:ok, get_params(native)}, state}
+        pid = spawn(__MODULE__, :frame_provider, [native, self()])
+        Process.link(pid)
+        {{:ok, get_params(native)}, %{state | provider: pid}}
 
       {:error, reason} ->
         raise("Transition to state `playing` failed. Reason: `#{reason}`")
@@ -57,11 +59,17 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_demand(pad, _size, _unit, _ctx, state) do
-    case Native.read_frame(state.native) do
+  def handle_demand(_pad, _size, _unit, _ctx, state) do
+    send(state.provider, :get_frame)
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_other({:result, result}, ctx, state) when ctx.playback_state == :playing do
+    case result do
       {:ok, type, frame} ->
         payload = prepare_payload(type, frame)
-        {{:ok, buffer: {type, %Buffer{payload: payload}}, redemand: pad}, state}
+        {{:ok, buffer: {type, %Buffer{payload: payload}}, redemand: type}, state}
 
       :end_of_stream ->
         {{:ok, end_of_stream: :audio, end_of_stream: :video}, state}
@@ -69,6 +77,39 @@ defmodule Membrane.RTMP.Source do
       {:error, reason} ->
         raise("Fetching frame failed. Reason: `#{reason}`")
     end
+  end
+
+  @impl true
+  def handle_other({:result, _result}, _ctx, state) do
+    {:ok, state}
+  end
+
+  @spec frame_provider(reference(), pid()) :: :ok
+  def frame_provider(native, target) do
+    receive do
+      :terminate ->
+        Native.stop(native)
+        :ok
+    after
+      0 ->
+        receive do
+          :get_frame ->
+            result = Native.read_frame(native)
+            send(target, {:result, result})
+
+            if result == :end_of_stream, do: :ok, else: frame_provider(native, target)
+
+          :terminate ->
+            Native.stop(native)
+            :ok
+        end
+    end
+  end
+
+  @impl true
+  def handle_playing_to_prepared(_ctx, state) do
+    send(state.provider, :terminate)
+    {:ok, %{state | native: nil}}
   end
 
   defp prepare_payload(:video, payload), do: AVC.Utils.to_annex_b(payload)

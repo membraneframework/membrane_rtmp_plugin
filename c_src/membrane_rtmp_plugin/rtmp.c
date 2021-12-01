@@ -61,6 +61,11 @@ err:
   return ret;
 }
 
+UNIFEX_TERM stop(UnifexEnv* env, State* s) {
+  unifex_release_state(env, s);
+  return stop_result_ok(env);
+}
+
 UNIFEX_TERM get_audio_params(UnifexEnv* env, State* s) {
   for(int i = 0; i < s->number_of_streams; i++) {
     if(s->input_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
