@@ -97,7 +97,7 @@ UNIFEX_TERM get_video_params(UnifexEnv* env, State* s) {
 }
 
 int64_t get_timestamp(AVPacket* pkt, AVStream* stream) {
-  const AVRational target_time_base = {1, 1000000};
+  const AVRational target_time_base = {1, 1000};
   return av_rescale_q_rnd(pkt->pts, stream->time_base, target_time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
 }
 
@@ -148,7 +148,6 @@ UNIFEX_TERM read_frame(UnifexEnv* env, State* s) {
   UnifexPayload payload;
   unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, packet.size, &payload);
   memcpy(payload.data, packet.data, packet.size);
-  av_packet_unref(&packet);
   result = result_func(env, get_timestamp(&packet, in_stream), &payload);
   unifex_payload_release(&payload);
   

@@ -43,7 +43,7 @@ defmodule Membrane.RTMP.Source do
   def handle_init(%__MODULE__{} = opts) do
     {:ok,
      Map.from_struct(opts)
-     |> Map.merge(%{native: nil, provider: nil, buffers: %{video: Qex.new(), audio: Qex.new()}})}
+     |> Map.merge(%{provider: nil, buffers: %{video: Qex.new(), audio: Qex.new()}})}
   end
 
   @impl true
@@ -54,9 +54,8 @@ defmodule Membrane.RTMP.Source do
     case Native.create(state.url, state.timeout) do
       {:ok, native} ->
         Membrane.Logger.debug("Connection established @ #{state.url}")
-        state = Map.put(state, :native, native)
-        pid = spawn(__MODULE__, :frame_provider, [native, self()])
-        Process.link(pid)
+        my_pid = self()
+        pid = spawn_link(fn -> frame_provider(native, my_pid) end)
         {{:ok, get_params(native)}, %{state | provider: pid}}
 
       {:error, reason} ->
@@ -65,57 +64,49 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_demand(pad, _size, _unit, _ctx, state) do
-    {actions, state} = maybe_provide_frame(pad, state)
-    send(state.provider, :get_frame)
-    {{:ok, actions}, state}
-  end
+  def handle_demand(type, _size, _unit, _ctx, state) do
+    {frame, buffer} = Qex.pop(get_in(state, [:buffers, type]))
+    state = put_in(state, [:buffers, type], buffer)
 
-  defp maybe_provide_frame(type, state) do
-    buffer = get_in(state, [:buffers, type])
+    case frame do
+      {:value, action} ->
+        {{:ok, [action | [redemand: type]]}, state}
 
-    {actions, queue} =
-      case Qex.pop(buffer) do
-        {:empty, queue} -> {[], queue}
-        {{:value, buffer}, queue} -> {[buffer: {type, buffer}, redemand: type], queue}
-      end
-
-    state = put_in(state, [:buffers, type], queue)
-    {actions, state}
-  end
-
-  @impl true
-  def handle_other({:result, result}, ctx, state) when ctx.playback_state == :playing do
-    case result do
-      {:ok, type, timestamp, frame} ->
-        other = if type == :video, do: :audio, else: :video
-        timestamp = Membrane.Time.microseconds(timestamp)
-        payload = prepare_payload(type, frame)
-        buffer = %Buffer{pts: timestamp, metadata: %{timestamp: timestamp}, payload: payload}
-        state = update_in(state, [:buffers, type], &Qex.push(&1, buffer))
-
-        if Enum.count(get_in(state, [:buffers, type])) > state.max_buffer_size,
-          do: raise("Buffer limit exceeded on pad #{inspect(type)}. Check your demands")
-
-        {{:ok, []}, state}
-
-        {{:ok, redemand: other}, state}
-
-      :end_of_stream ->
-        {{:ok, end_of_stream: :audio, end_of_stream: :video}, state}
-
-      {:error, reason} ->
-        raise("Fetching frame failed. Reason: `#{reason}`")
+      :empty ->
+        send(state.provider, :get_frame)
+        {:ok, state}
     end
   end
 
   @impl true
-  def handle_other({:result, _result}, _ctx, state) do
-    {:ok, state}
+  def handle_other({:frame_provider, {:ok, type, timestamp, frame}}, ctx, state)
+      when ctx.playback_state == :playing do
+    buffer = %Buffer{pts: Time.microseconds(timestamp), payload: prepare_payload(type, frame)}
+    state = update_in(state, [:buffers, type], &Qex.push(&1, {:buffer, {type, buffer}}))
+
+    if Enum.count(get_in(state, [:buffers, type])) > state.max_buffer_size,
+      do: raise("Buffer limit exceeded on pad #{inspect(type)}. Check your demands")
+
+    {{:ok, redemand: type}, state}
   end
 
-  @spec frame_provider(reference(), pid()) :: :ok
-  def frame_provider(native, target) do
+  @impl true
+  def handle_other({:frame_provider, :end_of_stream}, _ctx, state) do
+    Membrane.Logger.debug("Received end of stream")
+
+    state =
+      state
+      |> update_in([:buffers, :audio], &Qex.push(&1, {:end_of_stream, :audio}))
+      |> update_in([:buffers, :video], &Qex.push(&1, {:end_of_stream, :video}))
+
+    {{:ok, redemand: :audio, redemand: :video}, state}
+  end
+
+  @impl true
+  def handle_other({:frame_provider, {:error, reason}}, _ctx, _state),
+    do: raise("Fetching of the frame failed. Reason: #{inspect(reason)}")
+
+  defp frame_provider(native, target) do
     receive do
       :terminate ->
         Native.stop(native)
@@ -125,7 +116,7 @@ defmodule Membrane.RTMP.Source do
         receive do
           :get_frame ->
             result = Native.read_frame(native)
-            send(target, {:result, result})
+            send(target, {:frame_provider, result})
 
             if result == :end_of_stream, do: :ok, else: frame_provider(native, target)
 
