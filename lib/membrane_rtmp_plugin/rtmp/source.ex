@@ -103,22 +103,15 @@ defmodule Membrane.RTMP.Source do
 
   defp frame_provider(native, target) do
     receive do
+      :get_frame ->
+        result = Native.read_frame(native)
+        send(target, {:frame_provider, result})
+
+        if result == :end_of_stream, do: :ok, else: frame_provider(native, target)
+
       :terminate ->
         Native.stop(native)
         :ok
-    after
-      0 ->
-        receive do
-          :get_frame ->
-            result = Native.read_frame(native)
-            send(target, {:frame_provider, result})
-
-            if result == :end_of_stream, do: :ok, else: frame_provider(native, target)
-
-          :terminate ->
-            Native.stop(native)
-            :ok
-        end
     end
   end
 
