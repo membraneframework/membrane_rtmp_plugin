@@ -15,4 +15,4 @@ struct State {
   AVBSFContext *h264_bsf_ctx;
 };
 
-#include "_generated/rtmp.h"
+#include "_generated/rtmp_source.h"
