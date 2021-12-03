@@ -43,7 +43,7 @@ defmodule Membrane.RTMP.Source do
   def handle_init(%__MODULE__{} = opts) do
     {:ok,
      Map.from_struct(opts)
-     |> Map.merge(%{provider: nil, buffers: %{video: Qex.new(), audio: Qex.new()}})}
+     |> Map.merge(%{provider: nil, stale_frame: nil})}
   end
 
   @impl true
@@ -56,6 +56,7 @@ defmodule Membrane.RTMP.Source do
         Membrane.Logger.debug("Connection established @ #{state.url}")
         my_pid = self()
         pid = spawn_link(fn -> frame_provider(native, my_pid) end)
+        send(pid, :get_frame)
         {{:ok, get_params(native)}, %{state | provider: pid}}
 
       {:error, reason} ->
@@ -64,42 +65,36 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_demand(type, _size, _unit, _ctx, state) do
-    {frame, buffer} = Qex.pop(get_in(state, [:buffers, type]))
-    state = put_in(state, [:buffers, type], buffer)
+  def handle_demand(type, _size, _unit, _ctx, %{stale_frame: {type, buffer}} = state) do
+    send(state.provider, :get_frame)
+    {{:ok, buffer: {type, buffer}}, %{state | stale_frame: nil}}
+  end
 
-    case frame do
-      {:value, action} ->
-        {{:ok, [action | [redemand: type]]}, state}
-
-      :empty ->
-        send(state.provider, :get_frame)
-        {:ok, state}
-    end
+  @impl true
+  def handle_demand(_type, _size, _unit, _ctx, state) do
+    {:ok, state}
   end
 
   @impl true
   def handle_other({:frame_provider, {:ok, type, timestamp, frame}}, ctx, state)
       when ctx.playback_state == :playing do
-    buffer = %Buffer{pts: Time.microseconds(timestamp), payload: prepare_payload(type, frame)}
-    state = update_in(state, [:buffers, type], &Qex.push(&1, {:buffer, {type, buffer}}))
+    buffer = %Buffer{
+      pts: Time.microseconds(timestamp),
+      payload: prepare_payload(type, frame)
+    }
 
-    if Enum.count(get_in(state, [:buffers, type])) > state.max_buffer_size,
-      do: raise("Buffer limit exceeded on pad #{inspect(type)}. Check your demands")
-
-    {{:ok, redemand: type}, state}
+    if get_in(ctx.pads, [type, :demand]) > 0 do
+      send(state.provider, :get_frame)
+      {{:ok, buffer: {type, buffer}}, state}
+    else
+      {:ok, %{state | stale_frame: {type, buffer}}}
+    end
   end
 
   @impl true
   def handle_other({:frame_provider, :end_of_stream}, _ctx, state) do
     Membrane.Logger.debug("Received end of stream")
-
-    state =
-      state
-      |> update_in([:buffers, :audio], &Qex.push(&1, {:end_of_stream, :audio}))
-      |> update_in([:buffers, :video], &Qex.push(&1, {:end_of_stream, :video}))
-
-    {{:ok, redemand: :audio, redemand: :video}, state}
+    {{:ok, end_of_stream: :audio, end_of_stream: :video}, state}
   end
 
   @impl true
