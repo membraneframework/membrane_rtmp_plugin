@@ -55,15 +55,10 @@ UNIFEX_TERM native_create(UnifexEnv *env, char *url, char *timeout) {
   }
 
   av_bsf_init(s->h264_bsf_ctx);
-  return native_create_result_ok(env, s);
+  ret = native_create_result_ok(env, s);
 err:
   unifex_release_state(env, s);
   return ret;
-}
-
-UNIFEX_TERM stop(UnifexEnv* env, State* s) {
-  unifex_release_state(env, s);
-  return stop_result_ok(env);
 }
 
 UNIFEX_TERM get_audio_params(UnifexEnv* env, State* s) {

@@ -78,8 +78,11 @@ defmodule Membrane.RTMP.Source do
   @impl true
   def handle_other({:frame_provider, {:ok, type, timestamp, frame}}, ctx, state)
       when ctx.playback_state == :playing do
+    timestamp = Time.microseconds(timestamp)
+
     buffer = %Buffer{
-      pts: Time.microseconds(timestamp),
+      pts: timestamp,
+      dts: timestamp,
       payload: prepare_payload(type, frame)
     }
 
@@ -110,7 +113,6 @@ defmodule Membrane.RTMP.Source do
         if result == :end_of_stream, do: :ok, else: frame_provider(native, target)
 
       :terminate ->
-        Native.stop(native)
         :ok
     end
   end
@@ -118,7 +120,7 @@ defmodule Membrane.RTMP.Source do
   @impl true
   def handle_playing_to_prepared(_ctx, state) do
     send(state.provider, :terminate)
-    {:ok, %{state | native: nil}}
+    {:ok, state}
   end
 
   defp prepare_payload(:video, payload), do: AVC.Utils.to_annex_b(payload)

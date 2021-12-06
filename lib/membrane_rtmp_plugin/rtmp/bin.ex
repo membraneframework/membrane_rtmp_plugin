@@ -50,7 +50,6 @@ defmodule Membrane.RTMP.Bin do
       children: %{
         src: source,
         video_parser: %Membrane.H264.FFmpeg.Parser{
-          framerate: {30, 1},
           alignment: :au,
           attach_nalus?: true,
           skip_until_keyframe?: true
