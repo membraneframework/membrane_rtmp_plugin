@@ -9,7 +9,14 @@ typedef struct State State;
 
 struct State {
   AVFormatContext *output_ctx;
+
   int video_stream_index;
+  int64_t current_video_dts;
+
+  int audio_stream_index;
+  int64_t current_audio_pts;
+
+  bool header_written;
 };
 
 #include "_generated/rtmp_sink.h"

@@ -5,7 +5,8 @@ defmodule Membrane.RTMP.Sink.Test do
   alias Membrane.Testing
   alias Membrane.Testing.{Pipeline}
 
-  @input_video_path "test/fixtures/testvideo.h264"
+  @input_video_path "test/fixtures/bun33s_480x270.h264"
+  @input_audio_path "test/fixtures/bun33s.aac"
 
   @flv_path "/tmp/rtmp_sink_test.flv"
 
@@ -18,8 +19,12 @@ defmodule Membrane.RTMP.Sink.Test do
 
     assert_pipeline_playback_changed(sink_pipeline_pid, :prepared, :playing)
     assert File.exists?(@flv_path)
+
     assert_start_of_stream(sink_pipeline_pid, :rtmps_sink, :video, 5_000)
+    assert_start_of_stream(sink_pipeline_pid, :rtmps_sink, :audio, 5_000)
+
     assert_end_of_stream(sink_pipeline_pid, :rtmps_sink, :video, 5_000)
+    assert_end_of_stream(sink_pipeline_pid, :rtmps_sink, :audio, 5_000)
 
     Membrane.Testing.Pipeline.stop_and_terminate(sink_pipeline_pid, blocking?: true)
   end
@@ -32,13 +37,19 @@ defmodule Membrane.RTMP.Sink.Test do
         video_parser: %Membrane.H264.FFmpeg.Parser{
           framerate: {30, 1},
           alignment: :au,
-          attach_nalus?: true
+          attach_nalus?: true,
+          skip_until_keyframe?: true
+        },
+        audio_parser: %Membrane.AAC.Parser{
+          out_encapsulation: :none
         },
         video_source: %Membrane.File.Source{location: @input_video_path},
+        audio_source: %Membrane.File.Source{location: @input_audio_path},
         rtmps_sink: %Membrane.RTMP.Sink{rtmp_url: rtmp_url}
       ],
       links: [
-        link(:video_source) |> to(:video_parser) |> via_in(:video) |> to(:rtmps_sink)
+        link(:video_source) |> to(:video_parser) |> via_in(:video) |> to(:rtmps_sink),
+        link(:audio_source) |> to(:audio_parser) |> via_in(:audio) |> to(:rtmps_sink)
       ],
       test_process: self()
     }
