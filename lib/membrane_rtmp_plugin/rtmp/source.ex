@@ -66,6 +66,8 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_demand(type, _size, _unit, _ctx, %{stale_frame: {type, buffer}} = state) do
+    # There is stale frame, which indicates that that the source was blocked waiting for demand from one of the outputs
+    # It now arrived, so we request next frame and output the one that blocked us
     send(state.provider, :get_frame)
     {{:ok, buffer: {type, buffer}}, %{state | stale_frame: nil}}
   end
@@ -90,6 +92,8 @@ defmodule Membrane.RTMP.Source do
       send(state.provider, :get_frame)
       {{:ok, buffer: {type, buffer}}, state}
     else
+      # if there is no demand for element of this type so we wait until it appears
+      # effectively, it results in source adapting to the slower of the two outputs
       {:ok, %{state | stale_frame: {type, buffer}}}
     end
   end
