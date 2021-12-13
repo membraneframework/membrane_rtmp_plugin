@@ -29,8 +29,8 @@ defmodule Membrane.RTMP.Source.Test do
     assert_pipeline_playback_changed(pid, :prepared, :playing, 10_000)
     assert_sink_buffer(pid, :video_sink, %Membrane.Buffer{})
     assert_sink_buffer(pid, :audio_sink, %Membrane.Buffer{})
-    assert_end_of_stream(pid, :audio_sink, :input, 5_000)
-    assert_end_of_stream(pid, :video_sink, :input, 5_000)
+    assert_end_of_stream(pid, :audio_sink, :input, 11_000)
+    assert_end_of_stream(pid, :video_sink, :input)
 
     # Cleanup
     Membrane.Testing.Pipeline.stop_and_terminate(pid, blocking?: true)
