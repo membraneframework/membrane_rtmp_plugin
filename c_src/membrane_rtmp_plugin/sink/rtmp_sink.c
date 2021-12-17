@@ -1,14 +1,13 @@
 #include "rtmp_sink.h"
 #include <stdlib.h>
 
-const float H264_BPP = 0.116f;
 const AVRational MEMBRANE_TIME_BASE  = (AVRational) {1, 1000000000};
 
 void handle_init_state(State* state);
 
 void handle_destroy_state(UnifexEnv* env, State* state);
 
-UNIFEX_TERM init_connection(UnifexEnv* env, char* rtmp_url) {
+UNIFEX_TERM create(UnifexEnv* env, char* rtmp_url) {
     State* state = unifex_alloc_state(env);
     handle_init_state(state);
     AVFormatContext* output_ctx;
@@ -16,38 +15,31 @@ UNIFEX_TERM init_connection(UnifexEnv* env, char* rtmp_url) {
     avformat_alloc_output_context2(&output_ctx, NULL, "flv", rtmp_url);
     if(!output_ctx){
         unifex_release_state(env, state);
-        return init_connection_result_error(env, "Failed to initialize output context.");
+        return create_result_error(env, "Failed to initialize output context.");
     }
 
     if (!(output_ctx->oformat->flags & AVFMT_NOFILE)) {
         if(avio_open(&output_ctx->pb, rtmp_url, AVIO_FLAG_WRITE) < 0){
             unifex_release_state(env, state);
-            return init_connection_result_error(env, "Failed to open provided URL for writing.");
+            return create_result_error(env, "Failed to open provided URL for writing.");
         }
     }
 
     state->output_ctx = output_ctx;
-    return init_connection_result_ok(env, state);
-}
-
-UNIFEX_TERM close_connection(UnifexEnv* env, State* state){
-    handle_destroy_state(env, state);
-    return close_connection_result_ok(env);
+    return create_result_ok(env, state);
 }
 
 UNIFEX_TERM init_video_stream(UnifexEnv* env, State* state, int width, int height, UnifexPayload* avc_config){
     AVStream* video_stream;
+    if(state->video_stream_index != -1) {
+        return init_video_stream_result_ok(env, state->header_written, state);
+    }
 
-    if(state->video_stream_index == -1){
-        video_stream = avformat_new_stream(state->output_ctx, NULL);
-        if(!video_stream){
-            return init_video_stream_result_error(env, "Failed allocation video stream");
-        }
-        state->video_stream_index = video_stream->index;
+    video_stream = avformat_new_stream(state->output_ctx, NULL);
+    if(!video_stream){
+        return unifex_raise(env, "Failed allocation video stream");
     }
-    else{
-        video_stream = state->output_ctx->streams[state->video_stream_index];
-    }
+    state->video_stream_index = video_stream->index;
 
     video_stream->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
     video_stream->codecpar->codec_id = AV_CODEC_ID_H264;
@@ -58,28 +50,31 @@ UNIFEX_TERM init_video_stream(UnifexEnv* env, State* state, int width, int heigh
     video_stream->codecpar->extradata_size = avc_config->size;
     video_stream->codecpar->extradata = (uint8_t*) av_malloc(avc_config->size + AV_INPUT_BUFFER_PADDING_SIZE);
     if(!video_stream->codecpar->extradata){
-        return init_video_stream_result_error(env, "Failed allocating video stream configuration data.");
+        return unifex_raise(env, "Failed allocating video stream configuration data.");
     }
     memcpy(video_stream->codecpar->extradata, avc_config->data, avc_config->size);
 
     int ready = (state->video_stream_index != -1 && state->audio_stream_index != -1);
+    if(ready && !state->header_written){ 
+        if(avformat_write_header(state->output_ctx, NULL) < 0){
+            return unifex_raise(env, "Failed writing header");
+        }
+        state->header_written = true;
+    }
     return init_video_stream_result_ok(env, ready, state);
 }
 
-
 UNIFEX_TERM init_audio_stream(UnifexEnv* env, State* state, int channels, int sample_rate, UnifexPayload* aac_config){
     AVStream* audio_stream;
+    if(state->audio_stream_index != -1) {
+        return init_audio_stream_result_ok(env, state->header_written, state);
+    }
 
-    if(state->audio_stream_index == -1){
-        audio_stream = avformat_new_stream(state->output_ctx, NULL);
-        if(!audio_stream){
-            return init_audio_stream_result_error(env, "Failed allocating audio stream");
-        }
-        state->audio_stream_index = audio_stream->index;
+    audio_stream = avformat_new_stream(state->output_ctx, NULL);
+    if(!audio_stream){
+        return unifex_raise(env, "Failed allocating audio stream");
     }
-    else{
-        audio_stream = state->output_ctx->streams[state->audio_stream_index];
-    }
+    state->audio_stream_index = audio_stream->index;
 
     audio_stream->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
     audio_stream->codecpar->codec_id = AV_CODEC_ID_AAC;
@@ -89,27 +84,23 @@ UNIFEX_TERM init_audio_stream(UnifexEnv* env, State* state, int channels, int sa
     audio_stream->codecpar->extradata = (uint8_t*) av_malloc(aac_config->size + AV_INPUT_BUFFER_PADDING_SIZE);
 
     if(!audio_stream->codecpar->extradata){
-        return init_audio_stream_result_error(env, "Failed allocating audio stream extradata");
+        return unifex_raise(env, "Failed allocating audio stream extradata");
     }
     memcpy(audio_stream->codecpar->extradata, aac_config->data, aac_config->size);
 
     int ready = (state->video_stream_index != -1 && state->audio_stream_index != -1);
-    return init_audio_stream_result_ok(env, ready, state);
-}
-
-UNIFEX_TERM write_header(UnifexEnv* env, State* state){
-    if(!state->header_written){
+    if(ready && !state->header_written){ 
         if(avformat_write_header(state->output_ctx, NULL) < 0){
-            return write_header_result_error(env, "Failed writing header.");
+            return unifex_raise(env, "Failed writing header");
         }
         state->header_written = true;
     }
-    return write_header_result_ok(env, state);
+    return init_audio_stream_result_ok(env, ready, state);
 }
 
 UNIFEX_TERM write_video_frame(UnifexEnv* env, State* state, UnifexPayload* frame, int64_t dts, int is_key_frame){
     if(state->video_stream_index == -1){
-        return write_video_frame_result_error(env, "Failed attempting to write video frame without initialized video stream");
+        return write_video_frame_result_error(env, "Video stream is not initialized. Caps has not been received.");
     }
 
     AVRational video_stream_time_base = state->output_ctx->streams[state->video_stream_index]->time_base;
@@ -124,7 +115,7 @@ UNIFEX_TERM write_video_frame(UnifexEnv* env, State* state, UnifexPayload* frame
     packet->data = (uint8_t*) av_malloc(frame->size);
 
     if(!packet->data){
-        return write_video_frame_result_error(env, "Failed allocating video frame data.");
+        return unifex_raise(env, "Failed allocating video frame data.");
     }
 
     memcpy(packet->data, frame->data, frame->size);
@@ -149,7 +140,7 @@ UNIFEX_TERM write_video_frame(UnifexEnv* env, State* state, UnifexPayload* frame
 
 UNIFEX_TERM write_audio_frame(UnifexEnv* env, State* state, UnifexPayload* frame, int64_t pts){
     if(state->audio_stream_index == -1){
-        return write_audio_frame_result_error(env, "Failed attempting to write audio frame without initialized audio stream");
+        return write_audio_frame_result_error(env, "Audio stream has not been initialized. Caps has not been received.");
     }
 
     AVRational audio_stream_time_base = state->output_ctx->streams[state->audio_stream_index]->time_base;
@@ -160,7 +151,7 @@ UNIFEX_TERM write_audio_frame(UnifexEnv* env, State* state, UnifexPayload* frame
 
     packet->data = (uint8_t*) av_malloc(frame->size);
     if(!packet->data){
-        return write_audio_frame_result_error(env, "Failed allocating audio frame data.");
+        return unifex_raise(env, "Failed allocating audio frame data.");
     }
     memcpy(packet->data, frame->data, frame->size);
     int64_t pts_scaled = av_rescale_q(pts, MEMBRANE_TIME_BASE, audio_stream_time_base);
