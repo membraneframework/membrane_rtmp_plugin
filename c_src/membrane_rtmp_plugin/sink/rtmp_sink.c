@@ -10,29 +10,30 @@ void handle_destroy_state(UnifexEnv* env, State* state);
 UNIFEX_TERM create(UnifexEnv* env, char* rtmp_url) {
     State* state = unifex_alloc_state(env);
     handle_init_state(state);
-    AVFormatContext* output_ctx;
     
-    avformat_alloc_output_context2(&output_ctx, NULL, "flv", rtmp_url);
-    if(!output_ctx){
-        unifex_release_state(env, state);
-        return create_result_error(env, "Failed to initialize output context.");
+    UNIFEX_TERM create_result;
+    avformat_alloc_output_context2(&state->output_ctx, NULL, "flv", rtmp_url);
+    if(!state->output_ctx){
+        create_result = create_result_error(env, "Failed to initialize output context");
+        goto end;
     }
 
-    if (!(output_ctx->oformat->flags & AVFMT_NOFILE)) {
-        if(avio_open(&output_ctx->pb, rtmp_url, AVIO_FLAG_WRITE) < 0){
-            unifex_release_state(env, state);
-            return create_result_error(env, "Failed to open provided URL for writing.");
+    if (!(state->output_ctx->oformat->flags & AVFMT_NOFILE)) {
+        if(avio_open(&state->output_ctx->pb, rtmp_url, AVIO_FLAG_WRITE) < 0){
+            create_result = create_result_error(env, "Failed to open provided URL for writing");
+            goto end;
         }
     }
-
-    state->output_ctx = output_ctx;
-    return create_result_ok(env, state);
+    create_result = create_result_ok(env, state);
+end:
+    unifex_release_state(env, state);
+    return create_result;
 }
 
 UNIFEX_TERM init_video_stream(UnifexEnv* env, State* state, int width, int height, UnifexPayload* avc_config){
     AVStream* video_stream;
     if(state->video_stream_index != -1) {
-        return init_video_stream_result_ok(env, state->header_written, state);
+        return init_video_stream_result_debug(env, "Re-received caps for video stream");
     }
 
     video_stream = avformat_new_stream(state->output_ctx, NULL);
@@ -50,11 +51,11 @@ UNIFEX_TERM init_video_stream(UnifexEnv* env, State* state, int width, int heigh
     video_stream->codecpar->extradata_size = avc_config->size;
     video_stream->codecpar->extradata = (uint8_t*) av_malloc(avc_config->size + AV_INPUT_BUFFER_PADDING_SIZE);
     if(!video_stream->codecpar->extradata){
-        return unifex_raise(env, "Failed allocating video stream configuration data.");
+        return unifex_raise(env, "Failed allocating video stream configuration data");
     }
     memcpy(video_stream->codecpar->extradata, avc_config->data, avc_config->size);
 
-    int ready = (state->video_stream_index != -1 && state->audio_stream_index != -1);
+    bool ready = (state->video_stream_index != -1 && state->audio_stream_index != -1);
     if(ready && !state->header_written){ 
         if(avformat_write_header(state->output_ctx, NULL) < 0){
             return unifex_raise(env, "Failed writing header");
@@ -67,7 +68,7 @@ UNIFEX_TERM init_video_stream(UnifexEnv* env, State* state, int width, int heigh
 UNIFEX_TERM init_audio_stream(UnifexEnv* env, State* state, int channels, int sample_rate, UnifexPayload* aac_config){
     AVStream* audio_stream;
     if(state->audio_stream_index != -1) {
-        return init_audio_stream_result_ok(env, state->header_written, state);
+        return init_audio_stream_result_debug(env, "Re-received caps for audio stream");
     }
 
     audio_stream = avformat_new_stream(state->output_ctx, NULL);
@@ -88,7 +89,7 @@ UNIFEX_TERM init_audio_stream(UnifexEnv* env, State* state, int channels, int sa
     }
     memcpy(audio_stream->codecpar->extradata, aac_config->data, aac_config->size);
 
-    int ready = (state->video_stream_index != -1 && state->audio_stream_index != -1);
+    bool ready = (state->video_stream_index != -1 && state->audio_stream_index != -1);
     if(ready && !state->header_written){ 
         if(avformat_write_header(state->output_ctx, NULL) < 0){
             return unifex_raise(env, "Failed writing header");
@@ -100,7 +101,7 @@ UNIFEX_TERM init_audio_stream(UnifexEnv* env, State* state, int channels, int sa
 
 UNIFEX_TERM write_video_frame(UnifexEnv* env, State* state, UnifexPayload* frame, int64_t dts, int is_key_frame){
     if(state->video_stream_index == -1){
-        return write_video_frame_result_error(env, "Video stream is not initialized. Caps has not been received.");
+        return write_video_frame_result_error(env, "Video stream is not initialized. Caps has not been received");
     }
 
     AVRational video_stream_time_base = state->output_ctx->streams[state->video_stream_index]->time_base;
@@ -115,7 +116,7 @@ UNIFEX_TERM write_video_frame(UnifexEnv* env, State* state, UnifexPayload* frame
     packet->data = (uint8_t*) av_malloc(frame->size);
 
     if(!packet->data){
-        return unifex_raise(env, "Failed allocating video frame data.");
+        return unifex_raise(env, "Failed allocating video frame data");
     }
 
     memcpy(packet->data, frame->data, frame->size);
@@ -128,19 +129,22 @@ UNIFEX_TERM write_video_frame(UnifexEnv* env, State* state, UnifexPayload* frame
     packet->duration = dts_scaled - state->current_video_dts;
     state->current_video_dts = dts_scaled;
 
-    
+    UNIFEX_TERM write_frame_result;
     if(av_interleaved_write_frame(state->output_ctx, packet)){
-        return write_video_frame_result_error(env, "Failed writing video frame");
+        write_frame_result = write_video_frame_result_error(env, "Failed writing video frame");
+        goto end;
     }
-  
+    write_frame_result = write_video_frame_result_ok(env, state);
+
+end:
     av_packet_unref(packet);
     av_packet_free(&packet);
-    return write_video_frame_result_ok(env, state);
+    return write_frame_result;
 }
 
 UNIFEX_TERM write_audio_frame(UnifexEnv* env, State* state, UnifexPayload* frame, int64_t pts){
     if(state->audio_stream_index == -1){
-        return write_audio_frame_result_error(env, "Audio stream has not been initialized. Caps has not been received.");
+        return write_audio_frame_result_error(env, "Audio stream has not been initialized. Caps has not been received");
     }
 
     AVRational audio_stream_time_base = state->output_ctx->streams[state->audio_stream_index]->time_base;
@@ -162,13 +166,17 @@ UNIFEX_TERM write_audio_frame(UnifexEnv* env, State* state, UnifexPayload* frame
     packet->duration = pts_scaled - state->current_audio_pts;
     state->current_audio_pts = pts_scaled;
     
+    UNIFEX_TERM write_frame_result;
     if(av_interleaved_write_frame(state->output_ctx, packet)){
-        return write_audio_frame_result_error(env, "Failed writing audio frame");
+        write_frame_result =  write_audio_frame_result_error(env, "Failed writing audio frame");
+        goto end;
     }
-    
+    write_frame_result = write_audio_frame_result_ok(env, state);
+
+end:
     av_packet_unref(packet);
     av_packet_free(&packet);
-    return write_audio_frame_result_ok(env, state);
+    return write_frame_result;
 }
 
 void handle_init_state(State* state){

@@ -1,7 +1,10 @@
 defmodule Membrane.RTMP.Sink do
   @moduledoc """
-  Membrane element being client-side of RTMP streams
-
+  Membrane element being client-side of RTMP streams.
+  To work successfuly it requires to receive both audio and video streams in AAC and H264 format respectively. Currently it supports only:
+    - RTMP proper - "plain" RTMP protocol
+    - RTMPS - RTMP over TLS/SSL
+  other RTMP veriants - RTMPT, RTMPE, RTMFP are not supported.
   Implementation based on FFmpeg.
   """
   use Membrane.Sink
@@ -71,6 +74,10 @@ defmodule Membrane.RTMP.Sink do
         state = Map.merge(state, %{native: native, ready: ready})
         {:ok, state}
 
+      {:debug, message} ->
+        Membrane.Logger.debug(message)
+        {:ok, state}
+
       {:error, reason} ->
         raise("Video stream initialization failed with reason: #{reason}")
     end
@@ -90,6 +97,10 @@ defmodule Membrane.RTMP.Sink do
       {:ok, ready, native} ->
         Membrane.Logger.debug("Correctly initialized audio stream.")
         state = Map.merge(state, %{native: native, ready: ready})
+        {:ok, state}
+
+      {:debug, message} ->
+        Membrane.Logger.debug(message)
         {:ok, state}
 
       {:error, reason} ->
@@ -165,9 +176,8 @@ defmodule Membrane.RTMP.Sink do
         %{current_timestamps: %{audio: _audio_dts, video: _video_dts} = curr_tmps} = state
       ) do
     curr_tmps = Map.delete(curr_tmps, pad)
-
-    {{:ok, demand: curr_tmps |> Map.keys() |> List.first()},
-     Map.put(state, :current_timestamps, curr_tmps)}
+    state = Map.put(state, :current_timestamps, curr_tmps)
+    {{:ok, demand: curr_tmps |> Map.keys() |> List.first()}, state}
   end
 
   @impl true
