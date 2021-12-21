@@ -12,6 +12,14 @@ defmodule Membrane.RTMP.Sink do
   alias Membrane.{AAC, MP4}
   require Membrane.Logger
 
+  @supported_protocols ["rtmp://", "rtmps://"]
+  @default_state %{
+    native: nil,
+    buffered_frame: nil,
+    ready: false,
+    current_timestamps: %{}
+  }
+
   def_input_pad :audio,
     availability: :always,
     caps: AAC,
@@ -29,15 +37,15 @@ defmodule Membrane.RTMP.Sink do
                 spec: String.t(),
                 description:
                   "Destination URL of the stream. It needs to start with rtmp:// or rtmps:// depending on the protocol variant.
-                This URL should be provided to you by your streaming service."
+                This URL should be provided by your streaming service."
               ]
 
   @impl true
   def handle_init(options) do
-    case options.rtmp_url do
-      "rtmp://" <> _ -> {:ok, Map.from_struct(options)}
-      "rtmps://" <> _ -> {:ok, Map.from_struct(options)}
-      _url -> raise("Invalid destination URL provided")
+    if String.starts_with?(options.rtmp_url, @supported_protocols) do
+      {:ok, Map.from_struct(options) |> Map.merge(@default_state)}
+    else
+      raise("Invalid destination URL provided")
     end
   end
 
@@ -57,8 +65,8 @@ defmodule Membrane.RTMP.Sink do
 
   @impl true
   def handle_playing_to_prepared(_ctx, state) do
-    Native.close_stream(state.native)
-    state = Map.drop(state, [:native, :ready, :buffered_frames])
+    Native.finalize_stream(state.native)
+    state = Map.merge(state, @default_state)
     Membrane.Logger.debug("Stream correctly closed")
     {:ok, state}
   end
@@ -76,8 +84,11 @@ defmodule Membrane.RTMP.Sink do
         state = Map.merge(state, %{native: native, ready: ready})
         {:ok, state}
 
-      {:error, :caps_resend} ->
-        Membrane.Logger.debug("Re-received caps for video stream")
+      {:error, :caps_resent} ->
+        Membrane.Logger.error(
+          "Input caps redefined on pad :video. RTMP Sink does not support changing stream parameters"
+        )
+
         {:ok, state}
     end
   end
@@ -98,8 +109,11 @@ defmodule Membrane.RTMP.Sink do
         state = Map.merge(state, %{native: native, ready: ready})
         {:ok, state}
 
-      {:error, :caps_resend} ->
-        Membrane.Logger.debug("Re-received caps for audio stream")
+      {:error, :caps_resent} ->
+        Membrane.Logger.error(
+          "Input caps redefined on pas :audio. RTMP Sink does not support changing stream paremeters"
+        )
+
         {:ok, state}
     end
   end
@@ -114,16 +128,45 @@ defmodule Membrane.RTMP.Sink do
   def handle_write(
         pad,
         buffer,
-        ctx,
+        _ctx,
         %{ready: true, buffered_frame: {frame_pad, frame}} = state
       ) do
-    {_, state} = handle_write(frame_pad, frame, ctx, Map.delete(state, :buffered_frame))
-    {_, state} = handle_write(pad, buffer, ctx, state)
-    {{:ok, demand: state.current_timestamps |> Enum.min_by(&elem(&1, 1)) |> elem(0)}, state}
+    state = write_frame(state, frame_pad, frame) |> write_frame(pad, buffer)
+    {{:ok, demand: get_demand(state)}, Map.put(state, :buffered_frame, nil)}
   end
 
   @impl true
-  def handle_write(:video, buffer, _ctx, %{ready: true} = state) do
+  def handle_write(pad, buffer, _ctx, state) do
+    state = write_frame(state, pad, buffer)
+    {{:ok, demand: get_demand(state)}, state}
+  end
+
+  @impl true
+  def handle_end_of_stream(pad, ctx, state) do
+    if ctx.pads |> Map.values() |> Enum.all?(& &1.end_of_stream?) do
+      {:ok, state}
+    else
+      state = Map.update!(state, :current_timestamps, &Map.delete(&1, pad))
+      {{:ok, demand: get_demand(state)}, state}
+    end
+  end
+
+  defp write_frame(state, :audio, buffer) do
+    buffer_pts = buffer.pts |> Ratio.ceil()
+
+    case Native.write_audio_frame(state.native, buffer.payload, buffer_pts) do
+      {:ok, native} ->
+        Map.put(state, :native, native)
+        |> Map.update!(:current_timestamps, fn curr_tmps ->
+          Map.put(curr_tmps, :audio, buffer_pts)
+        end)
+
+      {:error, reason} ->
+        raise("Writing audio frame failed with reason: #{reason}")
+    end
+  end
+
+  defp write_frame(state, :video, buffer) do
     case Native.write_video_frame(
            state.native,
            buffer.payload,
@@ -131,53 +174,20 @@ defmodule Membrane.RTMP.Sink do
            buffer.metadata.h264.key_frame?
          ) do
       {:ok, native} ->
-        state = Map.put(state, :native, native)
-
-        state =
-          Map.update(state, :current_timestamps, %{video: buffer.dts}, fn curr_tmps ->
-            Map.put(curr_tmps, :video, buffer.dts)
-          end)
-
-        {{:ok, demand: state.current_timestamps |> Enum.min_by(&elem(&1, 1)) |> elem(0)}, state}
+        Map.put(state, :native, native)
+        |> Map.update!(:current_timestamps, fn curr_tmps ->
+          Map.put(curr_tmps, :video, buffer.dts)
+        end)
 
       {:error, reason} ->
         raise("Writing video frame failed with reason: #{reason}")
     end
   end
 
-  @impl true
-  def handle_write(:audio, buffer, _ctx, %{ready: true} = state) do
-    buffer_pts = buffer.pts |> Ratio.ceil()
+  defp get_demand(state) do
+    {pad, _timestamp} =
+      state.current_timestamps |> Enum.min_by(fn {_pad, timestamp} -> timestamp end)
 
-    case Native.write_audio_frame(state.native, buffer.payload, buffer_pts) do
-      {:ok, native} ->
-        state = Map.put(state, :native, native)
-
-        state =
-          Map.update(state, :current_timestamps, %{audio: buffer_pts}, fn curr_tmps ->
-            Map.put(curr_tmps, :audio, buffer_pts)
-          end)
-
-        {{:ok, demand: state.current_timestamps |> Enum.min_by(&elem(&1, 1)) |> elem(0)}, state}
-
-      {:error, reason} ->
-        raise("Writing audio frame failed with reason: #{reason}")
-    end
-  end
-
-  @impl true
-  def handle_end_of_stream(
-        pad,
-        _ctx,
-        %{current_timestamps: %{audio: _audio_dts, video: _video_dts} = curr_tmps} = state
-      ) do
-    curr_tmps = Map.delete(curr_tmps, pad)
-    state = Map.put(state, :current_timestamps, curr_tmps)
-    {{:ok, demand: curr_tmps |> Map.keys() |> List.first()}, state}
-  end
-
-  @impl true
-  def handle_end_of_stream(_pad, _ctx, state) do
-    {:ok, Map.delete(state, :current_timestamps)}
+    {pad, 1}
   end
 end

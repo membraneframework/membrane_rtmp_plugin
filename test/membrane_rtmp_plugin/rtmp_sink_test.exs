@@ -7,11 +7,12 @@ defmodule Membrane.RTMP.Sink.Test do
 
   require Logger
 
-  @input_video_path "test/fixtures/bun33s_480x270.h264"
-  @input_audio_path "test/fixtures/bun33s.aac"
+  @input_video_path "https://raw.githubusercontent.com/membraneframework/static/gh-pages/samples/big-buck-bunny/bun33s_480x270.h264"
+  @input_audio_path "https://raw.githubusercontent.com/membraneframework/static/gh-pages/samples/big-buck-bunny/bun33s.aac"
 
-  @rtmp_srv_url "rtmp://localhost:49500"
-  @flv_path "/tmp/rtmp_sink_test.flv"
+  @rtmp_server_url "rtmp://localhost:49500"
+  @reference_flv_path "test/fixtures/bun33s.flv"
+  @test_flv_path "/tmp/rtmp_sink_test.flv"
 
   setup do
     rtmp_server_pid =
@@ -24,9 +25,9 @@ defmodule Membrane.RTMP.Sink.Test do
   end
 
   test "Check if audio and video streams are correctly received by RTMP server instance" do
-    on_exit(fn -> File.rm(@flv_path) end)
+    on_exit(fn -> File.rm(@test_flv_path) end)
 
-    sink_pipeline_pid = get_sink_pipeline(@rtmp_srv_url) |> start_supervised!()
+    sink_pipeline_pid = get_sink_pipeline(@rtmp_server_url) |> start_supervised!()
     Membrane.Testing.Pipeline.play(sink_pipeline_pid)
 
     assert_pipeline_playback_changed(sink_pipeline_pid, :prepared, :playing)
@@ -38,7 +39,8 @@ defmodule Membrane.RTMP.Sink.Test do
     assert_end_of_stream(sink_pipeline_pid, :rtmps_sink, :audio, 5_000)
 
     Membrane.Testing.Pipeline.stop_and_terminate(sink_pipeline_pid, blocking?: true)
-    assert File.exists?(@flv_path)
+    assert File.exists?(@test_flv_path)
+    assert File.stat!(@test_flv_path).size == File.stat!(@reference_flv_path).size
   end
 
   defp get_sink_pipeline(rtmp_url) do
@@ -54,8 +56,14 @@ defmodule Membrane.RTMP.Sink.Test do
         audio_parser: %Membrane.AAC.Parser{
           out_encapsulation: :none
         },
-        video_source: %Membrane.File.Source{location: @input_video_path},
-        audio_source: %Membrane.File.Source{location: @input_audio_path},
+        video_source: %Membrane.Hackney.Source{
+          location: @input_video_path,
+          hackney_opts: [follow_redirect: true]
+        },
+        audio_source: %Membrane.Hackney.Source{
+          location: @input_audio_path,
+          hackney_opts: [follow_redirect: true]
+        },
         video_payloader: Membrane.MP4.Payloader.H264,
         rtmps_sink: %Membrane.RTMP.Sink{rtmp_url: rtmp_url}
       ],
@@ -93,9 +101,9 @@ defmodule Membrane.RTMP.Sink.Test do
         require_arg: true,
         contexts: [:global]
       })
-      |> add_input_file(@rtmp_srv_url)
+      |> add_input_file(@rtmp_server_url)
       |> add_file_option(option_f("flv"))
-      |> add_output_file(@flv_path)
+      |> add_output_file(@test_flv_path)
       |> add_file_option(option_c("copy"))
 
     case FFmpex.execute(command) do

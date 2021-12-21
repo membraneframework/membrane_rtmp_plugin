@@ -4,12 +4,15 @@
 [![API Docs](https://img.shields.io/badge/api-docs-yellow.svg?style=flat)](https://hexdocs.pm/membrane_rtmp_plugin)
 [![CircleCI](https://circleci.com/gh/membraneframework/membrane_rtmp_plugin.svg?style=svg)](https://circleci.com/gh/membraneframework/membrane_rtmp_plugin)
 
-This package provides RTMP server which listens to a connection from a client and streaming RTMP client which streams to a server.
+This package provides RTMP server which listens to a connection from a client and element for streaming to an RTMP server.
 ### Server
 After establishing connection it receives RTMP stream, demux it and outputs H264 video and AAC audio.
 At this moment only one client can connect to the server.
-### Client
-After establishing connection with server it waits to receive H264 video and AAc audio streams. Once both streams are received they are muxed to FLV format and streamed to the server.
+### Streaming element
+After establishing connection with server it waits to receive video and audio streams. Once both streams are received they are streamed to the server.
+Currently only the following codecs are supported:
+- H264 for video
+- AAC for audio
 
 It is part of [Membrane Multimedia Framework](https://membraneframework.org).
 
@@ -94,89 +97,18 @@ To run this example you will need following extra dependency
 ```elixir
 {:membrane_http_adaptive_stream_plugin, github: "membraneframework/membrane_http_adaptive_stream_plugin"}
 ```
-### Client
-Example Streaming Client pipeline might look like this:
-```elixir
-defmodule Example.Stream do
-  use Membrane.Pipeline
-
-  @impl true
-  def handle_init(options) do
-    children = [
-      video_source: %Membrane.File.Source{location: options[:video_file_path]},
-      video_parser: %Membrane.H264.FFmpeg.Parser{
-        framerate: {25, 1},
-        alignment: :au,
-        attach_nalus?: true,
-        skip_until_keyframe?: true
-      },
-      audio_parser: %Membrane.AAC.Parser{
-        out_encapsulation: :none
-      },
-      audio_source: %Membrane.File.Source{location: options[:audio_file_path]},
-      video_realtimer: Membrane.Realtimer,
-      audio_realtimer: Membrane.Realtimer,
-      video_payloader: Membrane.MP4.Payloader.H264,
-      rtmps_sink: %Membrane.RTMP.Sink{rtmp_url: options[:rtmp_url]}
-    ]
-
-    links = [
-      link(:video_source)
-      |> to(:video_parser)
-      |> to(:video_realtimer)
-      |> to(:video_payloader)
-      |> via_in(:video)
-      |> to(:rtmps_sink),
-      link(:audio_source)
-      |> to(:audio_parser)
-      |> to(:audio_realtimer)
-      |> via_in(:audio)
-      |> to(:rtmps_sink)
-    ]
-
-    {{:ok, spec: %ParentSpec{children: children, links: links}}, %{}}
-  end
-
-  @impl true
-  def handle_element_end_of_stream({:rtmps_sink, pad}, _ctx, %{finished_streams: [closed_pad]} = state) do
-    Membrane.Pipeline.stop_and_terminate(self())
-    {:ok, Map.put(state, :finished_streams, [pad, closed_pad])}
-  end
-
-  @impl true
-  def handle_element_end_of_stream({:rtmps_sink, pad}, _ctx, state) do
-    {:ok, Map.put(state, :finished_streams, [pad])}
-  end
-
-  @impl true
-  def handle_element_end_of_stream(_element, _ctx, state) do
-    {:ok, state}
-  end
-end
+### Streaming
+Streaming implementation example is provided with the following [script](examples/stream.exs). Run it with:
+```bash
+elixir examples/stream.exs
 ```
-It will connect to RTMP server provided via URL and stream H264 video and AAC audio muxed to FLV format.
+It will connect to RTMP server provided via URL and stream H264 video and AAC audio.
 RTMP server that will receive this stream can be launched with ffmpeg by running the following commands:
 ```bash
 export RTMP_URL=rtmp://localhost:1935
 ffmpeg -listen 1 -f flv -i rtmp://localhost:1935 -c copy dest.flv
 ```
-It will receive stream and once streaming is completed dump it to .flv file.
-Run it with:
-```elixir
-pipeline_options = %{
-  video_file_path: "bun33s_480x270.h264",
-  audio_file_path: "bun33s.aac",
-  rtmp_url: System.get_env("RTMP_URL")
-}
-{:ok, pid} = Example.Stream.start_link(pipeline_options)
-Example.Server.play(pid)
-```
-[Audio](test/fixtures/bun33.aac) and [Video](test/fixtures/bun33s_480x270.h264) files are present in our tests directory.
-Running this example requires the following extra dependencies:
-```elixir
-{:membrane_realtimer_plugin, "~> 0.4.0"},
-{:membrane_file_plugin, "~> 0.6"},
-```
+It will receive stream and once streaming is completed dump it to .flv file. If using the command above, please remember to run it **before** the streaming script.
 ## Copyright and License
 
 Copyright 2021, [Software Mansion](https://swmansion.com/?utm_source=git&utm_medium=readme&utm_campaign=membrane_rtmp_plugin)

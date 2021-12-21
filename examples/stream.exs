@@ -1,9 +1,10 @@
 Mix.install([
+  {:membrane_core, "~> 0.8.1"},
   {:membrane_realtimer_plugin, "~> 0.4.0"},
-  {:membrane_file_plugin, "~> 0.6"},
-  {:membrane_h264_ffmpeg_plugin, "~> 0.15.0"},
+  {:membrane_hackney_plugin, "~> 0.6.0"},
+  {:membrane_h264_ffmpeg_plugin, "~> 0.16.3"},
   {:membrane_aac_plugin, "~> 0.11.0"},
-  {:membrane_mp4_plugin, github: "membraneframework/membrane_mp4_plugin"},
+  {:membrane_mp4_plugin, "~> 0.10.0"},
   {:membrane_rtmp_plugin, path: __DIR__ |> Path.join("..") |> Path.expand()}
 ])
 
@@ -11,9 +12,12 @@ defmodule Example do
   use Membrane.Pipeline
 
   @impl true
-  def handle_init(options) do
+  def handle_init(_opts) do
     children = [
-      video_source: %Membrane.File.Source{location: options[:video_file_path]},
+      video_source: %Membrane.Hackney.Source{
+        location: "https://raw.githubusercontent.com/membraneframework/static/gh-pages/samples/big-buck-bunny/bun33s_480x270.h264",
+        hackney_opts: [follow_redirect: true]
+      },
       video_parser: %Membrane.H264.FFmpeg.Parser{
         framerate: {25, 1},
         alignment: :au,
@@ -23,11 +27,14 @@ defmodule Example do
       audio_parser: %Membrane.AAC.Parser{
         out_encapsulation: :none
       },
-      audio_source: %Membrane.File.Source{location: options[:audio_file_path]},
+      audio_source: %Membrane.Hackney.Source{
+        location: "https://raw.githubusercontent.com/membraneframework/static/gh-pages/samples/big-buck-bunny/bun33s.aac",
+        hackney_opts: [follow_redirect: true]
+      },
       video_realtimer: Membrane.Realtimer,
       audio_realtimer: Membrane.Realtimer,
       video_payloader: Membrane.MP4.Payloader.H264,
-      rtmps_sink: %Membrane.RTMP.Sink{rtmp_url: options[:rtmp_url]}
+      rtmps_sink: %Membrane.RTMP.Sink{rtmp_url: System.get_env("RTMP_URL")}
     ]
 
     links = [
@@ -44,13 +51,13 @@ defmodule Example do
       |> to(:rtmps_sink)
     ]
 
-    {{:ok, spec: %ParentSpec{children: children, links: links}}, %{}}
+    {{:ok, spec: %ParentSpec{children: children, links: links}}, %{finished_streams: []}}
   end
 
   @impl true
-  def handle_element_end_of_stream({:rtmps_sink, pad}, _ctx, %{finished_streams: [closed_pad]} = state) do
+  def handle_element_end_of_stream({:rtmps_sink, pad}, _ctx, state) when length(state.finished_streams) == 1 do
     Membrane.Pipeline.stop_and_terminate(self())
-    {:ok, Map.put(state, :finished_streams, [pad, closed_pad])}
+    {:ok, Map.put(state, :finished_streams, &[pad | &1])}
   end
 
   @impl true
@@ -64,19 +71,11 @@ defmodule Example do
   end
 end
 
-pipeline_options = %{
-  video_file_path: "test/fixtures/bun33s_480x270.h264",
-  audio_file_path: "test/fixtures/bun33s.aac",
-  rtmp_url: System.get_env("RTMP_URL")
-}
-
-ref =
-Example.start_link(pipeline_options)
-  |> elem(1)
-  |> tap(&Membrane.Pipeline.play/1)
-  |> then(&Process.monitor/1)
+{:ok, pipeline} = Example.start_link()
+Membrane.Pipeline.play(pipeline)
+monitor = Process.monitor(pipeline)
 
 receive do
-  {:DOWN, ^ref, :process, _pid, _reason} ->
+  {:DOWN, ^monitor, :process, _pid, _reason} ->
     :ok
 end
