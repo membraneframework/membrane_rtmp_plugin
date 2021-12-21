@@ -57,7 +57,9 @@ defmodule Membrane.RTMP.Sink do
 
   @impl true
   def handle_playing_to_prepared(_ctx, state) do
+    Native.close_stream(state.native)
     state = Map.drop(state, [:native, :ready, :buffered_frames])
+    Membrane.Logger.debug("Stream correctly closed")
     {:ok, state}
   end
 
@@ -74,12 +76,9 @@ defmodule Membrane.RTMP.Sink do
         state = Map.merge(state, %{native: native, ready: ready})
         {:ok, state}
 
-      {:debug, message} ->
-        Membrane.Logger.debug(message)
+      {:error, :caps_resend} ->
+        Membrane.Logger.debug("Re-received caps for video stream")
         {:ok, state}
-
-      {:error, reason} ->
-        raise("Video stream initialization failed with reason: #{reason}")
     end
   end
 
@@ -99,12 +98,9 @@ defmodule Membrane.RTMP.Sink do
         state = Map.merge(state, %{native: native, ready: ready})
         {:ok, state}
 
-      {:debug, message} ->
-        Membrane.Logger.debug(message)
+      {:error, :caps_resend} ->
+        Membrane.Logger.debug("Re-received caps for audio stream")
         {:ok, state}
-
-      {:error, reason} ->
-        raise("Audio stream initialization failed with reason: #{reason}")
     end
   end
 

@@ -30,10 +30,17 @@ end:
     return create_result;
 }
 
+UNIFEX_TERM close_stream(UnifexEnv* env, State* state){
+    if(av_write_trailer(state->output_ctx)){
+        return unifex_raise(env, "Failed writing stream trailer");
+    }
+    return close_stream_result(env);
+}
+
 UNIFEX_TERM init_video_stream(UnifexEnv* env, State* state, int width, int height, UnifexPayload* avc_config){
     AVStream* video_stream;
     if(state->video_stream_index != -1) {
-        return init_video_stream_result_debug(env, "Re-received caps for video stream");
+        return init_video_stream_result_error_caps_resend(env);
     }
 
     video_stream = avformat_new_stream(state->output_ctx, NULL);
@@ -68,7 +75,7 @@ UNIFEX_TERM init_video_stream(UnifexEnv* env, State* state, int width, int heigh
 UNIFEX_TERM init_audio_stream(UnifexEnv* env, State* state, int channels, int sample_rate, UnifexPayload* aac_config){
     AVStream* audio_stream;
     if(state->audio_stream_index != -1) {
-        return init_audio_stream_result_debug(env, "Re-received caps for audio stream");
+        return init_audio_stream_result_error_caps_resend(env);
     }
 
     audio_stream = avformat_new_stream(state->output_ctx, NULL);

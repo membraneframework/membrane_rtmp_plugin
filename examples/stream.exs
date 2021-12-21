@@ -46,6 +46,22 @@ defmodule Example do
 
     {{:ok, spec: %ParentSpec{children: children, links: links}}, %{}}
   end
+
+  @impl true
+  def handle_element_end_of_stream({:rtmps_sink, pad}, _ctx, %{finished_streams: [closed_pad]} = state) do
+    Membrane.Pipeline.stop_and_terminate(self())
+    {:ok, Map.put(state, :finished_streams, [pad, closed_pad])}
+  end
+
+  @impl true
+  def handle_element_end_of_stream({:rtmps_sink, pad}, _ctx, state) do
+    {:ok, Map.put(state, :finished_streams, [pad])}
+  end
+
+  @impl true
+  def handle_element_end_of_stream(_element, _ctx, state) do
+    {:ok, state}
+  end
 end
 
 pipeline_options = %{
