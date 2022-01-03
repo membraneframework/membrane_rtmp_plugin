@@ -1,6 +1,7 @@
 defmodule Membrane.RTMP.Source do
   @moduledoc """
-  Membrane Element being a server-side source of RTMP streams.
+  Membrane Element for receiving RTMP streams. Acts as a RTMP Server.
+  This implementation is limited to only AAC and H264 streams.
 
   Implementation based on FFmpeg
   """
@@ -16,7 +17,7 @@ defmodule Membrane.RTMP.Source do
 
   def_output_pad :video,
     availability: :always,
-    caps: :any,
+    caps: Membrane.H264.RemoteStream,
     mode: :pull
 
   def_options url: [
