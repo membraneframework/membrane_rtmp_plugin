@@ -11,7 +11,7 @@ defmodule Membrane.RTMP.Source do
 
   def_output_pad :audio,
     availability: :always,
-    caps: {AAC, encapsulation: :none},
+    caps: Membrane.AAC.RemoteStream,
     mode: :pull
 
   def_output_pad :video,
@@ -80,7 +80,7 @@ defmodule Membrane.RTMP.Source do
   @impl true
   def handle_other({:frame_provider, {:ok, type, timestamp, frame}}, ctx, state)
       when ctx.playback_state == :playing do
-    timestamp = Time.microseconds(timestamp)
+    timestamp = Time.milliseconds(timestamp)
 
     buffer = %Buffer{
       pts: timestamp,
@@ -139,8 +139,11 @@ defmodule Membrane.RTMP.Source do
       |> Enum.concat()
 
   defp get_audio_params(native) do
-    with {:ok, asc} <- Native.get_audio_params(native),
-         {:ok, caps} <- get_aac_caps(asc) do
+    with {:ok, asc} <- Native.get_audio_params(native) do
+      caps = %Membrane.AAC.RemoteStream{
+        audio_specific_config: asc
+      }
+
       [caps: {:audio, caps}]
     else
       {:error, _reason} -> []
@@ -159,21 +162,4 @@ defmodule Membrane.RTMP.Source do
       {:error, _reason} -> []
     end
   end
-
-  defp get_aac_caps(
-         <<profile::5, sr_index::4, channel_configuration::4, frame_length_flag::1, _rest::bits>> =
-           _audio_specific_config
-       ),
-       do:
-         %AAC{
-           profile: AAC.aot_id_to_profile(profile),
-           mpeg_version: 4,
-           sample_rate: AAC.sampling_frequency_id_to_sample_rate(sr_index),
-           channels: AAC.channel_config_id_to_channels(channel_configuration),
-           encapsulation: :none,
-           samples_per_frame: if(frame_length_flag == 1, do: 1024, else: 960)
-         }
-         |> then(&{:ok, &1})
-
-  defp get_aac_caps(_otherwise), do: {:error, :unknown_pattern}
 end
