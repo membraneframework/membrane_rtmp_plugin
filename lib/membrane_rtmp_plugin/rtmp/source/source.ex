@@ -148,10 +148,13 @@ defmodule Membrane.RTMP.Source do
   end
 
   defp get_video_params(native) do
-    with {:ok, config} <- Native.get_video_params(native),
-         {:ok, parsed} <- AVC.Configuration.parse(config),
-         %AVC.Configuration{pps: [pps], sps: [sps]} = parsed do
-      [buffer: {:video, %Buffer{payload: <<0, 0, 1>> <> sps <> <<0, 0, 1>> <> pps}}]
+    with {:ok, config} <- Native.get_video_params(native) do
+      caps = %Membrane.H264.RemoteStream{
+        decoder_configuration_record: config,
+        stream_format: :byte_stream
+      }
+
+      [caps: {:video, caps}]
     else
       {:error, _reason} -> []
     end
