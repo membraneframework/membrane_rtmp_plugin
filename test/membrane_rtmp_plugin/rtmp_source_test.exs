@@ -15,7 +15,7 @@ defmodule Membrane.RTMP.Source.Test do
     pipeline_pid = get_testing_pipeline() |> start_supervised!()
     Membrane.Testing.Pipeline.play(pipeline_pid)
 
-    ffmpeg = %{
+    %{
       pid: pipeline_pid,
       ffmpeg:
         start_supervised!(%{

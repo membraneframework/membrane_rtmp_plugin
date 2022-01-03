@@ -6,7 +6,7 @@ defmodule Membrane.RTMP.Source do
   """
   use Membrane.Source
   alias __MODULE__.Native
-  alias Membrane.{AVC, Time, AAC, Buffer}
+  alias Membrane.{AVC, Time, Buffer}
   require Membrane.Logger
 
   def_output_pad :audio,

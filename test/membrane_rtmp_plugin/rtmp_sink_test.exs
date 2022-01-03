@@ -1,8 +1,7 @@
 defmodule Membrane.RTMP.Sink.Test do
-  use ExUnit.Case, async: true
+  use ExUnit.Case
   import Membrane.Testing.Assertions
 
-  alias Membrane.Testing
   alias Membrane.Testing.{Pipeline}
 
   require Logger
