@@ -1,4 +1,4 @@
-defmodule Membrane.RTMP.Bin do
+defmodule Membrane.RTMP.SourceBin do
   @moduledoc """
   Bin responsible for spawning new RTMP server.
 

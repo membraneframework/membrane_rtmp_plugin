@@ -21,7 +21,7 @@ defmodule Example do
   def handle_init(_opts) do
     spec = %ParentSpec{
       children: %{
-          source: %Membrane.RTMP.Bin{
+          source: %Membrane.RTMP.SourceBin{
             local_ip: @server_url,
             port: @server_port
           },
