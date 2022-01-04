@@ -1,3 +1,8 @@
+# Before running this example, make sure that target RTMP server is live.
+# If you are streaming to eg. Youtube, you don't need to worry about it.
+# If you want to test it locally, you can run the FFmpeg server with:
+# ffmpeg -listen 1 -f flv -i rtmp://localhost:1935 -c copy dest.flv
+
 Mix.install([
   {:membrane_core, "~> 0.8.1"},
   {:membrane_realtimer_plugin, "~> 0.4.0"},
@@ -25,6 +30,7 @@ defmodule Example do
         skip_until_keyframe?: true
       },
       audio_parser: %Membrane.AAC.Parser{
+        in_encapsulation: :ADTS,
         out_encapsulation: :none
       },
       audio_source: %Membrane.Hackney.Source{
@@ -54,6 +60,7 @@ defmodule Example do
     {{:ok, spec: %ParentSpec{children: children, links: links}}, %{finished_streams: []}}
   end
 
+  # The rest of the example module is only used for self-termination of the pipeline after processing finishes
   @impl true
   def handle_element_end_of_stream({:rtmps_sink, pad}, _ctx, state) when length(state.finished_streams) == 1 do
     Membrane.Pipeline.stop_and_terminate(self())
@@ -71,11 +78,14 @@ defmodule Example do
   end
 end
 
+# Initialize the pipeline and start it
 {:ok, pipeline} = Example.start_link()
-Membrane.Pipeline.play(pipeline)
-monitor = Process.monitor(pipeline)
+:ok = Membrane.Pipeline.play(pipeline)
 
+monitor_ref = Process.monitor(pipeline)
+
+# Wait for the pipeline to finish
 receive do
-  {:DOWN, ^monitor, :process, _pid, _reason} ->
+  {:DOWN, ^monitor_ref, :process, _pid, _reason} ->
     :ok
 end

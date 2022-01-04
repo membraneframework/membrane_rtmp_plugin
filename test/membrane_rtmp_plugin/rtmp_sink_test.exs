@@ -1,8 +1,7 @@
 defmodule Membrane.RTMP.Sink.Test do
-  use ExUnit.Case, async: true
+  use ExUnit.Case
   import Membrane.Testing.Assertions
 
-  alias Membrane.Testing
   alias Membrane.Testing.{Pipeline}
 
   require Logger
@@ -30,7 +29,7 @@ defmodule Membrane.RTMP.Sink.Test do
     sink_pipeline_pid = get_sink_pipeline(@rtmp_server_url) |> start_supervised!()
     Membrane.Testing.Pipeline.play(sink_pipeline_pid)
 
-    assert_pipeline_playback_changed(sink_pipeline_pid, :prepared, :playing)
+    assert_pipeline_playback_changed(sink_pipeline_pid, :prepared, :playing, 5000)
 
     assert_start_of_stream(sink_pipeline_pid, :rtmps_sink, :video, 5_000)
     assert_start_of_stream(sink_pipeline_pid, :rtmps_sink, :audio, 5_000)
