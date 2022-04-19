@@ -40,7 +40,7 @@ defmodule Example do
       video_realtimer: Membrane.Realtimer,
       audio_realtimer: Membrane.Realtimer,
       video_payloader: Membrane.MP4.Payloader.H264,
-      rtmps_sink: %Membrane.RTMP.Sink{rtmp_url: System.get_env("RTMP_URL")}
+      rtmps_sink: %Membrane.RTMP.Sink{rtmp_url: System.get_env("RTMP_URL", "rtmp://localhost:1935")}
     ]
 
     links = [
