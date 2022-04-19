@@ -1,5 +1,6 @@
-# Before running this example, don't forget to start the RTMP server
-# eg. ffmpeg -re -i test/fixtures/testsrc.flv -f flv -c:v copy -c:a copy rtmp://localhost:5000
+# After running this script, you can access the server at rtmp://localhost:5000
+# You can use FFmpeg to stream to it
+# ffmpeg -re -i test/fixtures/testsrc.flv -f flv -c:v copy -c:a copy rtmp://localhost:5000
 
 Mix.install([
   :membrane_core,
@@ -7,8 +8,8 @@ Mix.install([
   :membrane_file_plugin,
   :membrane_mp4_plugin,
   :membrane_flv_plugin,
-  {:membrane_aac_plugin, github: "membraneframework/membrane_aac_plugin", branch: "bugfix/960-transform", override: true}
-], force: true)
+  :membrane_aac_plugin
+])
 
 defmodule Example do
   use Membrane.Pipeline
