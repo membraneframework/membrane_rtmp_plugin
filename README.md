@@ -28,7 +28,7 @@ end
 ```
 
 ### Prerequisites
-In order to successfully build and install the plugin, you need to have **ffmpeg >= 4.4** installed on your system
+In order to successfully build and install the plugin, you need to have **ffmpeg == 4.4** installed on your system
 
 ## Usage
 ### `Membrane.RTMP.Source` - RTMP Server
