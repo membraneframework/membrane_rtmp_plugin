@@ -37,16 +37,16 @@ defmodule Membrane.RTMP.Mixfile do
 
   defp deps do
     [
-      {:membrane_core, "~> 0.8.0"},
+      {:membrane_core, "~> 0.10.0"},
       {:unifex, "~> 0.7.0"},
       {:ex_doc, "~> 0.24", only: :dev, runtime: false},
       {:dialyxir, "~> 1.1", only: :dev, runtime: false},
       {:credo, "~> 1.5", runtime: false},
-      {:membrane_hackney_plugin, "~> 0.6.0", only: :test},
-      {:membrane_h264_ffmpeg_plugin, "~> 0.16.3"},
-      {:membrane_aac_plugin, "~> 0.11.0"},
+      {:membrane_hackney_plugin, "~> 0.8.0", only: :test},
+      {:membrane_h264_ffmpeg_plugin, github: "membraneframework/membrane_h264_ffmpeg_plugin", branch: "parser_integration_test"},
+      {:membrane_aac_plugin, "~> 0.12.1"},
       {:ffmpex, "~> 0.7", only: :test},
-      {:membrane_mp4_plugin, "~> 0.10.0"}
+      {:membrane_mp4_plugin, "~> 0.14.0"}
     ]
   end
 
