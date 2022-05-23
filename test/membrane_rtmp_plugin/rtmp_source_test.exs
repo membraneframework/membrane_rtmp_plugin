@@ -13,7 +13,6 @@ defmodule Membrane.RTMP.Source.Test do
 
   setup do
     pipeline_pid = get_testing_pipeline() |> start_supervised!()
-    Membrane.Testing.Pipeline.play(pipeline_pid)
 
     %{
       pid: pipeline_pid,
@@ -40,8 +39,8 @@ defmodule Membrane.RTMP.Source.Test do
   defp get_testing_pipeline() do
     import Membrane.ParentSpec
 
-    options = %Membrane.Testing.Pipeline.Options{
-      elements: [
+    options = [
+      children: [
         src: %Membrane.RTMP.SourceBin{port: @port},
         audio_sink: Testing.Sink,
         video_sink: Testing.Sink
@@ -51,7 +50,7 @@ defmodule Membrane.RTMP.Source.Test do
         link(:src) |> via_out(:video) |> to(:video_sink)
       ],
       test_process: self()
-    }
+    ]
 
     %{
       id: :test_pipeline,

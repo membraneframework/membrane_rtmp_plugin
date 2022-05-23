@@ -39,15 +39,16 @@ defmodule Membrane.RTMP.Mixfile do
     [
       {:membrane_core, "~> 0.10.0"},
       {:unifex, "~> 1.0"},
-      {:ex_doc, "~> 0.24", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.28", only: :dev, runtime: false},
       {:dialyxir, "~> 1.1", only: :dev, runtime: false},
       {:credo, "~> 1.5", runtime: false},
       {:membrane_hackney_plugin, "~> 0.8.0", only: :test},
       {:membrane_h264_ffmpeg_plugin,
-       github: "membraneframework/membrane_h264_ffmpeg_plugin", branch: "improve-integration-tests"},
+       github: "membraneframework/membrane_h264_ffmpeg_plugin",
+       branch: "improve-integration-tests"},
       {:membrane_aac_plugin, "~> 0.12.1"},
       {:ffmpex, "~> 0.7", only: :test},
-      {:membrane_mp4_plugin, "~> 0.14.0"}
+      {:membrane_mp4_plugin, "~> 0.15.0"}
     ]
   end
 

@@ -4,7 +4,7 @@
 # ffmpeg -listen 1 -f flv -i rtmp://localhost:1935 -c copy dest.flv
 
 Mix.install([
-  {:membrane_core, "~> 0.8.1"},
+  {:membrane_core, "~> 0.10"},
   {:membrane_realtimer_plugin, "~> 0.4.0"},
   {:membrane_hackney_plugin, "~> 0.6.0"},
   {:membrane_h264_ffmpeg_plugin, "~> 0.16.3"},
@@ -63,7 +63,7 @@ defmodule Example do
   # The rest of the example module is only used for self-termination of the pipeline after processing finishes
   @impl true
   def handle_element_end_of_stream({:rtmps_sink, pad}, _ctx, state) when length(state.finished_streams) == 1 do
-    Membrane.Pipeline.stop_and_terminate(self())
+    Membrane.Pipeline.terminate(self())
     {:ok, Map.put(state, :finished_streams, &[pad | &1])}
   end
 

@@ -3,7 +3,7 @@
 # ffmpeg -re -i test/fixtures/testsrc.flv -f flv -c:v copy -c:a copy rtmp://localhost:5000
 
 Mix.install([
-  :membrane_core,
+  {:membrane_core, "~> 0.10.1"},
   {:membrane_rtmp_plugin, path: __DIR__ |> Path.join("../") |> Path.expand()},
   :membrane_file_plugin,
   :membrane_mp4_plugin,
@@ -43,7 +43,7 @@ defmodule Example do
   # The rest of the module is used for self-termination of the pipeline after processing finishes
   @impl true
   def handle_element_end_of_stream({:sink, _pad}, _ctx, state) do
-    Membrane.Pipeline.stop_and_terminate(self())
+    Membrane.Pipeline.terminate(self())
     {:ok, state}
   end
 
