@@ -27,7 +27,6 @@ defmodule Membrane.RTMP.Sink.Test do
     on_exit(fn -> File.rm(@test_flv_path) end)
 
     sink_pipeline_pid = get_sink_pipeline(@rtmp_server_url) |> start_supervised!()
-    Membrane.Testing.Pipeline.play(sink_pipeline_pid)
 
     assert_pipeline_playback_changed(sink_pipeline_pid, :prepared, :playing, 5000)
 
@@ -37,7 +36,7 @@ defmodule Membrane.RTMP.Sink.Test do
     assert_end_of_stream(sink_pipeline_pid, :rtmps_sink, :video, 5_000)
     assert_end_of_stream(sink_pipeline_pid, :rtmps_sink, :audio, 5_000)
 
-    Membrane.Testing.Pipeline.stop_and_terminate(sink_pipeline_pid, blocking?: true)
+    Membrane.Testing.Pipeline.terminate(sink_pipeline_pid, blocking?: true)
     assert File.exists?(@test_flv_path)
     assert File.stat!(@test_flv_path).size == File.stat!(@reference_flv_path).size
   end
@@ -45,8 +44,8 @@ defmodule Membrane.RTMP.Sink.Test do
   defp get_sink_pipeline(rtmp_url) do
     import Membrane.ParentSpec
 
-    options = %Membrane.Testing.Pipeline.Options{
-      elements: [
+    options = [
+      children: [
         video_parser: %Membrane.H264.FFmpeg.Parser{
           framerate: {30, 1},
           alignment: :au,
@@ -75,7 +74,7 @@ defmodule Membrane.RTMP.Sink.Test do
         link(:audio_source) |> to(:audio_parser) |> via_in(:audio) |> to(:rtmps_sink)
       ],
       test_process: self()
-    }
+    ]
 
     %{
       id: :sink_pipeline,
