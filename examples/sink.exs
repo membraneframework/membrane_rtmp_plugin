@@ -6,10 +6,10 @@
 Mix.install([
   {:membrane_core, "~> 0.10"},
   {:membrane_realtimer_plugin, "~> 0.4.0"},
-  {:membrane_hackney_plugin, "~> 0.6.0"},
-  {:membrane_h264_ffmpeg_plugin, "~> 0.16.3"},
-  {:membrane_aac_plugin, "~> 0.11.0"},
-  {:membrane_mp4_plugin, "~> 0.10.0"},
+  {:membrane_hackney_plugin, "~> 0.8.0"},
+  {:membrane_h264_ffmpeg_plugin, "~> 0.21.1"},
+  {:membrane_aac_plugin, "~> 0.12.1"},
+  {:membrane_mp4_plugin, "~> 0.15.0"},
   {:membrane_rtmp_plugin, path: __DIR__ |> Path.join("..") |> Path.expand()}
 ])
 
