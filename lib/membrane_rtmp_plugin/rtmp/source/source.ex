@@ -79,13 +79,14 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_other({:frame_provider, {:ok, type, timestamp, frame}}, ctx, state)
+  def handle_other({:frame_provider, {:ok, type, pts, dts, frame}}, ctx, state)
       when ctx.playback_state == :playing do
-    timestamp = Time.milliseconds(timestamp)
+    pts = Time.milliseconds(pts)
+    dts = Time.milliseconds(dts)
 
     buffer = %Buffer{
-      pts: timestamp,
-      dts: timestamp,
+      pts: pts,
+      dts: dts,
       payload: prepare_payload(type, frame)
     }
 

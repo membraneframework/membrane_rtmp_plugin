@@ -91,9 +91,14 @@ UNIFEX_TERM get_video_params(UnifexEnv* env, State* s) {
   return get_video_params_result_error(env);
 }
 
-int64_t get_timestamp(AVPacket* pkt, AVStream* stream) {
+int64_t get_pts(AVPacket* pkt, AVStream* stream) {
   const AVRational target_time_base = {1, 1000};
   return av_rescale_q_rnd(pkt->pts, stream->time_base, target_time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
+}
+
+int64_t get_dts(AVPacket* pkt, AVStream* stream) {
+  const AVRational target_time_base = {1, 1000};
+  return av_rescale_q_rnd(pkt->dts, stream->time_base, target_time_base, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
 }
 
 UNIFEX_TERM read_frame(UnifexEnv* env, State* s) {
@@ -123,7 +128,7 @@ UNIFEX_TERM read_frame(UnifexEnv* env, State* s) {
     }
   }
   
-  UNIFEX_TERM (*result_func)(UnifexEnv*, int64_t, UnifexPayload*) = NULL;
+  UNIFEX_TERM (*result_func)(UnifexEnv*, int64_t, int64_t, UnifexPayload*) = NULL;
   
   switch(codec_type) {
     case AVMEDIA_TYPE_VIDEO:
@@ -143,7 +148,7 @@ UNIFEX_TERM read_frame(UnifexEnv* env, State* s) {
   UnifexPayload payload;
   unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, packet.size, &payload);
   memcpy(payload.data, packet.data, packet.size);
-  result = result_func(env, get_timestamp(&packet, in_stream), &payload);
+  result = result_func(env, get_pts(&packet, in_stream), get_dts(&packet, in_stream), &payload);
   unifex_payload_release(&payload);
   
 end:
