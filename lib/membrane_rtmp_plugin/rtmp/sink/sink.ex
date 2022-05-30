@@ -8,9 +8,11 @@ defmodule Membrane.RTMP.Sink do
   Implementation based on FFmpeg.
   """
   use Membrane.Sink
+
+  require Membrane.Logger
+
   alias __MODULE__.Native
   alias Membrane.{AAC, MP4}
-  require Membrane.Logger
 
   @supported_protocols ["rtmp://", "rtmps://"]
   @default_state %{

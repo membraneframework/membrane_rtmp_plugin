@@ -13,6 +13,7 @@ defmodule Membrane.RTMP.Mixfile do
       compilers: [:unifex, :bundlex] ++ Mix.compilers(),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
+      dialyzer: dialyzer(),
 
       # hex
       description: "RTMP Plugin for Membrane Multimedia Framework",
@@ -39,21 +40,36 @@ defmodule Membrane.RTMP.Mixfile do
     [
       {:membrane_core, "~> 0.10.0"},
       {:unifex, "~> 1.0"},
-      {:ex_doc, "~> 0.28", only: :dev, runtime: false},
-      {:dialyxir, "~> 1.1", only: :dev, runtime: false},
-      {:credo, "~> 1.5", only: :dev, runtime: false},
-      {:membrane_hackney_plugin, "~> 0.8.0", only: :test},
       {:membrane_h264_ffmpeg_plugin, "~> 0.21.1"},
       {:membrane_aac_plugin, "~> 0.12.1"},
+      {:membrane_mp4_plugin, "~> 0.15.0"},
+      # testing
+      {:membrane_hackney_plugin, "~> 0.8.0", only: :test},
       {:ffmpex, "~> 0.7", only: :test},
-      {:membrane_mp4_plugin, "~> 0.15.0"}
+      # development
+      {:ex_doc, "~> 0.28", only: :dev, runtime: false},
+      {:dialyxir, "~> 1.1", only: :dev, runtime: false},
+      {:credo, "~> 1.5", only: :dev, runtime: false}
     ]
+  end
+
+  defp dialyzer() do
+    opts = [
+      flags: [:error_handling]
+    ]
+
+    if System.get_env("CI") == "true" do
+      # Store PLTs in cacheable directory for CI
+      [plt_local_path: "priv/plts", plt_core_path: "priv/plts"] ++ opts
+    else
+      opts
+    end
   end
 
   defp package do
     [
       maintainers: ["Membrane Team"],
-      licenses: ["Apache 2.0"],
+      licenses: ["Apache-2.0"],
       links: %{
         "GitHub" => @github_url,
         "Membrane Framework Homepage" => "https://membraneframework.org"
@@ -66,6 +82,7 @@ defmodule Membrane.RTMP.Mixfile do
     [
       main: "readme",
       extras: ["README.md", "LICENSE"],
+      formatters: ["html"],
       source_ref: "v#{@version}",
       nest_modules_by_prefix: [Membrane.RTMP]
     ]

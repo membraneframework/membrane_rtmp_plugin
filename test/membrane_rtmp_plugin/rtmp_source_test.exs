@@ -2,10 +2,10 @@ defmodule Membrane.RTMP.Source.Test do
   use ExUnit.Case
   import Membrane.Testing.Assertions
 
+  require Logger
+
   alias Membrane.Testing
   alias Membrane.Testing.{Pipeline}
-
-  require Logger
 
   @input_file "test/fixtures/testsrc.flv"
   @port 9009
