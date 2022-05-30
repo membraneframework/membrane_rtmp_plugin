@@ -7,6 +7,6 @@ spec native_create(string, timeout :: string) :: {:ok :: label, state} | {:error
 
 spec get_video_params(state) :: {:ok :: label, params :: payload} | {:error :: label, :no_stream}
 spec get_audio_params(state) :: {:ok :: label, params :: payload} | {:error :: label, :no_stream}
-spec read_frame(state) :: {:ok, :audio :: label, timestamp :: int64, frame :: payload} | {:ok, :video :: label, timestamp :: int64, frame :: payload} | {:error :: label, reason :: string} | (:end_of_stream :: label)
+spec read_frame(state) :: {:ok, :audio :: label, pts :: int64, dts :: int64, frame :: payload} | {:ok, :video :: label, pts :: int64, dts :: int64, frame :: payload} | {:error :: label, reason :: string} | (:end_of_stream :: label)
 
 dirty :io, native_create: 2, read_frame: 1
