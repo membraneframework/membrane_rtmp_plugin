@@ -32,14 +32,10 @@ defmodule Membrane.RTMP.Source do
                 spec: Time.t() | :infinity,
                 default: :infinity,
                 description: """
-                Time the server will wait for connection from the client
+                Time the server will wait for a connection from the client
 
                 Duration given must be a multiply of one second or atom `:infinity`.
                 """
-              ],
-              max_buffer_size: [
-                spec: non_neg_integer(),
-                default: 1024
               ]
 
   @impl true
@@ -51,20 +47,12 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_prepared_to_playing(_ctx, state) do
-    # Native.create is blocking. Hence, the element will only go from prepared to playing when a new connection is established.
-    # This might not be desirable, but unfortunately this is caused by the fact that FFmpeg's create_input_stream is awaiting a new connection from the client before returning.
-
-    case Native.create(state.url, state.timeout) do
-      {:ok, native} ->
-        Membrane.Logger.debug("Connection established @ #{state.url}")
-        my_pid = self()
-        pid = spawn_link(fn -> frame_provider(native, my_pid) end)
-        send(pid, :get_frame)
-        {{:ok, get_params(native)}, %{state | provider: pid}}
-
-      {:error, reason} ->
-        raise("Transition to state `playing` failed. Reason: `#{reason}`")
-    end
+    {:ok, native} = Native.create()
+    my_pid = self()
+    pid = spawn_link(fn -> frame_provider(native, my_pid) end)
+    # Native.await_connection is blocking and awaits establishing an incoming connection.
+    send(self(), {:continue_init, native})
+    {:ok, %{state | provider: pid}}
   end
 
   @impl true
@@ -78,6 +66,19 @@ defmodule Membrane.RTMP.Source do
   @impl true
   def handle_demand(_type, _size, _unit, _ctx, state) do
     {:ok, state}
+  end
+
+  @impl true
+  def handle_other({:continue_init, native_ref}, _ctx, state) do
+    case Native.await_connection(native_ref, state.url, state.timeout) do
+      {:ok, native} ->
+        Membrane.Logger.debug("Connection established @ #{state.url}")
+        send(state.provider, :get_frame)
+        {{:ok, get_format_info_actions(native)}, state}
+
+      {:error, reason} ->
+        raise "Failed to initialize. Reason: `#{reason}`"
+    end
   end
 
   @impl true
@@ -109,16 +110,22 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_other({:frame_provider, {:error, reason}}, _ctx, _state),
-    do: raise("Fetching of the frame failed. Reason: #{inspect(reason)}")
+  def handle_other({:frame_provider, {:error, reason}}, _ctx, _state) do
+    raise "Fetching of the frame failed. Reason: #{inspect(reason)}"
+  end
 
   defp frame_provider(native, target) do
+    ref = Process.monitor(target)
+
     receive do
       :get_frame ->
         result = Native.read_frame(native)
         send(target, {:frame_provider, result})
 
         if result == :end_of_stream, do: :ok, else: frame_provider(native, target)
+
+      {:DOWN, ^ref, :process, _pid, _reason} ->
+        :ok
 
       :terminate ->
         :ok
@@ -128,19 +135,19 @@ defmodule Membrane.RTMP.Source do
   @impl true
   def handle_playing_to_prepared(_ctx, state) do
     send(state.provider, :terminate)
-    {:ok, state}
+    {:ok, %{state | provider: nil}}
   end
 
   defp prepare_payload(:video, payload), do: AVC.Utils.to_annex_b(payload)
   defp prepare_payload(:audio, payload), do: payload
 
-  defp get_params(native),
-    do:
-      [
-        get_audio_params(native),
-        get_video_params(native)
-      ]
-      |> Enum.concat()
+  defp get_format_info_actions(native) do
+    [
+      get_audio_params(native),
+      get_video_params(native)
+    ]
+    |> Enum.concat()
+  end
 
   defp get_audio_params(native) do
     with {:ok, asc} <- Native.get_audio_params(native) do

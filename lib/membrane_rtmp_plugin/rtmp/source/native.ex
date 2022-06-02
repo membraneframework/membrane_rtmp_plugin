@@ -4,27 +4,33 @@ defmodule Membrane.RTMP.Source.Native do
 
   alias Membrane.Time
 
-  @spec create(String.t(), Time.t()) :: {:ok, reference()} | {:error, reason :: any()}
-  def create(url, timeout) do
-    with {:ok, timeout} <- get_timeout(timeout),
-         {:ok, native} <- native_create(url, timeout) do
-      {:ok, native}
-    else
-      {:error, _reason} = error -> error
-    end
+  @spec await_connection(reference(), String.t(), Time.t()) ::
+          {:ok, reference()} | {:error, reason :: any()}
+  def await_connection(native, url, timeout) do
+    timeout = get_int_timeout(timeout)
+    creator = self()
+
+    spawn(fn ->
+      ref = Process.monitor(creator)
+
+      receive do
+        {:DOWN, ^ref, :process, ^creator, _reason} -> set_terminate(native)
+      end
+    end)
+
+    await_open(native, url, timeout)
   end
 
-  @one_second Time.seconds(1)
+  @one_second Time.second()
 
-  defp get_timeout(:infinity), do: {:ok, "0"}
+  defp get_int_timeout(:infinity), do: 0
 
-  defp get_timeout(time) when rem(time, @one_second) != 0,
-    do: {:error, "Timeout must be a multiply of one second. #{Time.pretty_duration(time)} is not"}
+  defp get_int_timeout(time) when rem(time, @one_second) != 0 do
+    raise ArgumentError,
+          "Timeout must be a multiply of one second. #{Time.pretty_duration(time)} is not"
+  end
 
-  defp get_timeout(time),
-    do:
-      Time.as_seconds(time)
-      |> Ratio.trunc()
-      |> inspect()
-      |> then(&{:ok, &1})
+  defp get_int_timeout(time) do
+    Time.as_seconds(time) |> Ratio.trunc()
+  end
 end
