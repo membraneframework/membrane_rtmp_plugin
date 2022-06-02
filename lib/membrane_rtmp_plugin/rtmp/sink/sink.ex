@@ -67,7 +67,6 @@ defmodule Membrane.RTMP.Sink do
 
   @impl true
   def handle_playing_to_prepared(_ctx, state) do
-    Native.finalize_stream(state.native)
     state = Map.merge(state, @default_state)
     Membrane.Logger.debug("Stream correctly closed")
     {:ok, state}
@@ -146,6 +145,7 @@ defmodule Membrane.RTMP.Sink do
   @impl true
   def handle_end_of_stream(pad, ctx, state) do
     if ctx.pads |> Map.values() |> Enum.all?(& &1.end_of_stream?) do
+      Native.finalize_stream(state.native)
       {:ok, state}
     else
       state = Map.update!(state, :current_timestamps, &Map.delete(&1, pad))
