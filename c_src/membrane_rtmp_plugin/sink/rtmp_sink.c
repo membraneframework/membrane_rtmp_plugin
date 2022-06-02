@@ -36,6 +36,7 @@ UNIFEX_TERM finalize_stream(UnifexEnv *env, State *state) {
   if (av_write_trailer(state->output_ctx)) {
     return unifex_raise(env, "Failed writing stream trailer");
   }
+  avio_flush(state->output_ctx->pb);
   return finalize_stream_result_ok(env);
 }
 

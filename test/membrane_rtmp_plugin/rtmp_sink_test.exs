@@ -6,42 +6,43 @@ defmodule Membrane.RTMP.Sink.Test do
 
   alias Membrane.Testing.{Pipeline}
 
-  @input_video_path "https://raw.githubusercontent.com/membraneframework/static/gh-pages/samples/big-buck-bunny/bun33s_480x270.h264"
-  @input_audio_path "https://raw.githubusercontent.com/membraneframework/static/gh-pages/samples/big-buck-bunny/bun33s.aac"
+  @input_video_url "https://raw.githubusercontent.com/membraneframework/static/gh-pages/samples/big-buck-bunny/bun33s_480x270.h264"
+  @input_audio_url "https://raw.githubusercontent.com/membraneframework/static/gh-pages/samples/big-buck-bunny/bun33s.aac"
 
-  @rtmp_server_url "rtmp://localhost:49500"
+  @rtmp_server_url "rtmp://localhost:49500/app/sink_test"
   @reference_flv_path "test/fixtures/bun33s.flv"
-  @test_flv_path "/tmp/rtmp_sink_test.flv"
 
-  setup do
-    rtmp_server_pid =
-      start_supervised!(%{
-        id: :rtmp_server,
-        start: {__MODULE__, :start_rtmp_server, []}
-      })
-
-    %{rtmp_server: rtmp_server_pid}
+  setup ctx do
+    flv_output_file = Path.join(ctx.tmp_dir, "rtmp_sink_test.flv")
+    %{flv_output_file: flv_output_file}
   end
 
-  test "Check if audio and video streams are correctly received by RTMP server instance" do
-    on_exit(fn -> File.rm(@test_flv_path) end)
+  @tag :tmp_dir
+  test "Check if audio and video streams are correctly received by RTMP server instance", %{
+    flv_output_file: flv_output_file
+  } do
+    rtmp_server = Task.async(fn -> start_rtmp_server(flv_output_file) end)
 
-    sink_pipeline_pid = get_sink_pipeline(@rtmp_server_url) |> start_supervised!()
+    # There's an RC - there's no way to ensure RTMP server starts to listen before pipeline is started
+    {:ok, sink_pipeline_pid} = start_sink_pipeline(@rtmp_server_url)
 
     assert_pipeline_playback_changed(sink_pipeline_pid, :prepared, :playing, 5000)
 
-    assert_start_of_stream(sink_pipeline_pid, :rtmps_sink, :video, 5_000)
-    assert_start_of_stream(sink_pipeline_pid, :rtmps_sink, :audio, 5_000)
+    assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, :video, 5_000)
+    assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, :audio, 5_000)
 
-    assert_end_of_stream(sink_pipeline_pid, :rtmps_sink, :video, 5_000)
-    assert_end_of_stream(sink_pipeline_pid, :rtmps_sink, :audio, 5_000)
+    assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, :video, 5_000)
+    assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, :audio, 5_000)
 
     Membrane.Testing.Pipeline.terminate(sink_pipeline_pid, blocking?: true)
-    assert File.exists?(@test_flv_path)
-    assert File.stat!(@test_flv_path).size == File.stat!(@reference_flv_path).size
+    # RTMP server should terminate when the connection is closed
+    assert :ok = Task.await(rtmp_server)
+
+    assert File.exists?(flv_output_file)
+    assert File.stat!(flv_output_file).size == File.stat!(@reference_flv_path).size
   end
 
-  defp get_sink_pipeline(rtmp_url) do
+  defp start_sink_pipeline(rtmp_url) do
     import Membrane.ParentSpec
 
     options = [
@@ -49,45 +50,39 @@ defmodule Membrane.RTMP.Sink.Test do
         video_parser: %Membrane.H264.FFmpeg.Parser{
           framerate: {30, 1},
           alignment: :au,
-          attach_nalus?: true
+          attach_nalus?: true,
+          skip_until_parameters?: false
         },
         audio_parser: %Membrane.AAC.Parser{
           out_encapsulation: :none
         },
         video_source: %Membrane.Hackney.Source{
-          location: @input_video_path,
+          location: @input_video_url,
           hackney_opts: [follow_redirect: true]
         },
         audio_source: %Membrane.Hackney.Source{
-          location: @input_audio_path,
+          location: @input_audio_url,
           hackney_opts: [follow_redirect: true]
         },
         video_payloader: Membrane.MP4.Payloader.H264,
-        rtmps_sink: %Membrane.RTMP.Sink{rtmp_url: rtmp_url}
+        rtmp_sink: %Membrane.RTMP.Sink{rtmp_url: rtmp_url}
       ],
       links: [
         link(:video_source)
         |> to(:video_parser)
         |> to(:video_payloader)
         |> via_in(:video)
-        |> to(:rtmps_sink),
-        link(:audio_source) |> to(:audio_parser) |> via_in(:audio) |> to(:rtmps_sink)
+        |> to(:rtmp_sink),
+        link(:audio_source) |> to(:audio_parser) |> via_in(:audio) |> to(:rtmp_sink)
       ],
       test_process: self()
     ]
 
-    %{
-      id: :sink_pipeline,
-      start: {Pipeline, :start_link, [options]}
-    }
+    Pipeline.start_link(options)
   end
 
-  @spec start_rtmp_server() :: {:ok, pid()}
-  def start_rtmp_server() do
-    spawn_link(&execute_loop/0) |> then(&{:ok, &1})
-  end
-
-  defp execute_loop() do
+  @spec start_rtmp_server(Path.t()) :: {:ok, pid()}
+  def start_rtmp_server(out_file) do
     import FFmpex
     use FFmpex.Options
 
@@ -101,7 +96,7 @@ defmodule Membrane.RTMP.Sink.Test do
       })
       |> add_input_file(@rtmp_server_url)
       |> add_file_option(option_f("flv"))
-      |> add_output_file(@test_flv_path)
+      |> add_output_file(out_file)
       |> add_file_option(option_c("copy"))
 
     case FFmpex.execute(command) do
@@ -110,7 +105,7 @@ defmodule Membrane.RTMP.Sink.Test do
 
       error ->
         Logger.error(inspect(error))
-        execute_loop()
+        :error
     end
   end
 end
