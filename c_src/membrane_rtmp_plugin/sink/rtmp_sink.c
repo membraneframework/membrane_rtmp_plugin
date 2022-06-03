@@ -18,18 +18,23 @@ UNIFEX_TERM create(UnifexEnv *env, char *rtmp_url) {
         create_result_error(env, "Failed to initialize output context");
     goto end;
   }
-
-  if (!(state->output_ctx->oformat->flags & AVFMT_NOFILE)) {
-    if (avio_open(&state->output_ctx->pb, rtmp_url, AVIO_FLAG_WRITE) < 0) {
-      create_result =
-          create_result_error(env, "Failed to connect to provided URL");
-      goto end;
-    }
-  }
   create_result = create_result_ok(env, state);
 end:
   unifex_release_state(env, state);
   return create_result;
+}
+
+UNIFEX_TERM try_connect(UnifexEnv *env, State *state) {
+  const char *rtmp_url = state->output_ctx->url;
+  if (!(state->output_ctx->oformat->flags & AVFMT_NOFILE)) {
+    int av_err = avio_open(&state->output_ctx->pb, rtmp_url, AVIO_FLAG_WRITE);
+    if (av_err == AVERROR(ECONNREFUSED)) {
+      return try_connect_result_error_econnrefused(env);
+    } else if (av_err < 0) {
+      return try_connect_result_error(env, av_err2str(av_err));
+    }
+  }
+  return try_connect_result_ok(env);
 }
 
 UNIFEX_TERM finalize_stream(UnifexEnv *env, State *state) {

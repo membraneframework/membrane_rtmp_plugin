@@ -4,6 +4,12 @@ state_type "State"
 interface [NIF]
 
 spec create(rtmp_url :: string) :: {:ok :: label, state} | {:error :: label, reason :: string}
+# WARN: connect will conflict with POSIX function name
+spec try_connect(state) ::
+       (:ok :: label)
+       | {:error :: label, :econnrefused :: label}
+       | {:error :: label, reason :: string}
+
 spec finalize_stream(state) :: :ok :: label
 
 spec init_video_stream(state, width :: int, height :: int, avc_config :: payload) ::
