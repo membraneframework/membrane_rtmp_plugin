@@ -23,9 +23,10 @@ defmodule Membrane.RTMP.Sink.Test do
   } do
     rtmp_server = Task.async(fn -> start_rtmp_server(flv_output_file) end)
 
-    # There's an RC - there's no way to ensure RTMP server starts to listen before pipeline is started
     {:ok, sink_pipeline_pid} = start_sink_pipeline(@rtmp_server_url)
 
+    # There's an RC - there's no way to ensure RTMP server starts to listen before pipeline is started
+    # so it may retry a few times before succeeding
     assert_pipeline_playback_changed(sink_pipeline_pid, :prepared, :playing, 5000)
 
     assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, :video, 5_000)
@@ -65,7 +66,7 @@ defmodule Membrane.RTMP.Sink.Test do
           hackney_opts: [follow_redirect: true]
         },
         video_payloader: Membrane.MP4.Payloader.H264,
-        rtmp_sink: %Membrane.RTMP.Sink{rtmp_url: rtmp_url}
+        rtmp_sink: %Membrane.RTMP.Sink{rtmp_url: rtmp_url, max_attempts: 5}
       ],
       links: [
         link(:video_source)

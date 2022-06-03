@@ -15,7 +15,9 @@ defmodule Membrane.RTMP.Sink do
   alias Membrane.{AAC, MP4}
 
   @supported_protocols ["rtmp://", "rtmps://"]
+  @connection_attempt_interval 500
   @default_state %{
+    attempts: 0,
     native: nil,
     buffered_frame: nil,
     ready: false,
@@ -40,29 +42,36 @@ defmodule Membrane.RTMP.Sink do
                 description:
                   "Destination URL of the stream. It needs to start with rtmp:// or rtmps:// depending on the protocol variant.
                 This URL should be provided by your streaming service."
+              ],
+              max_attempts: [
+                type: :integer,
+                spec: pos_integer(),
+                default: 1,
+                description: """
+                Maximum number of connection attempts before failing with an error.
+                The attempts will happen every #{@connection_attempt_interval} ms
+                """
               ]
 
   @impl true
   def handle_init(options) do
-    if String.starts_with?(options.rtmp_url, @supported_protocols) do
-      {:ok, Map.from_struct(options) |> Map.merge(@default_state)}
-    else
-      raise("Invalid destination URL provided")
+    unless String.starts_with?(options.rtmp_url, @supported_protocols) do
+      raise ArgumentError, "Invalid destination URL provided"
     end
+
+    unless is_integer(options.max_attempts) and options.max_attempts >= 1 do
+      raise ArgumentError, "Invalid max_attempts option value: #{options.max_attempts}"
+    end
+
+    {:ok, Map.from_struct(options) |> Map.merge(@default_state)}
   end
 
   @impl true
-  def handle_prepared_to_playing(ctx, state) do
-    case Native.create(state.rtmp_url) do
-      {:ok, native} ->
-        Membrane.Logger.debug("Correctly initialized connection with: #{state.rtmp_url}")
-        state = Map.put(state, :native, native)
-        demands = ctx.pads |> Map.keys() |> Enum.map(&{:demand, &1})
-        {{:ok, demands}, state}
+  def handle_prepared_to_playing(_ctx, state) do
+    {:ok, native} = Native.create(state.rtmp_url)
+    send(self(), :try_connect)
 
-      {:error, reason} ->
-        raise("Transition to state playing failed with reason: #{reason}")
-    end
+    {{:ok, playback_change: :suspend}, %{state | native: native}}
   end
 
   @impl true
@@ -150,6 +159,35 @@ defmodule Membrane.RTMP.Sink do
     else
       state = Map.update!(state, :current_timestamps, &Map.delete(&1, pad))
       {{:ok, demand: get_demand(state)}, state}
+    end
+  end
+
+  @impl true
+  def handle_other(:try_connect, _ctx, %{attempts: attempts, max_attempts: max_attempts} = state)
+      when attempts >= max_attempts do
+    raise "Failed to connect to '#{state.rtmp_url}' #{attempts} times, aborting"
+  end
+
+  def handle_other(:try_connect, ctx, state) do
+    state = %{state | attempts: state.attempts + 1}
+
+    case Native.try_connect(state.native) do
+      :ok ->
+        Membrane.Logger.debug("Correctly initialized connection with: #{state.rtmp_url}")
+        demands = ctx.pads |> Map.keys() |> Enum.map(&{:demand, &1})
+        {{:ok, [{:playback_change, :resume} | demands]}, state}
+
+      {:error, :econnrefused} ->
+        Process.send_after(self(), :try_connect, @connection_attempt_interval)
+
+        Membrane.Logger.warn(
+          "Connection to #{state.rtmp_url} refused, retrying in #{@connection_attempt_interval}ms"
+        )
+
+        {:ok, state}
+
+      {:error, reason} ->
+        raise "Failed to connect to '#{state.rtmp_url}': #{reason}"
     end
   end
 
