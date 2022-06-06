@@ -6,9 +6,11 @@ defmodule Membrane.RTMP.Source do
   Implementation based on FFmpeg
   """
   use Membrane.Source
-  alias __MODULE__.Native
-  alias Membrane.{AVC, Time, Buffer}
+
   require Membrane.Logger
+
+  alias __MODULE__.Native
+  alias Membrane.{AVC, Buffer, Time}
 
   def_output_pad :audio,
     availability: :always,
