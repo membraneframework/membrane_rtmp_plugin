@@ -16,7 +16,7 @@ typedef struct State State;
 struct State {
   AVFormatContext *input_ctx;
   int number_of_streams;
-  bool ready;
+  bool terminating;
 
   AVBSFContext *h264_bsf_ctx;
 };
