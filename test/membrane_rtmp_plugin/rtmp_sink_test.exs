@@ -4,7 +4,7 @@ defmodule Membrane.RTMP.Sink.Test do
 
   require Logger
 
-  alias Membrane.Testing.{Pipeline}
+  alias Membrane.Testing.Pipeline
 
   @input_video_path "https://raw.githubusercontent.com/membraneframework/static/gh-pages/samples/big-buck-bunny/bun33s_480x270.h264"
   @input_audio_path "https://raw.githubusercontent.com/membraneframework/static/gh-pages/samples/big-buck-bunny/bun33s.aac"

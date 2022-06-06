@@ -49,7 +49,7 @@ defmodule Membrane.RTMP.Mixfile do
       # development
       {:ex_doc, "~> 0.28", only: :dev, runtime: false},
       {:dialyxir, "~> 1.1", only: :dev, runtime: false},
-      {:credo, "~> 1.5", only: :dev, runtime: false}
+      {:credo, "~> 1.6", only: :dev, runtime: false}
     ]
   end
 
