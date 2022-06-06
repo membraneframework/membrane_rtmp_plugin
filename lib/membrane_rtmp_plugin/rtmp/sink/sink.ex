@@ -63,7 +63,7 @@ defmodule Membrane.RTMP.Sink do
       raise ArgumentError, "Invalid max_attempts option value: #{options.max_attempts}"
     end
 
-    {:ok, Map.from_struct(options) |> Map.merge(@default_state)}
+    {:ok, options |> Map.from_struct() |> Map.merge(@default_state)}
   end
 
   @impl true
