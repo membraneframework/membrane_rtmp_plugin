@@ -31,6 +31,6 @@ defmodule Membrane.RTMP.Source.Native do
   end
 
   defp get_int_timeout(time) do
-    Time.as_seconds(time) |> Ratio.trunc()
+    time |> Time.as_seconds() |> Ratio.trunc()
   end
 end

@@ -3,7 +3,9 @@
 
 void handle_init_state(State *);
 
-static int interrupt_cb(void *ctx) {
+// A callback invoked periodically by 'avformat_open_input' to check
+// if the blocking call should be interrupted.
+static int interrupt_callback(void *ctx) {
   bool is_terminating = *(bool *)ctx;
   // interrupt if the flag is set
   return is_terminating;
@@ -18,7 +20,7 @@ UNIFEX_TERM create(UnifexEnv *env) {
     return unifex_raise(env, "Could not find filter h264_mp4toannexb");
   }
 
-  s->input_ctx->interrupt_callback.callback = interrupt_cb;
+  s->input_ctx->interrupt_callback.callback = interrupt_callback;
   s->input_ctx->interrupt_callback.opaque = &s->terminating;
   return create_result_ok(env, s);
 }
@@ -35,7 +37,7 @@ UNIFEX_TERM await_open(UnifexEnv *env, State *s, char *url, int timeout) {
     ret = await_open_result_error_timeout(env);
     goto err;
   } else if (av_err == AVERROR_EXIT) {
-    // Error returned when interrupt_cb returns non-zero
+    // Error returned when interrupt_callback returns non-zero
     ret = await_open_result_error_interrupted(env);
     goto err;
   } else if (av_err < 0) {
