@@ -4,13 +4,13 @@
 # ffmpeg -listen 1 -f flv -i rtmp://localhost:1935 -c copy dest.flv
 
 Mix.install([
-  {:membrane_core, "~> 0.10"},
-  {:membrane_realtimer_plugin, "~> 0.4.0"},
-  {:membrane_hackney_plugin, "~> 0.8.0"},
-  {:membrane_h264_ffmpeg_plugin, "~> 0.21.1"},
-  {:membrane_aac_plugin, "~> 0.12.1"},
-  {:membrane_mp4_plugin, "~> 0.15.0"},
-  {:membrane_rtmp_plugin, path: __DIR__ |> Path.join("..") |> Path.expand()}
+  {:membrane_core, "~> 0.10.1"},
+  {:membrane_rtmp_plugin, path: __DIR__ |> Path.join("..") |> Path.expand()},
+  :membrane_realtimer_plugin,
+  :membrane_hackney_plugin,
+  :membrane_h264_ffmpeg_plugin,
+  :membrane_aac_plugin,
+  :membrane_mp4_plugin
 ])
 
 defmodule Example do
@@ -40,7 +40,7 @@ defmodule Example do
       video_realtimer: Membrane.Realtimer,
       audio_realtimer: Membrane.Realtimer,
       video_payloader: Membrane.MP4.Payloader.H264,
-      rtmps_sink: %Membrane.RTMP.Sink{rtmp_url: System.get_env("RTMP_URL", "rtmp://localhost:1935")}
+      rtmp_sink: %Membrane.RTMP.Sink{rtmp_url: System.get_env("RTMP_URL", "rtmp://localhost:1935")}
     ]
 
     links = [
@@ -49,26 +49,26 @@ defmodule Example do
       |> to(:video_realtimer)
       |> to(:video_payloader)
       |> via_in(:video)
-      |> to(:rtmps_sink),
+      |> to(:rtmp_sink),
       link(:audio_source)
       |> to(:audio_parser)
       |> to(:audio_realtimer)
       |> via_in(:audio)
-      |> to(:rtmps_sink)
+      |> to(:rtmp_sink)
     ]
 
-    {{:ok, spec: %ParentSpec{children: children, links: links}}, %{finished_streams: []}}
+    {{:ok, spec: %ParentSpec{children: children, links: links}, playback: :playing}, %{finished_streams: []}}
   end
 
   # The rest of the example module is only used for self-termination of the pipeline after processing finishes
   @impl true
-  def handle_element_end_of_stream({:rtmps_sink, pad}, _ctx, state) when length(state.finished_streams) == 1 do
+  def handle_element_end_of_stream({:rtmp_sink, pad}, _ctx, state) when length(state.finished_streams) == 1 do
     Membrane.Pipeline.terminate(self())
     {:ok, Map.put(state, :finished_streams, &[pad | &1])}
   end
 
   @impl true
-  def handle_element_end_of_stream({:rtmps_sink, pad}, _ctx, state) do
+  def handle_element_end_of_stream({:rtmp_sink, pad}, _ctx, state) do
     {:ok, Map.put(state, :finished_streams, [pad])}
   end
 
@@ -80,7 +80,6 @@ end
 
 # Initialize the pipeline and start it
 {:ok, pipeline} = Example.start_link()
-:ok = Membrane.Pipeline.play(pipeline)
 
 monitor_ref = Process.monitor(pipeline)
 
