@@ -47,11 +47,7 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_prepared_to_playing(_ctx, state) do
-    {:ok, native} = Native.create()
-    my_pid = self()
-    pid = spawn_link(fn -> frame_provider(native, my_pid) end)
-    # Native.await_connection is blocking and awaits establishing an incoming connection.
-    send(self(), {:continue_init, native})
+    pid = Native.start_link(state.url, state.timeout)
     {:ok, %{state | provider: pid}}
   end
 
@@ -69,20 +65,13 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_other({:continue_init, native_ref}, _ctx, state) do
-    case Native.await_connection(native_ref, state.url, state.timeout) do
-      {:ok, native} ->
-        Membrane.Logger.debug("Connection established @ #{state.url}")
-        send(state.provider, :get_frame)
-        {{:ok, get_format_info_actions(native)}, state}
-
-      {:error, reason} ->
-        raise "Failed to initialize. Reason: `#{reason}`"
-    end
+  def handle_other({Native, :format_info_ready, native_ref}, _ctx, state) do
+    actions = get_format_info_actions(native_ref)
+    {{:ok, actions}, state}
   end
 
   @impl true
-  def handle_other({:frame_provider, {:ok, type, pts, dts, frame}}, ctx, state)
+  def handle_other({Native, :read_frame, {:ok, type, pts, dts, frame}}, ctx, state)
       when ctx.playback_state == :playing do
     pts = Time.milliseconds(pts)
     dts = Time.milliseconds(dts)
@@ -104,37 +93,20 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_other({:frame_provider, :end_of_stream}, _ctx, state) do
+  def handle_other({Native, :read_frame, :end_of_stream}, _ctx, state) do
     Membrane.Logger.debug("Received end of stream")
     {{:ok, end_of_stream: :audio, end_of_stream: :video}, state}
   end
 
   @impl true
-  def handle_other({:frame_provider, {:error, reason}}, _ctx, _state) do
+  def handle_other({Native, :read_frame, {:error, reason}}, _ctx, _state) do
     raise "Fetching of the frame failed. Reason: #{inspect(reason)}"
-  end
-
-  defp frame_provider(native, target) do
-    ref = Process.monitor(target)
-
-    receive do
-      :get_frame ->
-        result = Native.read_frame(native)
-        send(target, {:frame_provider, result})
-
-        if result == :end_of_stream, do: :ok, else: frame_provider(native, target)
-
-      {:DOWN, ^ref, :process, _pid, _reason} ->
-        :ok
-
-      :terminate ->
-        :ok
-    end
   end
 
   @impl true
   def handle_playing_to_prepared(_ctx, state) do
     send(state.provider, :terminate)
+    Process.unlink(state.provider)
     {:ok, %{state | provider: nil}}
   end
 

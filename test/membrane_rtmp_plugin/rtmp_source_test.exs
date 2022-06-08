@@ -29,15 +29,26 @@ defmodule Membrane.RTMP.Source.Test do
 
   test "blocking calls are cancelled properly" do
     alias Membrane.RTMP.Source.Native
-    assert {:ok, native} = Native.create()
 
-    pid =
-      spawn(fn ->
-        Native.await_connection(native, @rtmp_stream_url, :infinity)
+    test_pid = self()
+
+    {pid, ref} =
+      spawn_monitor(fn ->
+        native_pid = Native.start_link(@rtmp_stream_url, :infinity)
+        send(test_pid, {:native_pid, native_pid})
+        # Ensure avformat_open_input gets stuck at listening
+        Process.sleep(100)
+        Process.exit(self(), :shutdown)
       end)
 
-    Process.sleep(100)
-    Process.exit(pid, :shutdown)
+    assert_receive {:native_pid, native_pid}
+    native_monitor_ref = Process.monitor(native_pid)
+
+    # First, the spawned process will exit
+    assert_receive {:DOWN, ^ref, :process, ^pid, :shutdown}, 200
+
+    # Now, after interrupt_callback fires, the native process should exit as well
+    assert_receive {:DOWN, ^native_monitor_ref, :process, ^native_pid, :shutdown}, 500
     Process.sleep(100)
 
     # Ensure the ffmpeg does not listen on this port anymore
