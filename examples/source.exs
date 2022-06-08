@@ -37,14 +37,14 @@ defmodule Example do
         ]
     }
 
-    {{:ok, spec: spec}, %{}}
+    {{:ok, spec: spec, playback: :playing}, %{}}
   end
 
   # The rest of the module is used for self-termination of the pipeline after processing finishes
   @impl true
   def handle_element_end_of_stream({:sink, _pad}, _ctx, state) do
     Membrane.Pipeline.terminate(self())
-    {:ok, state}
+    {{:ok, playback: :stopped}, state}
   end
 
   @impl true
@@ -53,7 +53,6 @@ end
 
 # Initialize and run the pipeline
 {:ok, pid} = Example.start()
-:ok = Example.play(pid)
 
 monitor_ref = Process.monitor(pid)
 
