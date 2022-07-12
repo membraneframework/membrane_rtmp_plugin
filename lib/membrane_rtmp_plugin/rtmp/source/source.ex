@@ -2,15 +2,13 @@ defmodule Membrane.RTMP.Source do
   @moduledoc """
   Membrane Element for receiving RTMP streams. Acts as a RTMP Server.
   This implementation is limited to only AAC and H264 streams.
-
-  Implementation based on FFmpeg
   """
   use Membrane.Source
 
   require Membrane.Logger
 
-  alias __MODULE__.Native
-  alias Membrane.{AVC, Buffer, Time}
+  alias Membrane.{AVC, Buffer, Time, Logger}
+  alias Membrane.RTMP.{Interceptor, Handshake}
 
   def_output_pad :audio,
     availability: :always,
@@ -22,10 +20,10 @@ defmodule Membrane.RTMP.Source do
     caps: Membrane.H264.RemoteStream,
     mode: :pull
 
-  def_options url: [
-                spec: binary(),
+  def_options port: [
+                spec: non_neg_integer(),
                 description: """
-                URL on which the FFmpeg instance will be created
+                Port on which the FFmpeg instance will be created
                 """
               ],
               timeout: [
@@ -42,13 +40,51 @@ defmodule Membrane.RTMP.Source do
   def handle_init(%__MODULE__{} = opts) do
     {:ok,
      Map.from_struct(opts)
-     |> Map.merge(%{provider: nil, stale_frame: nil})}
+     |> Map.merge(%{
+       provider: nil,
+       stale_frame: nil,
+       interceptor: Interceptor.init(Handshake.init_server())
+     })}
   end
 
   @impl true
   def handle_prepared_to_playing(_ctx, state) do
-    pid = Native.start_link(state.url, state.timeout)
-    {:ok, %{state | provider: pid}}
+    target_pid = self()
+
+    Logger.debug("Establishing connection on port: #{state.port}")
+
+    spawn_link(fn ->
+      {:ok, socket} =
+        :gen_tcp.listen(state.port, [:binary, packet: :line, active: false, reuseaddr: true])
+
+      {:ok, client} = :gen_tcp.accept(socket)
+
+      Logger.debug("Established connection with client, socket: #{inspect(client)}")
+
+      receive_loop(client, target_pid)
+    end)
+
+    # actions = [
+    #   caps:
+    #     {:video,
+    #      %Membrane.H264.RemoteStream{
+    #        decoder_configuration_record:
+    #          <<1::8, 0::8, 0::8, 0::8, 0b111111::6, 0::2, 0b111::3, 0::13>>,
+    #        stream_format: :avc1
+    #      }},
+    #   # caps: {:audio, %Membrane.AAC.RemoteStream{audio_specific_config: <<1::5, 0::4, 0::4, 0::1>>}},
+    #   buffer: {:video, %Membrane.Buffer{payload: nil}}
+    #   # buffer: {:audio, %Membrane.Buffer{payload: nil}}
+    # ]
+
+    {:ok, state}
+  end
+
+  defp receive_loop(socket, target) do
+    {:ok, data} = :gen_tcp.recv(socket, 0)
+    Logger.debug("Received data of size #{byte_size(data)}")
+    send(target, {:tcp, data})
+    receive_loop(socket, target)
   end
 
   @impl true
@@ -65,84 +101,57 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_other({Native, :format_info_ready, native_ref}, _ctx, state) do
-    actions = get_format_info_actions(native_ref)
-    {{:ok, actions}, state}
-  end
-
-  @impl true
-  def handle_other({Native, :read_frame, {:ok, type, pts, dts, frame}}, ctx, state)
-      when ctx.playback_state == :playing do
-    pts = Time.milliseconds(pts)
-    dts = Time.milliseconds(dts)
-
-    buffer = %Buffer{
-      pts: pts,
-      dts: dts,
-      payload: prepare_payload(type, frame)
-    }
-
-    if get_in(ctx.pads, [type, :demand]) > 0 do
-      send(state.provider, :get_frame)
-      {{:ok, buffer: {type, buffer}}, state}
-    else
-      # if there is no demand for element of this type so we wait until it appears
-      # effectively, it results in source adapting to the slower of the two outputs
-      {:ok, %{state | stale_frame: {type, buffer}}}
-    end
-  end
-
-  @impl true
-  def handle_other({Native, :read_frame, :end_of_stream}, _ctx, state) do
-    Membrane.Logger.debug("Received end of stream")
-    {{:ok, end_of_stream: :audio, end_of_stream: :video}, state}
-  end
-
-  @impl true
-  def handle_other({Native, :read_frame, {:error, reason}}, _ctx, _state) do
-    raise "Fetching of the frame failed. Reason: #{inspect(reason)}"
-  end
-
-  @impl true
   def handle_playing_to_prepared(_ctx, state) do
     send(state.provider, :terminate)
     Process.unlink(state.provider)
     {:ok, %{state | provider: nil}}
   end
 
-  defp prepare_payload(:video, payload), do: AVC.Utils.to_annex_b(payload)
-  defp prepare_payload(:audio, payload), do: payload
+  @impl true
+  def handle_other({:tcp, data}, _context, state) do
+    Logger.debug(
+      "Source received a packet of length: #{byte_size(data)}, handling with #{inspect(state.interceptor)}"
+    )
 
-  defp get_format_info_actions(native) do
-    [
-      get_audio_params(native),
-      get_video_params(native)
-    ]
-    |> Enum.concat()
+    parsed_packet =
+      data
+      |> parse_packet_messages(state.interceptor)
+
+    Logger.debug("Pared packet: #{inspect(parsed_packet)}")
+
+    {:ok, state}
   end
 
-  defp get_audio_params(native) do
-    with {:ok, asc} <- Native.get_audio_params(native) do
-      caps = %Membrane.AAC.RemoteStream{
-        audio_specific_config: asc
-      }
+  # The RTMP connection is based on TCP therefore we are operating on a continuous stream of bytes.
+  # In such case packets received on TCP sockets may contain a partial RTMP packet or several full packets.
+  #
+  # `Interceptor` is already able to request more data if packet is incomplete but it is not aware
+  # if its current buffer contains more than one message, therefore we need to call the `&Interceptor.handle_packet/2`
+  # as long as we decide to receive more messages (before starting to relay media packets).
+  #
+  # Once we hit `:need_more_data` the function returns the list of parsed messages and the interceptor then is ready
+  # to receive more data to continue with emitting new messages.
+  @spec parse_packet_messages(packet :: binary(), interceptor :: struct(), [any()]) ::
+          {[Message.t()], interceptor :: struct()}
+  defp parse_packet_messages(packet, interceptor, messages \\ [])
 
-      [caps: {:audio, caps}]
-    else
-      {:error, _reason} -> []
-    end
+  defp parse_packet_messages(<<>>, %{buffer: <<>>} = interceptor, messages) do
+    {Enum.reverse(messages), interceptor}
   end
 
-  defp get_video_params(native) do
-    with {:ok, config} <- Native.get_video_params(native) do
-      caps = %Membrane.H264.RemoteStream{
-        decoder_configuration_record: config,
-        stream_format: :byte_stream
-      }
+  defp parse_packet_messages(packet, interceptor, messages) do
+    case Interceptor.handle_packet(packet, interceptor) do
+      {_header, message, interceptor} ->
+        parse_packet_messages(<<>>, interceptor, [message | messages])
 
-      [caps: {:video, caps}]
-    else
-      {:error, _reason} -> []
+      {:need_more_data, interceptor} ->
+        {Enum.reverse(messages), interceptor}
+
+      {:handshake_done, interceptor} ->
+        parse_packet_messages(<<>>, interceptor, messages)
+
+      {%Membrane.RTMP.Handshake.Step{} = step, interceptor} ->
+        parse_packet_messages(<<>>, interceptor, [step | messages])
     end
   end
 end

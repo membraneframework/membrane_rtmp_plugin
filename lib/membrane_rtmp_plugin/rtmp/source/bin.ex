@@ -44,7 +44,7 @@ defmodule Membrane.RTMP.SourceBin do
   @impl true
   def handle_init(%__MODULE__{} = options) do
     url = "rtmp://#{options.local_ip}:#{options.port}"
-    source = %RTMP.Source{url: url, timeout: options.timeout}
+    source = %RTMP.Source{port: 1935, timeout: options.timeout}
 
     spec = %ParentSpec{
       children: %{
