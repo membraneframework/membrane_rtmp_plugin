@@ -242,6 +242,18 @@ defmodule Membrane.RTMP.Source do
 
         {:cont, {:ok, state}}
 
+      %Messages.Publish{stream_key: stream_key, publish_type: "live"} ->
+        %Messages.UserControl{event_type: 0, data: <<0, 0, 0, 1>>}
+        |> send_rtmp_payload(socket, chunk_size, chunk_stream_id: 3)
+
+        Responses.publish_success(stream_key)
+        |> send_rtmp_payload(socket, chunk_size, chunk_stream_id: 3)
+
+        {:halt, {:ok, state}}
+
+      %Messages.Publish{publish_type: _publish_type} ->
+        {:halt, {:error, :invalid_publish_type}}
+
       # NOTE: For now we end parsing messages once we receive publish message.
       # At some point we may want to verify the stream parameters or simply extract
       # them for further processing.
