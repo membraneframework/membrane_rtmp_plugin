@@ -46,6 +46,7 @@ defmodule Membrane.RTMP.Source do
        interceptor: Interceptor.init(Handshake.init_server()),
        client_pid: nil,
        client_socket: nil,
+       client_connected?: false,
        # epoch required for performing a handshake with the pipeline
        epoch: 0
      })}
@@ -146,35 +147,33 @@ defmodule Membrane.RTMP.Source do
   end
 
   defp request_packet(pid) do
-    Logger.debug("Sending request to receiver")
     send(pid, :need_more_data)
   end
 
   defp handle_client_messages([], state) do
+    Logger.debug("handle_client_messages: need_more_data")
     request_packet(state.client_pid)
 
     {:noreply, state}
   end
 
   defp handle_client_messages(messages, state) do
+    Logger.debug("handle_client_messages: messages: #{inspect(messages)}")
+
     messages
     |> Enum.reduce_while({:ok, state}, fn message, acc ->
       do_handle_client_message(state.client_socket, message, acc)
     end)
+    # |> then(&Logger.debug("Message handled: #{inspect(&1)}"))
     |> case do
       {:ok, %{client_connected?: true} = state} ->
         # once we are connected don't ask the client for new packets until a pipeline gets started
         {:noreply, state, {:continue, :start_pipeline}}
 
       {:ok, state} ->
-        request_packet(state.client_socket)
+        request_packet(state.client_pid)
 
         {:noreply, state}
-
-      {:error, :stream_key_missing} ->
-        Logger.error("Connection was missing stream key, closing...")
-
-        {:stop, :normal, state}
 
       {:error, _reason} = error ->
         {:stop, error, state}
@@ -201,6 +200,7 @@ defmodule Membrane.RTMP.Source do
         :gen_tcp.send(socket, Handshake.Step.serialize(step))
 
         connection_epoch = Handshake.Step.epoch(step)
+        Logger.debug("Handling message, epoch #{inspect(connection_epoch)}")
 
         {:cont, {:ok, %{state | epoch: connection_epoch}}}
 
