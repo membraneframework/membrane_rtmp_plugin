@@ -9,7 +9,8 @@ defmodule Membrane.RTMP.Interceptor do
 
   require Membrane.Logger
 
-  alias Membrane.RTMP.{Handshake, Header, Message, Messages, Logger}
+  alias Membrane.Logger
+  alias Membrane.RTMP.{Handshake, Header, Message, Messages}
 
   @enforce_keys [:state_machine, :buffer, :in_chunk_size, :out_chunk_size, :handshake]
   defstruct @enforce_keys ++ [previous_header: nil, current_tx_id: 1]

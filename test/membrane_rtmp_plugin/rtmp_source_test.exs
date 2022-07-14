@@ -8,7 +8,7 @@ defmodule Membrane.RTMP.Source.Test do
   alias Membrane.Testing.Pipeline
 
   @input_file "test/fixtures/testsrc.flv"
-  @port 9009
+  @port 1935
   @rtmp_stream_url "rtmp://127.0.0.1:#{@port}/"
 
   test "Check if the stream started and that it ends" do
@@ -16,6 +16,8 @@ defmodule Membrane.RTMP.Source.Test do
     assert_pipeline_playback_changed(pipeline, :prepared, :playing)
 
     ffmpeg_task = Task.async(&start_ffmpeg/0)
+
+    Process.sleep(2000)
 
     assert_sink_buffer(pipeline, :video_sink, %Membrane.Buffer{})
     assert_sink_buffer(pipeline, :audio_sink, %Membrane.Buffer{})
@@ -27,6 +29,7 @@ defmodule Membrane.RTMP.Source.Test do
     assert :ok = Task.await(ffmpeg_task)
   end
 
+  @tag :skip
   test "blocking calls are cancelled properly" do
     alias Membrane.RTMP.Source.Native
 
