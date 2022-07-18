@@ -107,15 +107,15 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_demand(type, _size, _unit, _ctx, %{stale_frame: {type, buffer}} = state) do
+  def handle_demand(pad, _size, _unit, _ctx, %{stale_frame: {pad, buffer}} = state) do
     # There is stale frame, which indicates that that the source was blocked waiting for demand from one of the outputs
     # It now arrived, so we request next frame and output the one that blocked us
     send(state.client_pid, :get_frame)
-    {{:ok, buffer: {type, buffer}}, %{state | stale_frame: nil}}
+    {{:ok, buffer: {pad, buffer}}, %{state | stale_frame: nil}}
   end
 
   @impl true
-  def handle_demand(_type, _size, _unit, _ctx, state) do
+  def handle_demand(_pad, _size, _unit, _ctx, state) do
     {:ok, state}
   end
 
@@ -258,7 +258,8 @@ defmodule Membrane.RTMP.Source do
       # At some point we may want to verify the stream parameters or simply extract
       # them for further processing.
       %Messages.SetDataFrame{} ->
-        raise "Received @setDataFrame RTMP message when it should not be possible"
+        # raise "Received @setDataFrame RTMP message when it should not be possible"
+        {:cont, {:ok, state}}
 
       %Messages.FCPublish{} ->
         %Messages.Anonymous{name: "onFCPublish", properties: []}
@@ -280,8 +281,37 @@ defmodule Membrane.RTMP.Source do
         |> send_rtmp_payload(socket, chunk_size, chunk_stream_id: 3)
 
         {:cont, {:ok, state}}
+
+      %Messages.Audio{data: data} ->
+        buffer = %Buffer{
+          # pts: pts,
+          # dts: dts,
+          payload: prepare_payload(:audio, data)
+        }
+
+        # if get_in(ctx.pads, [type, :demand]) > 0 do
+        #   send(state.provider, :get_frame)
+        #   {:cont, {{:ok, buffer: {type, buffer}}, state}}
+        # else
+        # if there is no demand for element of this type so we wait until it appears
+        # effectively, it results in source adapting to the slower of the two outputs
+        {:cont, {:ok, %{state | stale_frame: {:audio, buffer}}}}
+
+      # end
+
+      %Messages.Video{data: data} ->
+        buffer = %Buffer{
+          # pts: pts,
+          # dts: dts,
+          payload: prepare_payload(:video, data)
+        }
+
+        {:cont, {:ok, %{state | stale_frame: {:video, buffer}}}}
     end
   end
+
+  defp prepare_payload(:video, payload), do: AVC.Utils.to_annex_b(payload)
+  defp prepare_payload(:audio, payload), do: payload
 
   defp send_rtmp_payload(message, socket, chunk_size, opts \\ []) do
     type = Serializer.type(message)

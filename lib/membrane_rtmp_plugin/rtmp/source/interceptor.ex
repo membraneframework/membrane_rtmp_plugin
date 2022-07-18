@@ -75,12 +75,29 @@ defmodule Membrane.RTMP.Interceptor do
           | {Header.t(), Message.t(), t()}
   def handle_packet(packet, state)
 
-  def handle_packet(packet, %{state_machine: :connected, buffer: <<>>} = state) do
-    {packet, state}
-  end
+  # def handle_packet(packet, %{state_machine: :connected, buffer: <<>>} = state) do
+  #   {packet, state}
+  # end
 
-  def handle_packet(packet, %{state_machine: :connected, buffer: buffer} = state) do
-    {buffer <> packet, state}
+  # def handle_packet(packet, %{state_machine: :connected, buffer: buffer} = state) do
+  #   {buffer <> packet, state}
+  # end
+
+  def handle_packet(
+        packet,
+        %{state_machine: :connected, buffer: buffer, in_chunk_size: chunk_size} = state
+      ) do
+    payload = buffer <> packet
+
+    case read_frame(payload, state.previous_header, chunk_size) do
+      :need_more_data ->
+        {:need_more_data, %__MODULE__{state | buffer: payload}}
+
+      {header, message, rest} ->
+        state = update_state_with_message(state, header, message, rest)
+
+        {header, message, state}
+    end
   end
 
   def handle_packet(
@@ -201,6 +218,10 @@ defmodule Membrane.RTMP.Interceptor do
   # in case of client interception the Publish message indicates successful connection
   # (unless proxy temrinates the connection) and medai can be relayed
   defp message_fsm_transition(%Messages.Publish{}), do: :connected
+
+  # when receiving audio or video messages, we are remaining in connected state
+  defp message_fsm_transition(%Messages.Audio{}), do: :connected
+  defp message_fsm_transition(%Messages.Video{}), do: :connected
 
   # in case of server interception the `NetStream.Publish.Start` indicates
   # that the connection has been successful and media can be relayed
