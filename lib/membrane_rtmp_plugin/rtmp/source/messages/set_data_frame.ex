@@ -8,14 +8,14 @@ defmodule Membrane.RTMP.Messages.SetDataFrame do
   @enforce_keys ~w(
     duration file_size
     width height video_codec_id video_data_rate framerate
-    audio_codec_id audio_data_rate audio_sample_rate audio_sample_size audio_channels stereo
+    audio_codec_id audio_data_rate audio_sample_rate audio_sample_size stereo
     encoder
   )a
   defstruct @enforce_keys
 
   @attributes_to_keys %{
     "duration" => :duration,
-    "fileSize" => :file_size,
+    "filesize" => :file_size,
     "width" => :width,
     "height" => :height,
     "videocodecid" => :video_codec_id,
@@ -25,7 +25,6 @@ defmodule Membrane.RTMP.Messages.SetDataFrame do
     "audiodatarate" => :audio_data_rate,
     "audiosamplerate" => :audio_sample_rate,
     "audiosamplesize" => :audio_sample_size,
-    "audiochannels" => :audio_channels,
     "stereo" => :stereo,
     "encoder" => :encoder
   }
@@ -46,7 +45,6 @@ defmodule Membrane.RTMP.Messages.SetDataFrame do
           audio_data_rate: number(),
           audio_sample_rate: number(),
           audio_sample_size: number(),
-          audio_channels: number(),
           stereo: boolean()
         }
 
