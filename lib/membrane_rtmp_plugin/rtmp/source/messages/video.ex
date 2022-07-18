@@ -13,7 +13,7 @@ defmodule Membrane.RTMP.Messages.Video do
         }
 
   @impl true
-  def deserialize(<<data>>) do
+  def deserialize(<<data::binary>>) do
     %__MODULE__{data: data}
   end
 
