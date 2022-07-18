@@ -12,7 +12,7 @@ defmodule Membrane.RTMP.Interceptor do
   alias Membrane.Logger
   alias Membrane.RTMP.{Handshake, Header, Message, Messages}
 
-  @enforce_keys [:state_machine, :buffer, :in_chunk_size, :out_chunk_size, :handshake]
+  @enforce_keys [:state_machine, :buffer, :chunk_size, :handshake]
   defstruct @enforce_keys ++ [previous_header: nil, current_tx_id: 1]
 
   @type state_machine_t ::
@@ -25,9 +25,7 @@ defmodule Membrane.RTMP.Interceptor do
           buffer: binary(),
           previous_header: map() | nil,
           #  the chunk size of incoming messages (the other side of connection)
-          in_chunk_size: non_neg_integer(),
-          # the chunk size of outgoing messages
-          out_chunk_size: non_neg_integer(),
+          chunk_size: non_neg_integer(),
           current_tx_id: non_neg_integer(),
           handshake: Handshake.State.t()
         }
@@ -46,8 +44,7 @@ defmodule Membrane.RTMP.Interceptor do
       state_machine: :handshake,
       buffer: <<>>,
       previous_header: nil,
-      in_chunk_size: chunk_size,
-      out_chunk_size: chunk_size,
+      chunk_size: chunk_size,
       handshake: handshake
     }
   end
@@ -65,11 +62,6 @@ defmodule Membrane.RTMP.Interceptor do
     {tx_ids, %{interceptor | current_tx_id: tx_id + n}}
   end
 
-  @spec update_out_chunk_size(t(), non_neg_integer()) :: t()
-  def update_out_chunk_size(interceptor, chunk_size) do
-    %{interceptor | out_chunk_size: chunk_size}
-  end
-
   @spec handle_packet(packet_t(), t()) ::
           {Handshake.Step.t() | :need_more_data | :handshake_done | binary(), t()}
           | {Header.t(), Message.t(), t()}
@@ -85,7 +77,7 @@ defmodule Membrane.RTMP.Interceptor do
 
   def handle_packet(
         packet,
-        %{state_machine: :connected, buffer: buffer, in_chunk_size: chunk_size} = state
+        %{state_machine: :connected, buffer: buffer, chunk_size: chunk_size} = state
       ) do
     payload = buffer <> packet
 
@@ -150,7 +142,7 @@ defmodule Membrane.RTMP.Interceptor do
 
   def handle_packet(
         packet,
-        %{state_machine: :connecting, buffer: buffer, in_chunk_size: chunk_size} = state
+        %{state_machine: :connecting, buffer: buffer, chunk_size: chunk_size} = state
       ) do
     payload = buffer <> packet
 
@@ -238,7 +230,7 @@ defmodule Membrane.RTMP.Interceptor do
   defp update_state_with_message(state, header, message, rest) do
     %__MODULE__{
       state
-      | in_chunk_size: maybe_update_chunk_size(message, state),
+      | chunk_size: maybe_update_chunk_size(message, state),
         previous_header: header,
         buffer: rest,
         state_machine: message_fsm_transition(message)
@@ -246,5 +238,5 @@ defmodule Membrane.RTMP.Interceptor do
   end
 
   defp maybe_update_chunk_size(%Messages.SetChunkSize{chunk_size: size}, _state), do: size
-  defp maybe_update_chunk_size(_size, %{in_chunk_size: size}), do: size
+  defp maybe_update_chunk_size(_size, %{chunk_size: size}), do: size
 end

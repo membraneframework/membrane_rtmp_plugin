@@ -191,7 +191,7 @@ defmodule Membrane.RTMP.Source do
   # 8. [in] publish -> [out] user control with stream id, pubish success
   # 9. CONNECTED
   defp do_handle_client_message(socket, message, {:ok, state}) do
-    chunk_size = state.interceptor.out_chunk_size
+    chunk_size = state.interceptor.chunk_size
 
     Logger.debug("Handling message: #{inspect(message)}")
 
