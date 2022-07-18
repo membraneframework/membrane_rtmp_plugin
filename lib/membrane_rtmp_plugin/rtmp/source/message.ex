@@ -57,6 +57,12 @@ defmodule Membrane.RTMP.Message do
 
       Header.type(:amf_command) ->
         message_from_modules(payload, @amf_command_to_module)
+
+      Header.type(:audio_message) ->
+        Messages.Audio.deserialize(payload)
+
+      Header.type(:video_message) ->
+        Messages.Video.deserialize(payload)
     end
   end
 

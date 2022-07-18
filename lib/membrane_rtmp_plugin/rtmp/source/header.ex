@@ -28,6 +28,8 @@ defmodule Membrane.RTMP.Header do
   defmacro type(:user_control_message), do: 0x04
   defmacro type(:window_acknowledgement_size), do: 0x05
   defmacro type(:set_peer_bandwidth), do: 0x06
+  defmacro type(:audio_message), do: 0x08
+  defmacro type(:video_message), do: 0x09
   defmacro type(:amf_data), do: 0x12
   defmacro type(:amf_command), do: 0x14
 
