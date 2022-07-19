@@ -166,15 +166,15 @@ defmodule Membrane.RTMP.Source do
     Logger.debug("handle_client_messages: messages: #{inspect(messages)}")
 
     messages
-    |> Enum.reduce_while({:ok, state}, fn message, acc ->
+    |> Enum.reduce_while(state, fn message, acc ->
       do_handle_client_message(state.client_socket, message, acc)
     end)
     |> case do
-      {:ok, %{client_connected?: true} = state} ->
+      %{client_connected?: true} = state ->
         # once we are connected don't ask the client for new packets until a pipeline gets started
         state
 
-      {:ok, state} ->
+      state ->
         request_packet(state.client_pid)
 
         state
@@ -194,7 +194,7 @@ defmodule Membrane.RTMP.Source do
   # 7. [in] release stream -> [out] _result response
   # 8. [in] publish -> [out] user control with stream id, publish success
   # 9. CONNECTED
-  defp do_handle_client_message(socket, message, {:ok, state}) do
+  defp do_handle_client_message(socket, message, state) do
     chunk_size = state.interceptor.chunk_size
 
     case message do
@@ -202,10 +202,10 @@ defmodule Membrane.RTMP.Source do
         :gen_tcp.send(socket, Handshake.Step.serialize(step))
 
         connection_epoch = Handshake.Step.epoch(step)
-        {:cont, {:ok, %{state | epoch: connection_epoch}}}
+        {:cont, %{state | epoch: connection_epoch}}
 
       %Messages.SetChunkSize{chunk_size: _chunk_size} ->
-        {:cont, {:ok, state}}
+        {:cont, state}
 
       %Messages.Connect{} ->
         # the default value of ffmpeg server
@@ -233,14 +233,14 @@ defmodule Membrane.RTMP.Source do
         Responses.on_bw_done()
         |> send_rtmp_payload(socket, chunk_size, chunk_stream_id: 3)
 
-        {:cont, {:ok, %{state | interceptor: interceptor}}}
+        {:cont, %{state | interceptor: interceptor}}
 
       %Messages.ReleaseStream{tx_id: tx_id, stream_key: _stream_key} ->
         tx_id
         |> Responses.default_result()
         |> send_rtmp_payload(socket, chunk_size, chunk_stream_id: 3)
 
-        {:cont, {:ok, state}}
+        {:cont, state}
 
       %Messages.Publish{stream_key: stream_key, publish_type: "live"} ->
         %Messages.UserControl{event_type: 0, data: <<0, 0, 0, 1>>}
@@ -249,7 +249,7 @@ defmodule Membrane.RTMP.Source do
         Responses.publish_success(stream_key)
         |> send_rtmp_payload(socket, chunk_size, chunk_stream_id: 3)
 
-        {:halt, {:ok, state}}
+        {:halt, state}
 
       %Messages.Publish{publish_type: _publish_type} ->
         {:halt, {:error, :invalid_publish_type}}
@@ -259,13 +259,13 @@ defmodule Membrane.RTMP.Source do
       # them for further processing.
       %Messages.SetDataFrame{} ->
         # raise "Received @setDataFrame RTMP message when it should not be possible"
-        {:cont, {:ok, state}}
+        {:cont, state}
 
       %Messages.FCPublish{} ->
         %Messages.Anonymous{name: "onFCPublish", properties: []}
         |> send_rtmp_payload(socket, chunk_size, chunk_stream_id: 3)
 
-        {:cont, {:ok, state}}
+        {:cont, state}
 
       %Messages.CreateStream{tx_id: tx_id} ->
         stream_id = [1.0]
@@ -274,13 +274,13 @@ defmodule Membrane.RTMP.Source do
         |> Responses.default_result(stream_id)
         |> send_rtmp_payload(socket, chunk_size, chunk_stream_id: 3)
 
-        {:cont, {:ok, state}}
+        {:cont, state}
 
       %Messages.Anonymous{name: "_checkbw", tx_id: tx_id} ->
         tx_id
         |> send_rtmp_payload(socket, chunk_size, chunk_stream_id: 3)
 
-        {:cont, {:ok, state}}
+        {:cont, state}
 
       %Messages.Audio{data: data} ->
         buffer = %Buffer{
@@ -297,7 +297,7 @@ defmodule Membrane.RTMP.Source do
         # else
         # if there is no demand for element of this type so we wait until it appears
         # effectively, it results in source adapting to the slower of the two outputs
-        {:cont, {:ok, %{state | stale_frame: {:audio, buffer}}}}
+        {:cont, %{state | stale_frame: {:audio, buffer}}}
 
       # end
 
@@ -308,7 +308,9 @@ defmodule Membrane.RTMP.Source do
           payload: prepare_payload(:video, data)
         }
 
-        {:cont, {:ok, %{state | stale_frame: {:video, buffer}}}}
+        Logger.debug("source received video message")
+
+        {:cont, %{state | stale_frame: {:video, buffer}}}
     end
   end
 
