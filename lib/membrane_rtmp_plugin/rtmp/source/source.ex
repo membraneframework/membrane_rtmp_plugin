@@ -110,12 +110,14 @@ defmodule Membrane.RTMP.Source do
   def handle_demand(pad, _size, _unit, _ctx, %{stale_frame: {pad, buffer}} = state) do
     # There is stale frame, which indicates that that the source was blocked waiting for demand from one of the outputs
     # It now arrived, so we request next frame and output the one that blocked us
+    Logger.debug("source received demand")
     send(state.client_pid, :get_frame)
     {{:ok, buffer: {pad, buffer}}, %{state | stale_frame: nil}}
   end
 
   @impl true
   def handle_demand(_pad, _size, _unit, _ctx, state) do
+    Logger.debug("source received demand - no frames")
     {:ok, state}
   end
 
@@ -135,7 +137,10 @@ defmodule Membrane.RTMP.Source do
     )
 
     {messages, interceptor} = parse_packet_messages(packet, state.interceptor)
-    {_cmd, state} = handle_client_messages(messages, state)
+    state = handle_client_messages(messages, state)
+
+    %{stale_frame: frame} = state
+    Logger.debug("Handled messages, stale_frame: #{inspect(frame)}")
 
     {:ok, %{state | interceptor: interceptor}}
   end
@@ -154,7 +159,7 @@ defmodule Membrane.RTMP.Source do
     Logger.debug("handle_client_messages: need_more_data")
     request_packet(state.client_pid)
 
-    {:noreply, state}
+    state
   end
 
   defp handle_client_messages(messages, state) do
@@ -167,15 +172,15 @@ defmodule Membrane.RTMP.Source do
     |> case do
       {:ok, %{client_connected?: true} = state} ->
         # once we are connected don't ask the client for new packets until a pipeline gets started
-        {:noreply, state, {:continue, :start_pipeline}}
+        state
 
       {:ok, state} ->
         request_packet(state.client_pid)
 
-        {:noreply, state}
+        state
 
       {:error, _reason} = error ->
-        {:stop, error, state}
+        raise error
     end
   end
 
@@ -187,7 +192,7 @@ defmodule Membrane.RTMP.Source do
   # 5. [in] release stream -> [out] default _result
   # 6. [in] FC publish, create stream, _checkbw -> [out] onFCPublish, default _result, default _result
   # 7. [in] release stream -> [out] _result response
-  # 8. [in] publish -> [out] user control with stream id, pubish success
+  # 8. [in] publish -> [out] user control with stream id, publish success
   # 9. CONNECTED
   defp do_handle_client_message(socket, message, {:ok, state}) do
     chunk_size = state.interceptor.chunk_size
@@ -283,6 +288,8 @@ defmodule Membrane.RTMP.Source do
           # dts: dts,
           payload: prepare_payload(:audio, data)
         }
+
+        Logger.debug("source received audio message")
 
         # if get_in(ctx.pads, [type, :demand]) > 0 do
         #   send(state.provider, :get_frame)
