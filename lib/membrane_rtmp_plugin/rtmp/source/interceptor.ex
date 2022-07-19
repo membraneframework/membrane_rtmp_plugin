@@ -13,7 +13,7 @@ defmodule Membrane.RTMP.Interceptor do
   alias Membrane.RTMP.{Handshake, Header, Message, Messages}
 
   @enforce_keys [:state_machine, :buffer, :chunk_size, :handshake]
-  defstruct @enforce_keys ++ [previous_header: nil, current_tx_id: 1]
+  defstruct @enforce_keys ++ [previous_headers: %{}, current_tx_id: 1]
 
   @type state_machine_t ::
           :handshake | :connecting | :connected
@@ -23,7 +23,7 @@ defmodule Membrane.RTMP.Interceptor do
   @type t :: %__MODULE__{
           state_machine: state_machine_t(),
           buffer: binary(),
-          previous_header: map() | nil,
+          previous_headers: map(),
           #  the chunk size of incoming messages (the other side of connection)
           chunk_size: non_neg_integer(),
           current_tx_id: non_neg_integer(),
@@ -43,7 +43,8 @@ defmodule Membrane.RTMP.Interceptor do
     %__MODULE__{
       state_machine: :handshake,
       buffer: <<>>,
-      previous_header: nil,
+      # previous_headers keeps previous header for each of the stream chunks
+      previous_headers: %{},
       chunk_size: chunk_size,
       handshake: handshake
     }
@@ -81,7 +82,7 @@ defmodule Membrane.RTMP.Interceptor do
       ) do
     payload = buffer <> packet
 
-    case read_frame(payload, state.previous_header, chunk_size) do
+    case read_frame(payload, state.previous_headers, chunk_size) do
       :need_more_data ->
         {:need_more_data, %__MODULE__{state | buffer: payload}}
 
@@ -146,7 +147,7 @@ defmodule Membrane.RTMP.Interceptor do
       ) do
     payload = buffer <> packet
 
-    case read_frame(payload, state.previous_header, chunk_size) do
+    case read_frame(payload, state.previous_headers, chunk_size) do
       :need_more_data ->
         {:need_more_data, %__MODULE__{state | buffer: payload}}
 
@@ -157,20 +158,25 @@ defmodule Membrane.RTMP.Interceptor do
     end
   end
 
-  defp read_frame(packet, previous_header, chunk_size) do
-    {%Header{body_size: body_size} = header, rest} = Header.deserialize(packet, previous_header)
+  defp read_frame(packet, previous_headers, chunk_size) do
+    {%Header{body_size: body_size} = header, rest} = Header.deserialize(packet, previous_headers)
 
     chunked_body_size =
       if body_size > chunk_size do
         # if a message's body is greater than the chunk size then
-        # after chunk_size's bytes there is a 0x03 one byte header that
+        # after every chunk_size's bytes there is a 0x03 one byte header that
         # needs to be stripped and is not counted into the body_size
-        headers_to_strip = div(body_size, chunk_size)
+        headers_to_strip = div(body_size - 1, chunk_size)
 
         body_size + headers_to_strip
       else
         body_size
       end
+
+    Logger.debug(
+      "Reading frame, packet size: #{byte_size(packet)}; header: #{inspect(header)}; data: #{inspect(rest)}\n
+      previous_headers: #{inspect(previous_headers)}, chunk_size: #{chunk_size}, chunked_body_size: #{chunked_body_size}, rest: #{byte_size(rest)}"
+    )
 
     if chunked_body_size <= byte_size(rest) do
       <<body::binary-size(chunked_body_size), rest::binary>> = rest
@@ -203,7 +209,10 @@ defmodule Membrane.RTMP.Interceptor do
 
   defp do_combine_body_chunks(body, chunk_size, acc) do
     # cut out the header byte (staring with 0b11)
+    <<_body::binary-size(chunk_size), header::binary>> = body
     <<body::binary-size(chunk_size), 0b11::2, _chunk_stream_id::6, rest::binary>> = body
+
+    Logger.debug("Header 3: #{inspect(header)}")
     do_combine_body_chunks(rest, chunk_size, acc <> body)
   end
 
@@ -228,10 +237,12 @@ defmodule Membrane.RTMP.Interceptor do
   defp fsm_transition(:handshake), do: :connecting
 
   defp update_state_with_message(state, header, message, rest) do
+    updated_headers = Map.put(state.previous_headers, header.chunk_stream_id, header)
+
     %__MODULE__{
       state
       | chunk_size: maybe_update_chunk_size(message, state),
-        previous_header: header,
+        previous_headers: updated_headers,
         buffer: rest,
         state_machine: message_fsm_transition(message)
     }

@@ -58,7 +58,7 @@ defmodule Membrane.RTMP.Header do
   @doc """
   Deserializes given binary into an RTMP header structure.
 
-  RTMP headers can be self contained or may depend on preceeding headers.
+  RTMP headers can be self contained or may depend on preceding headers.
   It depends on the first 2 bits of the header:
   * `0b00` - current header is self contained and contains all the header information, see `t:t/0`
   * `0b01` - current header derives the `stream_id` from the previous header
@@ -66,13 +66,13 @@ defmodule Membrane.RTMP.Header do
   * `0b11` - all values are derived from the previous header with the same `chunk_stream_id`
   """
   @spec deserialize(binary(), t() | nil) :: {t(), rest :: binary()} | :error
-  def deserialize(binary, previous_header \\ nil)
+  def deserialize(binary, previous_headers \\ nil)
 
   # only the deserialization of the 0b00 type can have `nil` previous header
   def deserialize(
         <<@header_type_0::bitstring, chunk_stream_id::6, timestamp::24, body_size::24, type_id::8,
           stream_id::32, rest::binary>>,
-        _previous_header
+        _previous_headers
       ) do
     header = %__MODULE__{
       chunk_stream_id: chunk_stream_id,
@@ -88,14 +88,14 @@ defmodule Membrane.RTMP.Header do
   def deserialize(
         <<@header_type_1::bitstring, chunk_stream_id::6, timestamp::24, body_size::24, type_id::8,
           rest::binary>>,
-        previous_header
+        previous_headers
       ) do
     header = %__MODULE__{
       chunk_stream_id: chunk_stream_id,
       timestamp: timestamp,
       body_size: body_size,
       type_id: type_id,
-      stream_id: previous_header.stream_id
+      stream_id: previous_headers[chunk_stream_id].stream_id
     }
 
     {header, rest}
@@ -103,14 +103,14 @@ defmodule Membrane.RTMP.Header do
 
   def deserialize(
         <<@header_type_2::bitstring, chunk_stream_id::6, timestamp::24, rest::binary>>,
-        previous_header
+        previous_headers
       ) do
     header = %__MODULE__{
       chunk_stream_id: chunk_stream_id,
       timestamp: timestamp,
-      body_size: previous_header.body_size,
-      type_id: previous_header.type_id,
-      stream_id: previous_header.stream_id
+      body_size: previous_headers[chunk_stream_id].body_size,
+      type_id: previous_headers[chunk_stream_id].type_id,
+      stream_id: previous_headers[chunk_stream_id].stream_id
     }
 
     {header, rest}
@@ -118,14 +118,14 @@ defmodule Membrane.RTMP.Header do
 
   def deserialize(
         <<@header_type_3::bitstring, chunk_stream_id::6, rest::binary>>,
-        previous_header
+        previous_headers
       ) do
     header = %__MODULE__{
       chunk_stream_id: chunk_stream_id,
-      timestamp: previous_header.timestamp,
-      body_size: previous_header.body_size,
-      type_id: previous_header.type_id,
-      stream_id: previous_header.stream_id
+      timestamp: previous_headers[chunk_stream_id].timestamp,
+      body_size: previous_headers[chunk_stream_id].body_size,
+      type_id: previous_headers[chunk_stream_id].type_id,
+      stream_id: previous_headers[chunk_stream_id].stream_id
     }
 
     {header, rest}

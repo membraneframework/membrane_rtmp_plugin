@@ -164,7 +164,6 @@ defmodule Membrane.RTMP.Source do
     |> Enum.reduce_while({:ok, state}, fn message, acc ->
       do_handle_client_message(state.client_socket, message, acc)
     end)
-    # |> then(&Logger.debug("Message handled: #{inspect(&1)}"))
     |> case do
       {:ok, %{client_connected?: true} = state} ->
         # once we are connected don't ask the client for new packets until a pipeline gets started
@@ -193,15 +192,11 @@ defmodule Membrane.RTMP.Source do
   defp do_handle_client_message(socket, message, {:ok, state}) do
     chunk_size = state.interceptor.chunk_size
 
-    Logger.debug("Handling message: #{inspect(message)}")
-
     case message do
       %Handshake.Step{type: :s0_s1_s2} = step ->
         :gen_tcp.send(socket, Handshake.Step.serialize(step))
 
         connection_epoch = Handshake.Step.epoch(step)
-        Logger.debug("Handling message, epoch #{inspect(connection_epoch)}")
-
         {:cont, {:ok, %{state | epoch: connection_epoch}}}
 
       %Messages.SetChunkSize{chunk_size: _chunk_size} ->
