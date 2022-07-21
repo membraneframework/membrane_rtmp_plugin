@@ -47,6 +47,7 @@ defmodule Membrane.RTMP.Source do
        client_pid: nil,
        client_socket: nil,
        client_connected?: false,
+       end_of_stream?: false,
        # epoch required for performing a handshake with the pipeline
        epoch: 0
      })}
@@ -72,20 +73,19 @@ defmodule Membrane.RTMP.Source do
 
     Logger.debug("Receiver started, pid: #{inspect(pid)}")
 
-    # actions = [
-    #   caps:
-    #     {:video,
-    #      %Membrane.H264.RemoteStream{
-    #        decoder_configuration_record:
-    #          <<1::8, 0::8, 0::8, 0::8, 0b111111::6, 0::2, 0b111::3, 0::13>>,
-    #        stream_format: :avc1
-    #      }},
-    #   # caps: {:audio, %Membrane.AAC.RemoteStream{audio_specific_config: <<1::5, 0::4, 0::4, 0::1>>}},
-    #   buffer: {:video, %Membrane.Buffer{payload: nil}}
-    #   # buffer: {:audio, %Membrane.Buffer{payload: nil}}
-    # ]
+    actions = [
+      caps:
+        {:video,
+         %Membrane.H264.RemoteStream{
+           decoder_configuration_record:
+             <<1::8, 0::8, 0::8, 0::8, 0b111111::6, 0::2, 0b111::3, 0::13>>,
+           stream_format: :avc1
+         }},
+      caps:
+        {:audio, %Membrane.AAC.RemoteStream{audio_specific_config: <<1::5, 0::4, 0::4, 0::1>>}}
+    ]
 
-    {:ok, %{state | client_pid: pid}}
+    {{:ok, actions}, %{state | client_pid: pid}}
   end
 
   defp receive_loop(socket, target) do
@@ -97,6 +97,9 @@ defmodule Membrane.RTMP.Source do
       {:tcp, _port, packet} ->
         Logger.debug("Receiver got packet: #{inspect(packet)}")
         send(target, {:tcp, socket, packet})
+
+      :terminate ->
+        exit(:normal)
 
       message ->
         Logger.debug("Receiver got unknown message: #{inspect(message)}")
@@ -111,7 +114,7 @@ defmodule Membrane.RTMP.Source do
     # There is stale frame, which indicates that that the source was blocked waiting for demand from one of the outputs
     # It now arrived, so we request next frame and output the one that blocked us
     Logger.debug("source received demand")
-    send(state.client_pid, :get_frame)
+    send(state.client_pid, :need_more_data)
     {{:ok, buffer: {pad, buffer}}, %{state | stale_frame: nil}}
   end
 
@@ -129,7 +132,7 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_other({:tcp, client_socket, packet}, _context, state) do
+  def handle_other({:tcp, client_socket, packet}, ctx, state) do
     state = %{state | client_socket: client_socket}
 
     Logger.debug(
@@ -137,12 +140,30 @@ defmodule Membrane.RTMP.Source do
     )
 
     {messages, interceptor} = parse_packet_messages(packet, state.interceptor)
+
     state = handle_client_messages(messages, state)
 
-    %{stale_frame: frame} = state
-    Logger.debug("Handled messages, stale_frame: #{inspect(frame)}")
+    actions =
+      case state do
+        %{end_of_stream?: true} ->
+          Logger.debug("Returning ")
+          [end_of_stream: :audio]
 
-    {:ok, %{state | interceptor: interceptor}}
+        %{stale_frame: {pad, buffer}} ->
+          if get_in(ctx.pads, [pad, :demand]) > 0 do
+            send(state.client_pid, :need_more_data)
+            [buffer: {pad, buffer}]
+          else
+            []
+          end
+
+        _state ->
+          []
+      end
+
+    Logger.debug("Handled messages, actions: #{inspect(actions)}")
+
+    {{:ok, actions}, %{state | interceptor: interceptor}}
   end
 
   @impl true
@@ -311,10 +332,20 @@ defmodule Membrane.RTMP.Source do
         Logger.debug("source received video message")
 
         {:cont, %{state | stale_frame: {:video, buffer}}}
+
+      %Messages.Anonymous{name: "deleteStream"} ->
+        Logger.debug("Received deleteStream messaage")
+        {:cont, %{state | end_of_stream?: true}}
+
+      %Messages.Anonymous{} = message ->
+        Logger.debug("Unknown message: #{inspect(message)}")
+
+        {:cont, state}
     end
   end
 
-  defp prepare_payload(:video, payload), do: AVC.Utils.to_annex_b(payload)
+  # defp prepare_payload(:video, payload), do: AVC.Utils.to_annex_b(payload)
+  defp prepare_payload(:video, payload), do: payload
   defp prepare_payload(:audio, payload), do: payload
 
   defp send_rtmp_payload(message, socket, chunk_size, opts \\ []) do

@@ -173,10 +173,10 @@ defmodule Membrane.RTMP.Interceptor do
         body_size
       end
 
-    Logger.debug(
-      "Reading frame, packet size: #{byte_size(packet)}; header: #{inspect(header)}; data: #{inspect(rest)}\n
-      previous_headers: #{inspect(previous_headers)}, chunk_size: #{chunk_size}, chunked_body_size: #{chunked_body_size}, rest: #{byte_size(rest)}"
-    )
+    # Logger.debug(
+    #   "Reading frame, packet size: #{byte_size(packet)}; header: #{inspect(header)}; data: #{inspect(rest)}\n
+    #   previous_headers: #{inspect(previous_headers)}, chunk_size: #{chunk_size}, chunked_body_size: #{chunked_body_size}, rest: #{byte_size(rest)}"
+    # )
 
     if chunked_body_size <= byte_size(rest) do
       <<body::binary-size(chunked_body_size), rest::binary>> = rest
