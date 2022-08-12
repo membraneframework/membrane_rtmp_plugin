@@ -17,8 +17,6 @@ defmodule Membrane.RTMP.Source.Test do
 
     ffmpeg_task = Task.async(&start_ffmpeg/0)
 
-    Logger.debug("Expecting pid: #{inspect(pipeline)}")
-
     assert_sink_buffer(pipeline, :audio_sink, %Membrane.Buffer{})
     assert_sink_buffer(pipeline, :video_sink, %Membrane.Buffer{})
     assert_end_of_stream(pipeline, :audio_sink, :input, 11_000)

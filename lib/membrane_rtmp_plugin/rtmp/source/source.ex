@@ -10,6 +10,7 @@ defmodule Membrane.RTMP.Source do
   alias Membrane.{AVC, Buffer, Time, Logger}
   alias Membrane.RTMP.{Interceptor, Handshake, Header, Message, Messages, Responses}
   alias Membrane.RTMP.Messages.Serializer
+  alias Membrane.H264.FFmpeg.Parser.NALu
 
   def_output_pad :audio,
     availability: :always,
@@ -37,12 +38,15 @@ defmodule Membrane.RTMP.Source do
                 """
               ]
 
+  @sps_keyframe <<23, 0, 0, 0, 0, 1, 100, 0, 40, 255, 225, 0>>
+
   @impl true
   def handle_init(%__MODULE__{} = opts) do
     {:ok,
      Map.from_struct(opts)
      |> Map.merge(%{
        stale_frame: nil,
+       buffers: %{audio: [], video: []},
        interceptor: Interceptor.init(Handshake.init_server()),
        client_pid: nil,
        client_socket: nil,
@@ -98,6 +102,9 @@ defmodule Membrane.RTMP.Source do
         Logger.debug("Receiver got packet: #{inspect(packet)}")
         send(target, {:tcp, socket, packet})
 
+      {:tcp_closed, _port} ->
+        send(target, {:tcp_closed, socket})
+
       :terminate ->
         exit(:normal)
 
@@ -109,20 +116,29 @@ defmodule Membrane.RTMP.Source do
     receive_loop(socket, target)
   end
 
-  @impl true
-  def handle_demand(pad, _size, _unit, _ctx, %{stale_frame: {pad, buffer}} = state) do
-    # There is stale frame, which indicates that that the source was blocked waiting for demand from one of the outputs
-    # It now arrived, so we request next frame and output the one that blocked us
-    Logger.debug("source received demand")
-    send(state.client_pid, :need_more_data)
-    {{:ok, buffer: {pad, buffer}}, %{state | stale_frame: nil}}
-  end
+  # @impl true
+  # def handle_demand(:video, _size, _unit, _ctx, state) do
+  #   # There is stale frame, which indicates that that the source was blocked waiting for demand from one of the outputs
+  #   # It now arrived, so we request next frame and output the one that blocked us
+  #   Logger.debug("source received demand on :video - asking for frames")
+  #   # send(state.client_pid, :need_more_data)
+  #   {{:ok, buffer: {:video, %Buffer{payload: nil}}}, state}
+  # end
 
   @impl true
-  def handle_demand(_pad, _size, _unit, _ctx, state) do
-    Logger.debug("source received demand - no frames")
+  def handle_demand(pad, _size, _unit, _ctx, state) do
+    # There is stale frame, which indicates that that the source was blocked waiting for demand from one of the outputs
+    # It now arrived, so we request next frame and output the one that blocked us
+    Logger.debug("source received demand on #{inspect(pad)} - asking for frames")
+    send(state.client_pid, :need_more_data)
     {:ok, state}
   end
+
+  # @impl true
+  # def handle_demand(_pad, _size, _unit, _ctx, state) do
+  #   Logger.debug("source received demand - no frames")
+  #   {:ok, state}
+  # end
 
   @impl true
   def handle_playing_to_prepared(_ctx, state) do
@@ -142,24 +158,7 @@ defmodule Membrane.RTMP.Source do
     {messages, interceptor} = parse_packet_messages(packet, state.interceptor)
 
     state = handle_client_messages(messages, state)
-
-    actions =
-      case state do
-        %{end_of_stream?: true} ->
-          Logger.debug("Returning ")
-          [end_of_stream: :audio]
-
-        %{stale_frame: {pad, buffer}} ->
-          if get_in(ctx.pads, [pad, :demand]) > 0 do
-            send(state.client_pid, :need_more_data)
-            [buffer: {pad, buffer}]
-          else
-            []
-          end
-
-        _state ->
-          []
-      end
+    {actions, state} = get_actions(state)
 
     Logger.debug("Handled messages, actions: #{inspect(actions)}")
 
@@ -167,9 +166,30 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_other(message, _context, state) do
+  def handle_other({:tcp_closed, _port}, _ctx, state) do
+    {{:ok, end_of_stream: :audio, end_of_stream: :video}, state}
+    # {:ok, state}
+  end
+
+  @impl true
+  def handle_other(message, _ctx, state) do
     Logger.debug("Source received unknown message: #{inspect(message)}")
     {:ok, state}
+  end
+
+  defp get_actions(state) do
+    case state do
+      %{buffers: buffers} ->
+        # Logger.debug("Buffers: #{inspect(buffers)}")
+
+        # {[buffer: {:audio, buffers[:audio]}, buffer: {:video, buffers[:video]}],
+        {[buffer: {:video, buffers[:video]}, buffer: {:audio, buffers[:audio]}],
+         %{state | buffers: %{audio: [], video: []}}}
+
+      # {[], state}
+      _ ->
+        {[], state}
+    end
   end
 
   defp request_packet(pid) do
@@ -195,13 +215,13 @@ defmodule Membrane.RTMP.Source do
         # once we are connected don't ask the client for new packets until a pipeline gets started
         state
 
+      {:error, _reason} = error ->
+        raise error
+
       state ->
         request_packet(state.client_pid)
 
         state
-
-      {:error, _reason} = error ->
-        raise error
     end
   end
 
@@ -312,26 +332,34 @@ defmodule Membrane.RTMP.Source do
 
         Logger.debug("source received audio message")
 
-        # if get_in(ctx.pads, [type, :demand]) > 0 do
-        #   send(state.provider, :get_frame)
-        #   {:cont, {{:ok, buffer: {type, buffer}}, state}}
-        # else
         # if there is no demand for element of this type so we wait until it appears
         # effectively, it results in source adapting to the slower of the two outputs
-        {:cont, %{state | stale_frame: {:audio, buffer}}}
-
-      # end
+        audio_buffers = [buffer | get_in(state, [:buffers, :audio])]
+        buffers = %{state[:buffers] | audio: audio_buffers}
+        {:cont, %{state | buffers: buffers}}
 
       %Messages.Video{data: data} ->
+        # {payload, state} = parse_video_message(data, state)
+
         buffer = %Buffer{
-          # pts: pts,
-          # dts: dts,
-          payload: prepare_payload(:video, data)
+          # pts: state[:pps],
+          # dts: state[:dts],
+          payload: data
         }
 
-        Logger.debug("source received video message")
+        # Logger.debug("source received video message: #{inspect(buffer.payload)}")
 
-        {:cont, %{state | stale_frame: {:video, buffer}}}
+        video_buffers = [buffer | get_in(state, [:buffers, :video])]
+        buffers = %{state[:buffers] | video: video_buffers}
+
+        Logger.debug("source video buffers: #{inspect(video_buffers)}")
+
+        # nalu =
+        #   Enum.reduce(video_buffers, <<>>, fn buf, acc -> buf.payload <> acc end) |> NALu.parse()
+
+        # Logger.debug("parsed NALu: #{inspect(nalu)}")
+
+        {:cont, %{state | buffers: buffers}}
 
       %Messages.Anonymous{name: "deleteStream"} ->
         Logger.debug("Received deleteStream messaage")
@@ -341,6 +369,21 @@ defmodule Membrane.RTMP.Source do
         Logger.debug("Unknown message: #{inspect(message)}")
 
         {:cont, state}
+    end
+  end
+
+  defp parse_video_message(data, state) do
+    case data do
+      <<23, 0, 0, 0, 0, 1, 100, 0, 40, 255, 225, 0, sps_size, rest::binary>> ->
+        <<sps::binary-size(sps_size), rest::binary>> = rest
+        <<1, pps_size::16, rest::binary>> = rest
+        Logger.debug("pps size: #{inspect(pps_size)}")
+        <<pps::binary-size(pps_size), data::binary>> = rest
+
+        {data, state}
+
+      _ ->
+        {data, state}
     end
   end
 
@@ -397,4 +440,37 @@ defmodule Membrane.RTMP.Source do
         parse_packet_messages(<<>>, interceptor, [step | messages])
     end
   end
+
+  # defp get_format_info_actions(native) do
+  #   [
+  #     get_audio_params(native),
+  #     get_video_params(native)
+  #   ]
+  #   |> Enum.concat()
+  # end
+
+  # defp get_audio_params(native) do
+  #   with {:ok, asc} <- Native.get_audio_params(native) do
+  #     caps = %Membrane.AAC.RemoteStream{
+  #       audio_specific_config: asc
+  #     }
+
+  #     [caps: {:audio, caps}]
+  #   else
+  #     {:error, _reason} -> []
+  #   end
+  # end
+
+  # defp get_video_params(native) do
+  #   with {:ok, config} <- Native.get_video_params(native) do
+  #     caps = %Membrane.H264.RemoteStream{
+  #       decoder_configuration_record: config,
+  #       stream_format: :byte_stream
+  #     }
+
+  #     [caps: {:video, caps}]
+  #   else
+  #     {:error, _reason} -> []
+  #   end
+  # end
 end

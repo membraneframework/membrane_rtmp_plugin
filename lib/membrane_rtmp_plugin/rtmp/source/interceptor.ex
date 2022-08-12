@@ -212,7 +212,6 @@ defmodule Membrane.RTMP.Interceptor do
     <<_body::binary-size(chunk_size), header::binary>> = body
     <<body::binary-size(chunk_size), 0b11::2, _chunk_stream_id::6, rest::binary>> = body
 
-    Logger.debug("Header 3: #{inspect(header)}")
     do_combine_body_chunks(rest, chunk_size, acc <> body)
   end
 
