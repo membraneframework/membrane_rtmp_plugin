@@ -38,8 +38,6 @@ defmodule Membrane.RTMP.Source do
                 """
               ]
 
-  @sps_keyframe <<23, 0, 0, 0, 0, 1, 100, 0, 40, 255, 225, 0>>
-
   @impl true
   def handle_init(%__MODULE__{} = opts) do
     {:ok,
@@ -47,11 +45,11 @@ defmodule Membrane.RTMP.Source do
      |> Map.merge(%{
        stale_frame: nil,
        buffers: %{audio: [], video: []},
+       decoder_configuration: nil,
        interceptor: Interceptor.init(Handshake.init_server()),
        client_pid: nil,
        client_socket: nil,
        client_connected?: false,
-       end_of_stream?: false,
        # epoch required for performing a handshake with the pipeline
        epoch: 0
      })}
@@ -77,29 +75,18 @@ defmodule Membrane.RTMP.Source do
 
     Logger.debug("Receiver started, pid: #{inspect(pid)}")
 
-    actions = [
-      caps:
-        {:video,
-         %Membrane.H264.RemoteStream{
-           decoder_configuration_record:
-             <<1::8, 0::8, 0::8, 0::8, 0b111111::6, 0::2, 0b111::3, 0::13>>,
-           stream_format: :avc1
-         }},
-      caps:
-        {:audio, %Membrane.AAC.RemoteStream{audio_specific_config: <<1::5, 0::4, 0::4, 0::1>>}}
-    ]
-
-    {{:ok, actions}, %{state | client_pid: pid}}
+    {:ok, %{state | client_pid: pid}}
   end
 
   defp receive_loop(socket, target) do
     receive do
       :need_more_data ->
         :inet.setopts(socket, active: :once)
-        Logger.debug("Receiver requesting more data")
+
+      # Logger.debug("Receiver requesting more data")
 
       {:tcp, _port, packet} ->
-        Logger.debug("Receiver got packet: #{inspect(packet)}")
+        # Logger.debug("Receiver got packet: #{inspect(packet)}")
         send(target, {:tcp, socket, packet})
 
       {:tcp_closed, _port} ->
@@ -151,9 +138,9 @@ defmodule Membrane.RTMP.Source do
   def handle_other({:tcp, client_socket, packet}, ctx, state) do
     state = %{state | client_socket: client_socket}
 
-    Logger.debug(
-      "Source received a packet of length: #{byte_size(packet)}, handling with #{inspect(state.interceptor)}"
-    )
+    # Logger.debug(
+    #   "Source received a packet of length: #{byte_size(packet)}, handling with #{inspect(state.interceptor)}"
+    # )
 
     {messages, interceptor} = parse_packet_messages(packet, state.interceptor)
 
@@ -179,14 +166,27 @@ defmodule Membrane.RTMP.Source do
 
   defp get_actions(state) do
     case state do
+      %{decoder_configuration: <<decoder_configuration::binary>>} ->
+        {[
+           caps:
+             {:video,
+              %Membrane.H264.RemoteStream{
+                decoder_configuration_record: decoder_configuration,
+                stream_format: :avc1
+              }},
+           caps:
+             {:audio,
+              %Membrane.AAC.RemoteStream{audio_specific_config: <<1::5, 0::4, 0::4, 0::1>>}}
+         ], %{state | decoder_configuration: nil}}
+
       %{buffers: buffers} ->
         # Logger.debug("Buffers: #{inspect(buffers)}")
 
-        # {[buffer: {:audio, buffers[:audio]}, buffer: {:video, buffers[:video]}],
-        {[buffer: {:video, buffers[:video]}, buffer: {:audio, buffers[:audio]}],
-         %{state | buffers: %{audio: [], video: []}}}
+        actions = [buffer: {:video, buffers[:video]}, buffer: {:audio, buffers[:audio]}]
+        Logger.debug("actions: #{inspect(actions)}")
 
-      # {[], state}
+        {actions, %{state | buffers: %{audio: [], video: []}}}
+
       _ ->
         {[], state}
     end
@@ -339,31 +339,26 @@ defmodule Membrane.RTMP.Source do
         {:cont, %{state | buffers: buffers}}
 
       %Messages.Video{data: data} ->
-        # {payload, state} = parse_video_message(data, state)
+        {payload, state} = parse_video_message(data, state)
 
         buffer = %Buffer{
           # pts: state[:pps],
           # dts: state[:dts],
-          payload: data
+          payload: payload
         }
 
-        # Logger.debug("source received video message: #{inspect(buffer.payload)}")
+        Logger.debug("source received video message: #{inspect(buffer.payload)}")
 
         video_buffers = [buffer | get_in(state, [:buffers, :video])]
         buffers = %{state[:buffers] | video: video_buffers}
 
         Logger.debug("source video buffers: #{inspect(video_buffers)}")
 
-        # nalu =
-        #   Enum.reduce(video_buffers, <<>>, fn buf, acc -> buf.payload <> acc end) |> NALu.parse()
-
-        # Logger.debug("parsed NALu: #{inspect(nalu)}")
-
         {:cont, %{state | buffers: buffers}}
 
       %Messages.Anonymous{name: "deleteStream"} ->
         Logger.debug("Received deleteStream messaage")
-        {:cont, %{state | end_of_stream?: true}}
+        {:cont, state}
 
       %Messages.Anonymous{} = message ->
         Logger.debug("Unknown message: #{inspect(message)}")
@@ -374,13 +369,8 @@ defmodule Membrane.RTMP.Source do
 
   defp parse_video_message(data, state) do
     case data do
-      <<23, 0, 0, 0, 0, 1, 100, 0, 40, 255, 225, 0, sps_size, rest::binary>> ->
-        <<sps::binary-size(sps_size), rest::binary>> = rest
-        <<1, pps_size::16, rest::binary>> = rest
-        Logger.debug("pps size: #{inspect(pps_size)}")
-        <<pps::binary-size(pps_size), data::binary>> = rest
-
-        {data, state}
+      <<23, 0, 0, 0, 0, decoder_configuration_record::binary>> ->
+        {data, %{state | decoder_configuration: decoder_configuration_record}}
 
       _ ->
         {data, state}
@@ -440,37 +430,4 @@ defmodule Membrane.RTMP.Source do
         parse_packet_messages(<<>>, interceptor, [step | messages])
     end
   end
-
-  # defp get_format_info_actions(native) do
-  #   [
-  #     get_audio_params(native),
-  #     get_video_params(native)
-  #   ]
-  #   |> Enum.concat()
-  # end
-
-  # defp get_audio_params(native) do
-  #   with {:ok, asc} <- Native.get_audio_params(native) do
-  #     caps = %Membrane.AAC.RemoteStream{
-  #       audio_specific_config: asc
-  #     }
-
-  #     [caps: {:audio, caps}]
-  #   else
-  #     {:error, _reason} -> []
-  #   end
-  # end
-
-  # defp get_video_params(native) do
-  #   with {:ok, config} <- Native.get_video_params(native) do
-  #     caps = %Membrane.H264.RemoteStream{
-  #       decoder_configuration_record: config,
-  #       stream_format: :byte_stream
-  #     }
-
-  #     [caps: {:video, caps}]
-  #   else
-  #     {:error, _reason} -> []
-  #   end
-  # end
 end
