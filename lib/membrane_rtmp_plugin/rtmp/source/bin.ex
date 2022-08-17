@@ -43,12 +43,16 @@ defmodule Membrane.RTMP.SourceBin do
 
   @impl true
   def handle_init(%__MODULE__{} = options) do
-    url = "rtmp://#{options.local_ip}:#{options.port}"
-    source = %RTMP.Source{port: 1935, timeout: options.timeout}
+    source = %RTMP.Source{
+      port: options.port,
+      local_ip: options.local_ip,
+      timeout: options.timeout
+    }
 
     spec = %ParentSpec{
       children: %{
         src: source,
+        demuxer: Membrane.FLV.Demuxer,
         video_parser: %Membrane.H264.FFmpeg.Parser{
           alignment: :au,
           attach_nalus?: true,
@@ -60,8 +64,17 @@ defmodule Membrane.RTMP.SourceBin do
         }
       },
       links: [
-        link(:src) |> via_out(:audio) |> to(:audio_parser) |> to_bin_output(:audio),
-        link(:src) |> via_out(:video) |> to(:video_parser) |> to_bin_output(:video)
+        link(:src) |> to(:demuxer),
+        #
+        link(:demuxer)
+        |> via_out(Pad.ref(:audio, 0))
+        |> to(:audio_parser)
+        |> to_bin_output(:audio),
+        #
+        link(:demuxer)
+        |> via_out(Pad.ref(:video, 0))
+        |> to(:video_parser)
+        |> to_bin_output(:video)
       ]
     }
 

@@ -9,7 +9,8 @@ defmodule Membrane.RTMP.Source.Test do
 
   @input_file "test/fixtures/testsrc.flv"
   @port 9009
-  @rtmp_stream_url "rtmp://127.0.0.1:#{@port}/"
+  @local_ip "127.0.0.1"
+  @rtmp_stream_url "rtmp://#{@local_ip}:#{@port}/"
 
   test "Check if the stream started and that it ends" do
     assert {:ok, pipeline} = get_testing_pipeline()
@@ -27,41 +28,13 @@ defmodule Membrane.RTMP.Source.Test do
     assert :ok = Task.await(ffmpeg_task)
   end
 
-  test "blocking calls are cancelled properly" do
-    alias Membrane.RTMP.Source.Native
-
-    test_pid = self()
-
-    {pid, ref} =
-      spawn_monitor(fn ->
-        native_pid = Native.start_link(@rtmp_stream_url, :infinity)
-        send(test_pid, {:native_pid, native_pid})
-        # Ensure avformat_open_input gets stuck at listening
-        Process.sleep(100)
-        Process.exit(self(), :shutdown)
-      end)
-
-    assert_receive {:native_pid, native_pid}
-    native_monitor_ref = Process.monitor(native_pid)
-
-    # First, the spawned process will exit
-    assert_receive {:DOWN, ^ref, :process, ^pid, :shutdown}, 200
-
-    # Now, after interrupt_callback fires, the native process should exit as well
-    assert_receive {:DOWN, ^native_monitor_ref, :process, ^native_pid, :shutdown}, 500
-    Process.sleep(100)
-
-    # Ensure the ffmpeg does not listen on this port anymore
-    assert :gen_tcp.connect('127.0.0.1', @port, [:binary]) == {:error, :econnrefused}
-  end
-
   defp get_testing_pipeline() do
     import Membrane.ParentSpec
     timeout = Membrane.Time.seconds(10)
 
     options = [
       children: [
-        src: %Membrane.RTMP.SourceBin{port: @port, timeout: timeout},
+        src: %Membrane.RTMP.SourceBin{local_ip: @local_ip, port: @port, timeout: timeout},
         audio_sink: Testing.Sink,
         video_sink: Testing.Sink
       ],

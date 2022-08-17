@@ -43,6 +43,7 @@ defmodule Membrane.RTMP.Mixfile do
       {:membrane_h264_ffmpeg_plugin, "~> 0.21"},
       {:membrane_aac_plugin, "~> 0.12"},
       {:membrane_mp4_plugin, "~> 0.16"},
+      {:membrane_flv_plugin, "~> 0.3.0"},
       # testing
       {:membrane_hackney_plugin, "~> 0.8", only: :test},
       {:ffmpex, "~> 0.7", only: :test},

@@ -7,26 +7,26 @@ defmodule Membrane.RTMP.Source do
 
   require Membrane.Logger
 
-  alias Membrane.{AVC, Buffer, Time, Logger}
+  alias Membrane.{Buffer, Time, Logger}
   alias Membrane.RTMP.{Interceptor, Handshake, Header, Message, Messages, Responses}
   alias Membrane.RTMP.Messages.Serializer
-  alias Membrane.H264.FFmpeg.Parser.NALu
 
-  def_output_pad :audio,
+  def_output_pad :output,
     availability: :always,
-    caps: Membrane.AAC.RemoteStream,
-    mode: :pull
-
-  def_output_pad :video,
-    availability: :always,
-    caps: Membrane.H264.RemoteStream,
+    caps: Membrane.RemoteStream,
     mode: :pull
 
   def_options port: [
                 spec: non_neg_integer(),
                 description: """
-                Port on which the FFmpeg instance will be created
+                Port on which the server will be listen
                 """
+              ],
+              local_ip: [
+                spec: binary(),
+                default: "127.0.0.1",
+                description:
+                  "IP address on which the server will listen. This is useful if you have more than one network interface"
               ],
               timeout: [
                 spec: Time.t() | :infinity,
@@ -44,8 +44,8 @@ defmodule Membrane.RTMP.Source do
      Map.from_struct(opts)
      |> Map.merge(%{
        stale_frame: nil,
-       buffers: %{audio: [], video: []},
-       decoder_configuration: nil,
+       buffers: [],
+       header_sent?: false,
        interceptor: Interceptor.init(Handshake.init_server()),
        client_pid: nil,
        client_socket: nil,
@@ -59,23 +59,33 @@ defmodule Membrane.RTMP.Source do
   def handle_prepared_to_playing(_ctx, state) do
     target_pid = self()
 
-    Logger.debug("Establishing connection on port: #{state.port}")
-
     pid =
       spawn_link(fn ->
         {:ok, socket} =
-          :gen_tcp.listen(state.port, [:binary, packet: :raw, active: :once, reuseaddr: true])
+          :gen_tcp.listen(state.port, [
+            :binary,
+            packet: :raw,
+            active: :once,
+            reuseaddr: true,
+            ip:
+              state.local_ip
+              |> String.split(".")
+              |> Enum.map(&String.to_integer/1)
+              |> List.to_tuple()
+          ])
+
+        Logger.debug("established tcp connection")
 
         {:ok, client} = :gen_tcp.accept(socket)
-
-        Logger.debug("Established connection with client, socket: #{inspect(client)}")
 
         receive_loop(client, target_pid)
       end)
 
-    Logger.debug("Receiver started, pid: #{inspect(pid)}")
+    actions = [
+      caps: {:output, %Membrane.RemoteStream{content_format: Membrane.FLV, type: :bytestream}}
+    ]
 
-    {:ok, %{state | client_pid: pid}}
+    {{:ok, actions}, %{state | client_pid: pid}}
   end
 
   defp receive_loop(socket, target) do
@@ -83,10 +93,7 @@ defmodule Membrane.RTMP.Source do
       :need_more_data ->
         :inet.setopts(socket, active: :once)
 
-      # Logger.debug("Receiver requesting more data")
-
       {:tcp, _port, packet} ->
-        # Logger.debug("Receiver got packet: #{inspect(packet)}")
         send(target, {:tcp, socket, packet})
 
       {:tcp_closed, _port} ->
@@ -103,29 +110,11 @@ defmodule Membrane.RTMP.Source do
     receive_loop(socket, target)
   end
 
-  # @impl true
-  # def handle_demand(:video, _size, _unit, _ctx, state) do
-  #   # There is stale frame, which indicates that that the source was blocked waiting for demand from one of the outputs
-  #   # It now arrived, so we request next frame and output the one that blocked us
-  #   Logger.debug("source received demand on :video - asking for frames")
-  #   # send(state.client_pid, :need_more_data)
-  #   {{:ok, buffer: {:video, %Buffer{payload: nil}}}, state}
-  # end
-
   @impl true
-  def handle_demand(pad, _size, _unit, _ctx, state) do
-    # There is stale frame, which indicates that that the source was blocked waiting for demand from one of the outputs
-    # It now arrived, so we request next frame and output the one that blocked us
-    Logger.debug("source received demand on #{inspect(pad)} - asking for frames")
+  def handle_demand(_pad, _size, _unit, _ctx, state) do
     send(state.client_pid, :need_more_data)
     {:ok, state}
   end
-
-  # @impl true
-  # def handle_demand(_pad, _size, _unit, _ctx, state) do
-  #   Logger.debug("source received demand - no frames")
-  #   {:ok, state}
-  # end
 
   @impl true
   def handle_playing_to_prepared(_ctx, state) do
@@ -135,27 +124,20 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_other({:tcp, client_socket, packet}, ctx, state) do
+  def handle_other({:tcp, client_socket, packet}, _ctx, state) do
     state = %{state | client_socket: client_socket}
-
-    # Logger.debug(
-    #   "Source received a packet of length: #{byte_size(packet)}, handling with #{inspect(state.interceptor)}"
-    # )
 
     {messages, interceptor} = parse_packet_messages(packet, state.interceptor)
 
     state = handle_client_messages(messages, state)
     {actions, state} = get_actions(state)
 
-    Logger.debug("Handled messages, actions: #{inspect(actions)}")
-
     {{:ok, actions}, %{state | interceptor: interceptor}}
   end
 
   @impl true
   def handle_other({:tcp_closed, _port}, _ctx, state) do
-    {{:ok, end_of_stream: :audio, end_of_stream: :video}, state}
-    # {:ok, state}
+    {{:ok, end_of_stream: :output}, state}
   end
 
   @impl true
@@ -166,26 +148,8 @@ defmodule Membrane.RTMP.Source do
 
   defp get_actions(state) do
     case state do
-      %{decoder_configuration: <<decoder_configuration::binary>>} ->
-        {[
-           caps:
-             {:video,
-              %Membrane.H264.RemoteStream{
-                decoder_configuration_record: decoder_configuration,
-                stream_format: :avc1
-              }},
-           caps:
-             {:audio,
-              %Membrane.AAC.RemoteStream{audio_specific_config: <<1::5, 0::4, 0::4, 0::1>>}}
-         ], %{state | decoder_configuration: nil}}
-
-      %{buffers: buffers} ->
-        # Logger.debug("Buffers: #{inspect(buffers)}")
-
-        actions = [buffer: {:video, buffers[:video]}, buffer: {:audio, buffers[:audio]}]
-        Logger.debug("actions: #{inspect(actions)}")
-
-        {actions, %{state | buffers: %{audio: [], video: []}}}
+      %{buffers: [_buf | _rest] = buffers} ->
+        {[buffer: {:output, Enum.reverse(buffers)}], %{state | buffers: []}}
 
       _ ->
         {[], state}
@@ -197,15 +161,11 @@ defmodule Membrane.RTMP.Source do
   end
 
   defp handle_client_messages([], state) do
-    Logger.debug("handle_client_messages: need_more_data")
     request_packet(state.client_pid)
-
     state
   end
 
   defp handle_client_messages(messages, state) do
-    Logger.debug("handle_client_messages: messages: #{inspect(messages)}")
-
     messages
     |> Enum.reduce_while(state, fn message, acc ->
       do_handle_client_message(state.client_socket, message, acc)
@@ -235,7 +195,7 @@ defmodule Membrane.RTMP.Source do
   # 7. [in] release stream -> [out] _result response
   # 8. [in] publish -> [out] user control with stream id, publish success
   # 9. CONNECTED
-  defp do_handle_client_message(socket, message, state) do
+  defp do_handle_client_message(socket, {header, message}, state) do
     chunk_size = state.interceptor.chunk_size
 
     case message do
@@ -324,36 +284,15 @@ defmodule Membrane.RTMP.Source do
         {:cont, state}
 
       %Messages.Audio{data: data} ->
-        buffer = %Buffer{
-          # pts: pts,
-          # dts: dts,
-          payload: prepare_payload(:audio, data)
-        }
-
         Logger.debug("source received audio message")
 
-        # if there is no demand for element of this type so we wait until it appears
-        # effectively, it results in source adapting to the slower of the two outputs
-        audio_buffers = [buffer | get_in(state, [:buffers, :audio])]
-        buffers = %{state[:buffers] | audio: audio_buffers}
+        {buffers, state} = get_media_buffers(header, data, state)
         {:cont, %{state | buffers: buffers}}
 
       %Messages.Video{data: data} ->
-        {payload, state} = parse_video_message(data, state)
+        Logger.debug("source received video message")
 
-        buffer = %Buffer{
-          # pts: state[:pps],
-          # dts: state[:dts],
-          payload: payload
-        }
-
-        Logger.debug("source received video message: #{inspect(buffer.payload)}")
-
-        video_buffers = [buffer | get_in(state, [:buffers, :video])]
-        buffers = %{state[:buffers] | video: video_buffers}
-
-        Logger.debug("source video buffers: #{inspect(video_buffers)}")
-
+        {buffers, state} = get_media_buffers(header, data, state)
         {:cont, %{state | buffers: buffers}}
 
       %Messages.Anonymous{name: "deleteStream"} ->
@@ -367,19 +306,38 @@ defmodule Membrane.RTMP.Source do
     end
   end
 
-  defp parse_video_message(data, state) do
-    case data do
-      <<23, 0, 0, 0, 0, decoder_configuration_record::binary>> ->
-        {data, %{state | decoder_configuration: decoder_configuration_record}}
+  defp get_media_buffers(header, data, state) do
+    payload =
+      case state.header_sent? do
+        false ->
+          get_flv_header()
 
-      _ ->
-        {data, state}
-    end
+        true ->
+          <<>>
+      end <> get_flv_body(header, data)
+
+    buffers = [%Buffer{payload: payload} | state[:buffers]]
+    Logger.debug("media buffer: #{inspect(%Buffer{payload: payload})}")
+    {buffers, %{state | header_sent?: true}}
   end
 
-  # defp prepare_payload(:video, payload), do: AVC.Utils.to_annex_b(payload)
-  defp prepare_payload(:video, payload), do: payload
-  defp prepare_payload(:audio, payload), do: payload
+  defp get_flv_header() do
+    <<"FLV", 0x01::8, 0::5, 1::1, 0::1, 1::1, 9::32>>
+  end
+
+  defp get_flv_body(
+         %Membrane.RTMP.Header{
+           #  chunk_stream_id: stream_id,
+           timestamp: timestamp,
+           body_size: data_size,
+           type_id: type_id,
+           stream_id: stream_id
+         },
+         payload
+       ) do
+    <<0::32, type_id::8, data_size::24, timestamp::24, 0::8, stream_id::24,
+      payload::binary-size(data_size)>>
+  end
 
   defp send_rtmp_payload(message, socket, chunk_size, opts \\ []) do
     type = Serializer.type(message)
@@ -417,8 +375,8 @@ defmodule Membrane.RTMP.Source do
 
   defp parse_packet_messages(packet, interceptor, messages) do
     case Interceptor.handle_packet(packet, interceptor) do
-      {_header, message, interceptor} ->
-        parse_packet_messages(<<>>, interceptor, [message | messages])
+      {header, message, interceptor} ->
+        parse_packet_messages(<<>>, interceptor, [{header, message} | messages])
 
       {:need_more_data, interceptor} ->
         {Enum.reverse(messages), interceptor}
@@ -427,7 +385,7 @@ defmodule Membrane.RTMP.Source do
         parse_packet_messages(<<>>, interceptor, messages)
 
       {%Handshake.Step{} = step, interceptor} ->
-        parse_packet_messages(<<>>, interceptor, [step | messages])
+        parse_packet_messages(<<>>, interceptor, [{nil, step} | messages])
     end
   end
 end
