@@ -209,7 +209,6 @@ defmodule Membrane.RTMP.Interceptor do
 
   defp do_combine_body_chunks(body, chunk_size, acc) do
     # cut out the header byte (staring with 0b11)
-    <<_body::binary-size(chunk_size), header::binary>> = body
     <<body::binary-size(chunk_size), 0b11::2, _chunk_stream_id::6, rest::binary>> = body
 
     do_combine_body_chunks(rest, chunk_size, acc <> body)

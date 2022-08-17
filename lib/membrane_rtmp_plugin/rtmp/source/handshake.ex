@@ -142,7 +142,9 @@ defmodule Membrane.RTMP.Handshake do
   end
 
   defmodule State do
-    @moduledoc false
+    @moduledoc """
+    Structure representing the current state of the handshake
+    """
 
     @enforce_keys [:step]
     defstruct @enforce_keys
@@ -212,7 +214,7 @@ defmodule Membrane.RTMP.Handshake do
   end
 
   @doc """
-  Retrns how many bytes the next handshake step should consist of.
+  Returns how many bytes the next handshake step should consist of.
   """
   @spec expects_bytes(State.t()) :: non_neg_integer()
   def expects_bytes(%State{step: step}) do
