@@ -133,8 +133,6 @@ defmodule Membrane.RTMP.Header do
 
   def deserialize(_binary, _prev_header), do: :error
 
-  # TODO: support serialization utilizing the previous header fields
-  # (other header types)
   @spec serialize(t()) :: binary()
   def serialize(%__MODULE__{} = header) do
     %{

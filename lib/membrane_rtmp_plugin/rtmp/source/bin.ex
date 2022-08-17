@@ -3,7 +3,7 @@ defmodule Membrane.RTMP.SourceBin do
   Bin responsible for spawning new RTMP server.
 
   It will receive RTMP stream from the client, parse it and demux it, outputting single audio and video which are ready for further processing with Membrane Elements.
-  At this moment only AAC and H264 codecs are support
+  At this moment only AAC and H264 codecs are supported
   """
   use Membrane.Bin
 
