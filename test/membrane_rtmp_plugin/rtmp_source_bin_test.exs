@@ -5,7 +5,6 @@ defmodule Membrane.RTMP.Source.Test do
   require Logger
 
   alias Membrane.Testing
-  alias Membrane.Testing.Pipeline
 
   @input_file "test/fixtures/testsrc.flv"
   @port 9009
@@ -13,7 +12,12 @@ defmodule Membrane.RTMP.Source.Test do
   @rtmp_stream_url "rtmp://#{@local_ip}:#{@port}/"
 
   test "Check if the stream started and that it ends" do
-    assert {:ok, pipeline} = get_testing_pipeline()
+    Process.register(self(), __MODULE__)
+    Task.start_link(&get_testing_pipeline/0)
+
+    Process.sleep(500)
+    pipeline = Process.whereis(Membrane.RTMP.Source.Test.Pipeline)
+
     assert_pipeline_playback_changed(pipeline, :prepared, :playing)
 
     ffmpeg_task = Task.async(&start_ffmpeg/0)
@@ -24,7 +28,7 @@ defmodule Membrane.RTMP.Source.Test do
     assert_end_of_stream(pipeline, :video_sink, :input)
 
     # Cleanup
-    Pipeline.terminate(pipeline, blocking?: true)
+    Testing.Pipeline.terminate(pipeline, blocking?: true)
     assert :ok = Task.await(ffmpeg_task)
   end
 
@@ -33,19 +37,14 @@ defmodule Membrane.RTMP.Source.Test do
     timeout = Membrane.Time.seconds(10)
 
     options = [
-      children: [
-        src: %Membrane.RTMP.SourceBin{local_ip: @local_ip, port: @port, timeout: timeout},
-        audio_sink: Testing.Sink,
-        video_sink: Testing.Sink
-      ],
-      links: [
-        link(:src) |> via_out(:audio) |> to(:audio_sink),
-        link(:src) |> via_out(:video) |> to(:video_sink)
-      ],
-      test_process: self()
+      module: Membrane.RTMP.Source.Test.Pipeline,
+      custom_args: [local_ip: @local_ip, port: @port, timeout: timeout],
+      test_process: Process.whereis(__MODULE__)
     ]
 
-    Pipeline.start_link(options)
+    {:ok, pid} = Testing.Pipeline.start_link(options)
+    :ok = Membrane.Pipeline.play(pid)
+    {:ok, pid}
   end
 
   defp start_ffmpeg() do
