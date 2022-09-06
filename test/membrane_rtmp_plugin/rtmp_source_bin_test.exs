@@ -10,17 +10,29 @@ defmodule Membrane.RTMP.Source.Test do
   @port 9009
   @local_ip "127.0.0.1"
   @rtmp_stream_url "rtmp://#{@local_ip}:#{@port}/"
+  @pipeline_module Membrane.RTMP.Source.Test.Pipeline
 
   test "Check if the stream started and that it ends" do
-    Process.register(self(), __MODULE__)
-    Task.start_link(&get_testing_pipeline/0)
+    options = %{
+      port: @port,
+      tcp_options: [
+        :binary,
+        packet: :raw,
+        active: false,
+        reuseaddr: true,
+        ip: @local_ip |> String.to_charlist() |> :inet.parse_address() |> elem(1)
+      ],
+      serve_fn: fn socket -> get_testing_pipeline(socket) end
+    }
 
-    Process.sleep(500)
-    pipeline = Process.whereis(Membrane.RTMP.Source.Test.Pipeline)
+    Process.register(self(), __MODULE__)
+
+    {:ok, _tcp_server} = Membrane.RTMP.Source.TcpServer.start_link(options)
+    ffmpeg_task = Task.async(&start_ffmpeg/0)
+
+    pipeline = await_pipeline_started()
 
     assert_pipeline_playback_changed(pipeline, :prepared, :playing)
-
-    ffmpeg_task = Task.async(&start_ffmpeg/0)
 
     assert_sink_buffer(pipeline, :video_sink, %Membrane.Buffer{})
     assert_sink_buffer(pipeline, :audio_sink, %Membrane.Buffer{})
@@ -32,13 +44,10 @@ defmodule Membrane.RTMP.Source.Test do
     assert :ok = Task.await(ffmpeg_task)
   end
 
-  defp get_testing_pipeline() do
-    import Membrane.ParentSpec
-    timeout = Membrane.Time.seconds(10)
-
+  defp get_testing_pipeline(socket) do
     options = [
       module: Membrane.RTMP.Source.Test.Pipeline,
-      custom_args: [local_ip: @local_ip, port: @port, timeout: timeout],
+      custom_args: [socket: socket],
       test_process: Process.whereis(__MODULE__)
     ]
 
@@ -69,6 +78,17 @@ defmodule Membrane.RTMP.Source.Test do
       error ->
         Logger.error(inspect(error))
         :error
+    end
+  end
+
+  defp await_pipeline_started() do
+    case Process.whereis(@pipeline_module) do
+      nil ->
+        Process.sleep(100)
+        await_pipeline_started()
+
+      pid ->
+        pid
     end
   end
 end

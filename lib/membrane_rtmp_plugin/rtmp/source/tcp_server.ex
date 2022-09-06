@@ -1,10 +1,19 @@
 defmodule Membrane.RTMP.Source.TcpServer do
+  @moduledoc """
+  A simple tcp server, which executes given function for each new connection.
+  """
   use Task
 
+  @enforce_keys [:port]
+
+  defstruct @enforce_keys
+
+  @spec start_link(%__MODULE__{}) :: {:ok, pid}
   def start_link(options) do
     Task.start_link(__MODULE__, :run, [Enum.into(options, %{})])
   end
 
+  @spec run(map()) :: nil
   def run(options) do
     {:ok, socket} = :gen_tcp.listen(options.port, options.tcp_options)
 

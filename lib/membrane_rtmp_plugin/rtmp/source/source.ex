@@ -7,7 +7,7 @@ defmodule Membrane.RTMP.Source do
 
   require Membrane.Logger
 
-  alias Membrane.{Logger, Time}
+  alias Membrane.Logger
   alias Membrane.RTMP.{Handshake, Interceptor, MessageHandler}
 
   def_output_pad :output,
@@ -15,31 +15,16 @@ defmodule Membrane.RTMP.Source do
     caps: Membrane.RemoteStream,
     mode: :pull
 
-  def_options port: [
+  def_options socket: [
                 spec: non_neg_integer(),
                 description: """
-                Port on which the server will be listen
-                """
-              ],
-              local_ip: [
-                spec: binary(),
-                default: "127.0.0.1",
-                description:
-                  "IP address on which the server will listen. This is useful if you have more than one network interface"
-              ],
-              timeout: [
-                spec: Time.t() | :infinity,
-                default: :infinity,
-                description: """
-                Time the server will wait for a connection from the client
-
-                Duration given must be a multiply of one second or atom `:infinity`.
+                Socket on which the source will be receive the RTMP stream.
                 """
               ]
 
   @impl true
   def handle_init(%__MODULE__{} = opts) do
-    {:ok,
+    {{:ok, [notify: :rtmp_source_initialized]},
      Map.from_struct(opts)
      |> Map.merge(%{
        stale_frame: nil,
@@ -47,8 +32,8 @@ defmodule Membrane.RTMP.Source do
        header_sent?: false,
        interceptor: Interceptor.init(Handshake.init_server()),
        client_pid: nil,
-       client_socket: nil,
        client_connected?: false,
+       socket_owner?: false,
        # epoch required for performing a handshake with the pipeline
        epoch: 0
      })}
@@ -58,27 +43,12 @@ defmodule Membrane.RTMP.Source do
   def handle_prepared_to_playing(_ctx, state) do
     target_pid = self()
 
-    pid =
-      spawn_link(fn ->
-        {:ok, socket} =
-          :gen_tcp.listen(state.port, [
-            :binary,
-            packet: :raw,
-            active: :once,
-            reuseaddr: true,
-            ip:
-              state.local_ip
-              |> String.split(".")
-              |> Enum.map(&String.to_integer/1)
-              |> List.to_tuple()
-          ])
-
-        Logger.debug("established tcp connection")
-
-        {:ok, client} = :gen_tcp.accept(socket)
-
-        receive_loop(client, target_pid)
+    {:ok, pid} =
+      Task.start_link(fn ->
+        receive_loop(state.socket, target_pid)
       end)
+
+    send(self(), :start_receiving)
 
     actions = [
       caps: {:output, %Membrane.RemoteStream{content_format: Membrane.FLV, type: :bytestream}}
@@ -90,7 +60,7 @@ defmodule Membrane.RTMP.Source do
   defp receive_loop(socket, target) do
     receive do
       :need_more_data ->
-        :inet.setopts(socket, active: :once)
+        :ok = :inet.setopts(socket, active: :once)
 
       {:tcp, _port, packet} ->
         send(target, {:tcp, socket, packet})
@@ -110,8 +80,13 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_demand(_pad, _size, _unit, _ctx, state) do
+  def handle_demand(_pad, _size, _unit, _ctx, state) when state.socket_owner? do
     send(state.client_pid, :need_more_data)
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_demand(_pad, _size, _unit, _ctx, state) do
     {:ok, state}
   end
 
@@ -123,8 +98,21 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_other({:tcp, client_socket, packet}, _ctx, state) do
-    state = %{state | client_socket: client_socket}
+  def handle_other(:start_receiving, _ctx, state) do
+    case :gen_tcp.controlling_process(state.socket, state.client_pid) do
+      :ok ->
+        :ok = :inet.setopts(state.socket, active: :once)
+        {:ok, %{state | socket_owner?: true}}
+
+      {:error, :not_owner} ->
+        Process.send_after(self(), :start_receiving, 200)
+        {:ok, state}
+    end
+  end
+
+  @impl true
+  def handle_other({:tcp, socket, packet}, _ctx, state) do
+    state = %{state | socket: socket}
 
     {messages, interceptor} = MessageHandler.parse_packet_messages(packet, state.interceptor)
 

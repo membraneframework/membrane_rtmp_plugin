@@ -53,7 +53,7 @@ defmodule Membrane.RTMP.MessageHandler do
   # 8. [in] publish -> [out] user control with stream id, publish success
   # 9. CONNECTED
   defp do_handle_client_message(%Handshake.Step{type: :s0_s1_s2} = step, _header, state) do
-    :gen_tcp.send(state.client_socket, Handshake.Step.serialize(step))
+    :gen_tcp.send(state.socket, Handshake.Step.serialize(step))
 
     connection_epoch = Handshake.Step.epoch(step)
     {:cont, %{state | epoch: connection_epoch}}
@@ -68,28 +68,28 @@ defmodule Membrane.RTMP.MessageHandler do
 
     # the default value of ffmpeg server
     %Messages.WindowAcknowledgement{size: 2_500_000}
-    |> send_rtmp_payload(state.client_socket, chunk_size)
+    |> send_rtmp_payload(state.socket, chunk_size)
 
     # the default value of ffmpeg server
     %Messages.SetPeerBandwidth{size: 2_500_000}
-    |> send_rtmp_payload(state.client_socket, chunk_size)
+    |> send_rtmp_payload(state.socket, chunk_size)
 
     # stream begin type
     %Messages.UserControl{event_type: 0x00, data: <<0, 0, 0, 0>>}
-    |> send_rtmp_payload(state.client_socket, chunk_size)
+    |> send_rtmp_payload(state.socket, chunk_size)
 
     # by default the ffmpeg server uses 128 chunk size
     %Messages.SetChunkSize{chunk_size: chunk_size}
-    |> send_rtmp_payload(state.client_socket, chunk_size)
+    |> send_rtmp_payload(state.socket, chunk_size)
 
     {[tx_id], interceptor} = Interceptor.generate_tx_ids(state.interceptor, 1)
 
     tx_id
     |> Responses.connection_success()
-    |> send_rtmp_payload(state.client_socket, chunk_size, chunk_stream_id: 3)
+    |> send_rtmp_payload(state.socket, chunk_size, chunk_stream_id: 3)
 
     Responses.on_bw_done()
-    |> send_rtmp_payload(state.client_socket, chunk_size, chunk_stream_id: 3)
+    |> send_rtmp_payload(state.socket, chunk_size, chunk_stream_id: 3)
 
     {:cont, %{state | interceptor: interceptor}}
   end
@@ -101,7 +101,7 @@ defmodule Membrane.RTMP.MessageHandler do
        ) do
     tx_id
     |> Responses.default_result()
-    |> send_rtmp_payload(state.client_socket, state.interceptor.chunk_size, chunk_stream_id: 3)
+    |> send_rtmp_payload(state.socket, state.interceptor.chunk_size, chunk_stream_id: 3)
 
     {:cont, state}
   end
@@ -112,10 +112,10 @@ defmodule Membrane.RTMP.MessageHandler do
          state
        ) do
     %Messages.UserControl{event_type: 0, data: <<0, 0, 0, 1>>}
-    |> send_rtmp_payload(state.client_socket, state.interceptor.chunk_size, chunk_stream_id: 3)
+    |> send_rtmp_payload(state.socket, state.interceptor.chunk_size, chunk_stream_id: 3)
 
     Responses.publish_success(stream_key)
-    |> send_rtmp_payload(state.client_socket, state.interceptor.chunk_size, chunk_stream_id: 3)
+    |> send_rtmp_payload(state.socket, state.interceptor.chunk_size, chunk_stream_id: 3)
 
     {:halt, state}
   end
@@ -134,7 +134,7 @@ defmodule Membrane.RTMP.MessageHandler do
 
   defp do_handle_client_message(%Messages.FCPublish{}, _header, state) do
     %Messages.Anonymous{name: "onFCPublish", properties: []}
-    |> send_rtmp_payload(state.client_socket, state.interceptor.chunk_size, chunk_stream_id: 3)
+    |> send_rtmp_payload(state.socket, state.interceptor.chunk_size, chunk_stream_id: 3)
 
     {:cont, state}
   end
@@ -144,7 +144,7 @@ defmodule Membrane.RTMP.MessageHandler do
 
     tx_id
     |> Responses.default_result(stream_id)
-    |> send_rtmp_payload(state.client_socket, state.interceptor.chunk_size, chunk_stream_id: 3)
+    |> send_rtmp_payload(state.socket, state.interceptor.chunk_size, chunk_stream_id: 3)
 
     {:cont, state}
   end
@@ -155,20 +155,20 @@ defmodule Membrane.RTMP.MessageHandler do
          state
        ) do
     tx_id
-    |> send_rtmp_payload(state.client_socket, state.interceptor.chunk_size, chunk_stream_id: 3)
+    |> send_rtmp_payload(state.socket, state.interceptor.chunk_size, chunk_stream_id: 3)
 
     {:cont, state}
   end
 
   defp do_handle_client_message(%Messages.Audio{data: data}, header, state) do
-    Logger.debug("source received audio message")
+    # Logger.debug("source received audio message")
 
     {buffers, state} = get_media_buffers(header, data, state)
     {:cont, %{state | buffers: buffers}}
   end
 
   defp do_handle_client_message(%Messages.Video{data: data}, header, state) do
-    Logger.debug("source received video message")
+    # Logger.debug("source received video message")
 
     {buffers, state} = get_media_buffers(header, data, state)
     {:cont, %{state | buffers: buffers}}
@@ -200,7 +200,7 @@ defmodule Membrane.RTMP.MessageHandler do
       end <> get_flv_body(header, data)
 
     buffers = [%Buffer{payload: payload} | state[:buffers]]
-    Logger.debug("media buffer: #{inspect(%Buffer{payload: payload})}")
+    # Logger.debug("media buffer: #{inspect(%Buffer{payload: payload})}")
     {buffers, %{state | header_sent?: true}}
   end
 

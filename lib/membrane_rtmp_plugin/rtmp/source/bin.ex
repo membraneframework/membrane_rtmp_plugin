@@ -21,32 +21,15 @@ defmodule Membrane.RTMP.SourceBin do
     mode: :pull,
     demand_unit: :buffers
 
-  def_options port: [
-                spec: 1..65_535,
-                description: "Port on which the server will listen"
-              ],
-              local_ip: [
-                spec: binary(),
-                default: "127.0.0.1",
-                description:
-                  "IP address on which the server will listen. This is useful if you have more than one network interface"
-              ],
-              timeout: [
-                spec: Time.t() | :infinity,
-                default: :infinity,
-                description: """
-                Time during which the connection with the client must be established before handle_prepared_to_playing fails.
-
-                Duration given must be a multiply of one second or atom `:infinity`.
-                """
+  def_options socket: [
+                spec: port(),
+                description: "Socket on which the server will receive RTMP stream."
               ]
 
   @impl true
   def handle_init(%__MODULE__{} = options) do
     source = %RTMP.Source{
-      port: options.port,
-      local_ip: options.local_ip,
-      timeout: options.timeout
+      socket: options.socket
     }
 
     spec = %ParentSpec{
@@ -79,5 +62,15 @@ defmodule Membrane.RTMP.SourceBin do
     }
 
     {{:ok, spec: spec}, %{}}
+  end
+
+  @impl true
+  def handle_notification(
+        :rtmp_source_initialized,
+        :src,
+        %{children: %{src: %{pid: source_pid}}},
+        state
+      ) do
+    {{:ok, [notify: {:rtmp_source_initialized, source_pid}]}, state}
   end
 end

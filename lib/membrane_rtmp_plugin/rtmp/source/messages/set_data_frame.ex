@@ -15,7 +15,7 @@ defmodule Membrane.RTMP.Messages.SetDataFrame do
 
   @attributes_to_keys %{
     "duration" => :duration,
-    "filesize" => :file_size,
+    "fileSize" => :file_size,
     "width" => :width,
     "height" => :height,
     "videocodecid" => :video_codec_id,
