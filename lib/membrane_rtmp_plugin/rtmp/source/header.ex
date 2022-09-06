@@ -86,13 +86,13 @@ defmodule Membrane.RTMP.Header do
   end
 
   def deserialize(
-        <<@header_type_1::bitstring, chunk_stream_id::6, timestamp::24, body_size::24, type_id::8,
-          rest::binary>>,
+        <<@header_type_1::bitstring, chunk_stream_id::6, timestamp_delta::24, body_size::24,
+          type_id::8, rest::binary>>,
         previous_headers
       ) do
     header = %__MODULE__{
       chunk_stream_id: chunk_stream_id,
-      timestamp: timestamp,
+      timestamp: previous_headers[chunk_stream_id].timestamp + timestamp_delta,
       body_size: body_size,
       type_id: type_id,
       stream_id: previous_headers[chunk_stream_id].stream_id
@@ -102,12 +102,12 @@ defmodule Membrane.RTMP.Header do
   end
 
   def deserialize(
-        <<@header_type_2::bitstring, chunk_stream_id::6, timestamp::24, rest::binary>>,
+        <<@header_type_2::bitstring, chunk_stream_id::6, timestamp_delta::24, rest::binary>>,
         previous_headers
       ) do
     header = %__MODULE__{
       chunk_stream_id: chunk_stream_id,
-      timestamp: timestamp,
+      timestamp: previous_headers[chunk_stream_id].timestamp + timestamp_delta,
       body_size: previous_headers[chunk_stream_id].body_size,
       type_id: previous_headers[chunk_stream_id].type_id,
       stream_id: previous_headers[chunk_stream_id].stream_id
