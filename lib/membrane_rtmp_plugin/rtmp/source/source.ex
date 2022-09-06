@@ -7,7 +7,6 @@ defmodule Membrane.RTMP.Source do
 
   require Membrane.Logger
 
-  alias Membrane.Logger
   alias Membrane.RTMP.{Handshake, Interceptor, MessageHandler}
 
   def_output_pad :output,
@@ -71,8 +70,7 @@ defmodule Membrane.RTMP.Source do
       :terminate ->
         exit(:normal)
 
-      message ->
-        Logger.debug("Receiver got unknown message: #{inspect(message)}")
+      _message ->
         :noop
     end
 
@@ -128,8 +126,7 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_other(message, _ctx, state) do
-    Logger.debug("Source received unknown message: #{inspect(message)}")
+  def handle_other(_message, _ctx, state) do
     {:ok, state}
   end
 

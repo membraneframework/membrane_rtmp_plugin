@@ -9,7 +9,6 @@ defmodule Membrane.RTMP.Interceptor do
 
   require Membrane.Logger
 
-  alias Membrane.Logger
   alias Membrane.RTMP.{Handshake, Header, Message, Messages}
 
   @enforce_keys [:state_machine, :buffer, :chunk_size, :handshake]
@@ -101,10 +100,6 @@ defmodule Membrane.RTMP.Interceptor do
 
     step_size = Handshake.expects_bytes(handshake)
 
-    Logger.debug(
-      "Handling packet, buffer size: #{byte_size(buffer)}, packet size: #{byte_size(packet)}, step size: #{step_size}"
-    )
-
     if byte_size(payload) >= step_size do
       <<step_data::binary-size(step_size), rest::binary>> = payload
 
@@ -172,11 +167,6 @@ defmodule Membrane.RTMP.Interceptor do
       else
         body_size
       end
-
-    # Logger.debug(
-    #   "Reading frame, packet size: #{byte_size(packet)}; header: #{inspect(header)}; data: #{inspect(rest)}\n
-    #   previous_headers: #{inspect(previous_headers)}, chunk_size: #{chunk_size}, chunked_body_size: #{chunked_body_size}, rest: #{byte_size(rest)}"
-    # )
 
     if chunked_body_size <= byte_size(rest) do
       <<body::binary-size(chunked_body_size), rest::binary>> = rest

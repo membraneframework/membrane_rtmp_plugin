@@ -161,21 +161,16 @@ defmodule Membrane.RTMP.MessageHandler do
   end
 
   defp do_handle_client_message(%Messages.Audio{data: data}, header, state) do
-    # Logger.debug("source received audio message")
-
     {buffers, state} = get_media_buffers(header, data, state)
     {:cont, %{state | buffers: buffers}}
   end
 
   defp do_handle_client_message(%Messages.Video{data: data}, header, state) do
-    # Logger.debug("source received video message")
-
     {buffers, state} = get_media_buffers(header, data, state)
     {:cont, %{state | buffers: buffers}}
   end
 
   defp do_handle_client_message(%Messages.Anonymous{name: "deleteStream"}, _header, state) do
-    Logger.debug("Received deleteStream messaage")
     {:cont, state}
   end
 
@@ -200,7 +195,6 @@ defmodule Membrane.RTMP.MessageHandler do
       end <> get_flv_body(header, data)
 
     buffers = [%Buffer{payload: payload} | state[:buffers]]
-    # Logger.debug("media buffer: #{inspect(%Buffer{payload: payload})}")
     {buffers, %{state | header_sent?: true}}
   end
 
