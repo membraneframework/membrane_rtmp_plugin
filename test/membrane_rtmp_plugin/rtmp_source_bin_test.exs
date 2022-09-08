@@ -11,22 +11,28 @@ defmodule Membrane.RTMP.SourceBin.Test do
   @port 9009
   @local_ip "127.0.0.1"
   @rtmp_stream_url "rtmp://#{@local_ip}:#{@port}/"
-  @pipeline_module Membrane.RTMP.Source.Test.Pipeline
 
   test "Check if the stream started and that it ends" do
+    test_process = self()
+
     options = %TcpServer{
       port: @port,
       listen_options: [
         :binary,
         packet: :raw,
         active: false,
-        reuseaddr: true,
         ip: @local_ip |> String.to_charlist() |> :inet.parse_address() |> elem(1)
       ],
-      socket_handler: fn socket -> get_testing_pipeline(socket) end
-    }
+      socket_handler: fn socket ->
+        options = [
+          module: Membrane.RTMP.Source.Test.Pipeline,
+          custom_args: [socket: socket, test_process: test_process],
+          test_process: test_process
+        ]
 
-    Process.register(self(), __MODULE__)
+        Testing.Pipeline.start_link(options)
+      end
+    }
 
     {:ok, _tcp_server} = TcpServer.start_link(options)
     ffmpeg_task = Task.async(&start_ffmpeg/0)
@@ -43,18 +49,6 @@ defmodule Membrane.RTMP.SourceBin.Test do
     # Cleanup
     Testing.Pipeline.terminate(pipeline, blocking?: true)
     assert :ok = Task.await(ffmpeg_task)
-  end
-
-  defp get_testing_pipeline(socket) do
-    options = [
-      module: Membrane.RTMP.Source.Test.Pipeline,
-      custom_args: [socket: socket],
-      test_process: Process.whereis(__MODULE__)
-    ]
-
-    {:ok, pid} = Testing.Pipeline.start_link(options)
-    :ok = Membrane.Pipeline.play(pid)
-    {:ok, pid}
   end
 
   defp start_ffmpeg() do
@@ -83,13 +77,8 @@ defmodule Membrane.RTMP.SourceBin.Test do
   end
 
   defp await_pipeline_started() do
-    case Process.whereis(@pipeline_module) do
-      nil ->
-        Process.sleep(100)
-        await_pipeline_started()
-
-      pid ->
-        pid
+    receive do
+      {:pipeline_started, pid} -> pid
     end
   end
 end

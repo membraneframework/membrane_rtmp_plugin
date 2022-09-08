@@ -7,21 +7,24 @@ defmodule Membrane.RTMP.Source.Test.Pipeline do
   alias Membrane.Testing
 
   @impl true
-  def handle_init(socket: socket) do
+  def handle_init(socket: socket, test_process: test_process) do
     Process.register(self(), __MODULE__)
 
-    children = [
-      src: %Membrane.RTMP.SourceBin{socket: socket},
-      audio_sink: Testing.Sink,
-      video_sink: Testing.Sink
-    ]
+    spec = %Membrane.ParentSpec{
+      children: [
+        src: %Membrane.RTMP.SourceBin{socket: socket},
+        audio_sink: Testing.Sink,
+        video_sink: Testing.Sink
+      ],
+      links: [
+        link(:src) |> via_out(:audio) |> to(:audio_sink),
+        link(:src) |> via_out(:video) |> to(:video_sink)
+      ]
+    }
 
-    links = [
-      link(:src) |> via_out(:audio) |> to(:audio_sink),
-      link(:src) |> via_out(:video) |> to(:video_sink)
-    ]
+    send(test_process, {:pipeline_started, self()})
 
-    {{:ok, [spec: %Membrane.ParentSpec{children: children, links: links}]}, %{socket: socket}}
+    {{:ok, [spec: spec, playback: :playing]}, %{socket: socket}}
   end
 
   @impl true
