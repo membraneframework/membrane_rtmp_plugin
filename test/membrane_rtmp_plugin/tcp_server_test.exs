@@ -1,4 +1,4 @@
-defmodule Membrane.RTMP.Source.TcpServer.Test do
+defmodule Membrane.RTMP.Source.TcpServerTest do
   use ExUnit.Case
 
   alias Membrane.RTMP.Source.TcpServer
@@ -8,19 +8,21 @@ defmodule Membrane.RTMP.Source.TcpServer.Test do
   @sample_data "Hello World"
 
   test "TcpServer transfers the control to the process " do
-    server_options = [
+    testing_process = self()
+
+    server_options = %TcpServer{
       port: @port,
-      tcp_options: [
+      listen_options: [
         :binary,
         packet: :raw,
         active: false,
         reuseaddr: true,
         ip: @local_ip
       ],
-      serve_fn: fn socket ->
+      socket_handler: fn socket ->
         {:ok, receive_task} =
           Task.start(fn ->
-            Process.whereis(__MODULE__) |> Process.link()
+            testing_process |> Process.link()
             :inet.setopts(socket, active: true)
 
             data = @sample_data
@@ -29,9 +31,8 @@ defmodule Membrane.RTMP.Source.TcpServer.Test do
 
         {:ok, receive_task}
       end
-    ]
+    }
 
-    Process.register(self(), __MODULE__)
     TcpServer.start_link(server_options)
 
     Process.sleep(500)
@@ -44,9 +45,7 @@ defmodule Membrane.RTMP.Source.TcpServer.Test do
         :infinity
       )
 
-    data = @sample_data
-
-    :gen_tcp.send(socket, data)
+    :gen_tcp.send(socket, @sample_data)
     assert_receive({:tcp_closed, ^socket}, 1000)
   end
 end

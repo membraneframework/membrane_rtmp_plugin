@@ -1,4 +1,4 @@
-defmodule Membrane.RTMP.Source.Test do
+defmodule Membrane.RTMP.SourceTest do
   use ExUnit.Case
   import Membrane.Testing.Assertions
 
@@ -41,7 +41,7 @@ defmodule Membrane.RTMP.Source.Test do
         Process.exit(self(), :shutdown)
       end)
 
-    assert_receive {:native_pid, native_pid}
+    assert_receive {:native_pid, native_pid}, 200
     native_monitor_ref = Process.monitor(native_pid)
 
     # First, the spawned process will exit
