@@ -1,4 +1,4 @@
-defmodule Membrane.RTMP.Sink.Test do
+defmodule Membrane.RTMP.SinkTest do
   use ExUnit.Case
   import Membrane.Testing.Assertions
 
