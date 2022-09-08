@@ -1,10 +1,11 @@
-defmodule Membrane.RTMP.Source.Test do
+defmodule Membrane.RTMP.SourceBin.Test do
   use ExUnit.Case
   import Membrane.Testing.Assertions
 
   require Logger
 
   alias Membrane.Testing
+  alias Membrane.RTMP.Source.TcpServer
 
   @input_file "test/fixtures/testsrc.flv"
   @port 9009
@@ -13,21 +14,21 @@ defmodule Membrane.RTMP.Source.Test do
   @pipeline_module Membrane.RTMP.Source.Test.Pipeline
 
   test "Check if the stream started and that it ends" do
-    options = %{
+    options = %TcpServer{
       port: @port,
-      tcp_options: [
+      listen_options: [
         :binary,
         packet: :raw,
         active: false,
         reuseaddr: true,
         ip: @local_ip |> String.to_charlist() |> :inet.parse_address() |> elem(1)
       ],
-      serve_fn: fn socket -> get_testing_pipeline(socket) end
+      socket_handler: fn socket -> get_testing_pipeline(socket) end
     }
 
     Process.register(self(), __MODULE__)
 
-    {:ok, _tcp_server} = Membrane.RTMP.Source.TcpServer.start_link(options)
+    {:ok, _tcp_server} = TcpServer.start_link(options)
     ffmpeg_task = Task.async(&start_ffmpeg/0)
 
     pipeline = await_pipeline_started()
