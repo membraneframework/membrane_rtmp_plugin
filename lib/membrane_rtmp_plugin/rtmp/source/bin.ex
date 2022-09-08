@@ -1,9 +1,10 @@
 defmodule Membrane.RTMP.SourceBin do
   @moduledoc """
-  Bin responsible for spawning new RTMP server.
+  Bin responsible for demuxing and parsing a video stream.
 
-  It will receive RTMP stream from the client, parse it and demux it, outputting single audio and video which are ready for further processing with Membrane Elements.
-  At this moment only AAC and H264 codecs are supported
+  The bin requires the RTMP client to be already connected.
+  Outputs single audio and video which are ready for further processing with Membrane Elements.
+  At this moment only AAC and H264 codecs are supported.
   """
   use Membrane.Bin
 
@@ -23,18 +24,15 @@ defmodule Membrane.RTMP.SourceBin do
 
   def_options socket: [
                 spec: port(),
-                description: "Socket on which the server will receive RTMP stream."
+                description:
+                  "Socket connected to a client, on which the bin will receive RTMP stream."
               ]
 
   @impl true
   def handle_init(%__MODULE__{} = options) do
-    source = %RTMP.Source{
-      socket: options.socket
-    }
-
     spec = %ParentSpec{
       children: %{
-        src: source,
+        src: %RTMP.Source{socket: options.socket},
         demuxer: Membrane.FLV.Demuxer,
         video_parser: %Membrane.H264.FFmpeg.Parser{
           alignment: :au,

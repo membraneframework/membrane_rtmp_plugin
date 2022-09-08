@@ -18,7 +18,7 @@ defmodule Membrane.RTMP.MessageHandler do
 
   @spec handle_client_messages(list(), map()) :: map()
   def handle_client_messages([], state) do
-    request_packet(state.client_pid)
+    request_packet(state.receiver_pid)
     state
   end
 
@@ -28,15 +28,11 @@ defmodule Membrane.RTMP.MessageHandler do
       do_handle_client_message(message, header, acc)
     end)
     |> case do
-      %{client_connected?: true} = state ->
-        # once we are connected don't ask the client for new packets until a pipeline gets started
-        state
-
       {:error, _reason} = error ->
         raise error
 
       state ->
-        request_packet(state.client_pid)
+        request_packet(state.receiver_pid)
 
         state
     end

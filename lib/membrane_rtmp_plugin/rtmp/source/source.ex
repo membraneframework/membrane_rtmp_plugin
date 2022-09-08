@@ -1,7 +1,9 @@
 defmodule Membrane.RTMP.Source do
   @moduledoc """
-  Membrane Element for receiving RTMP streams. Acts as a RTMP Server.
-  This implementation assumes that audio and video is .
+  Membrane Element for receiving an RTMP stream. Acts as a RTMP Server.
+
+  Upon initialization, the source sends `:rtmp_source_initialized` notification, upon which it should be granted the control over the `socket` via `:gen_tcp.controlling_process/2`.
+  This implementation is limited to only AAC and H264 streams.
   """
   use Membrane.Source
 
@@ -17,7 +19,7 @@ defmodule Membrane.RTMP.Source do
   def_options socket: [
                 spec: non_neg_integer(),
                 description: """
-                Socket on which the source will be receive the RTMP stream.
+                Socket on which the source will be receiving the RTMP stream. The socket must be already connect to the RTMP client and be in non-active mode (`active` set to `false`).
                 """
               ]
 
@@ -30,9 +32,8 @@ defmodule Membrane.RTMP.Source do
        buffers: [],
        header_sent?: false,
        interceptor: Interceptor.init(Handshake.init_server()),
-       client_pid: nil,
-       client_connected?: false,
-       socket_owner?: false,
+       receiver_pid: nil,
+       socket_ready?: false,
        # epoch required for performing a handshake with the pipeline
        epoch: 0
      })}
@@ -42,7 +43,7 @@ defmodule Membrane.RTMP.Source do
   def handle_prepared_to_playing(_ctx, state) do
     target_pid = self()
 
-    {:ok, pid} =
+    {:ok, receiver_process} =
       Task.start_link(fn ->
         receive_loop(state.socket, target_pid)
       end)
@@ -53,7 +54,7 @@ defmodule Membrane.RTMP.Source do
       caps: {:output, %Membrane.RemoteStream{content_format: Membrane.FLV, type: :bytestream}}
     ]
 
-    {{:ok, actions}, %{state | client_pid: pid}}
+    {{:ok, actions}, %{state | receiver_pid: receiver_process}}
   end
 
   defp receive_loop(socket, target) do
@@ -78,8 +79,8 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_demand(_pad, _size, _unit, _ctx, state) when state.socket_owner? do
-    send(state.client_pid, :need_more_data)
+  def handle_demand(_pad, _size, _unit, _ctx, state) when state.socket_ready? do
+    send(state.receiver_pid, :need_more_data)
     {:ok, state}
   end
 
@@ -90,17 +91,17 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_playing_to_prepared(_ctx, state) do
-    send(state.client_pid, :terminate)
-    Process.unlink(state.client_pid)
-    {:ok, %{state | client_pid: nil}}
+    send(state.receiver_pid, :terminate)
+    Process.unlink(state.receiver_pid)
+    {:ok, %{state | receiver_pid: nil}}
   end
 
   @impl true
   def handle_other(:start_receiving, _ctx, state) do
-    case :gen_tcp.controlling_process(state.socket, state.client_pid) do
+    case :gen_tcp.controlling_process(state.socket, state.receiver_pid) do
       :ok ->
         :ok = :inet.setopts(state.socket, active: :once)
-        {:ok, %{state | socket_owner?: true}}
+        {:ok, %{state | socket_ready?: true}}
 
       {:error, :not_owner} ->
         Process.send_after(self(), :start_receiving, 200)

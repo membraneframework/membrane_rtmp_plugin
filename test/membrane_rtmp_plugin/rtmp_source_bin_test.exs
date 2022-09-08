@@ -4,8 +4,8 @@ defmodule Membrane.RTMP.SourceBin.Test do
 
   require Logger
 
-  alias Membrane.Testing
   alias Membrane.RTMP.Source.TcpServer
+  alias Membrane.Testing
 
   @input_file "test/fixtures/testsrc.flv"
   @port 9009
