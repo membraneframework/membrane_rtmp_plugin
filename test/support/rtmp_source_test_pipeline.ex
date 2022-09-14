@@ -1,4 +1,4 @@
-defmodule Membrane.RTMP.Source.Test.Pipeline do
+defmodule Membrane.RTMP.Source.TestPipeline do
   @moduledoc false
   use Membrane.Pipeline
 

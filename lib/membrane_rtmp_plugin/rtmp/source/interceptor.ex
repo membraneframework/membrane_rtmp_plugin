@@ -67,14 +67,6 @@ defmodule Membrane.RTMP.Interceptor do
           | {Header.t(), Message.t(), t()}
   def handle_packet(packet, state)
 
-  # def handle_packet(packet, %{state_machine: :connected, buffer: <<>>} = state) do
-  #   {packet, state}
-  # end
-
-  # def handle_packet(packet, %{state_machine: :connected, buffer: buffer} = state) do
-  #   {buffer <> packet, state}
-  # end
-
   def handle_packet(
         packet,
         %{state_machine: :connected, buffer: buffer, chunk_size: chunk_size} = state

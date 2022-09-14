@@ -182,15 +182,13 @@ defmodule Membrane.RTMP.MessageHandler do
 
   defp get_media_buffers(header, data, state) do
     payload =
-      case state.header_sent? do
-        false ->
-          get_flv_header()
-
-        true ->
-          <<>>
+      unless state.header_sent? do
+        get_flv_header()
+      else
+        <<>>
       end <> get_flv_body(header, data)
 
-    buffers = [%Buffer{payload: payload} | state[:buffers]]
+    buffers = [%Buffer{payload: payload} | state.buffers]
     {buffers, %{state | header_sent?: true}}
   end
 
@@ -200,7 +198,6 @@ defmodule Membrane.RTMP.MessageHandler do
 
   defp get_flv_body(
          %Membrane.RTMP.Header{
-           #  chunk_stream_id: stream_id,
            timestamp: timestamp,
            body_size: data_size,
            type_id: type_id,

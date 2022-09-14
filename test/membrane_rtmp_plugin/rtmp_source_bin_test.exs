@@ -1,5 +1,6 @@
 defmodule Membrane.RTMP.SourceBin.Test do
   use ExUnit.Case
+
   import Membrane.Testing.Assertions
 
   require Logger
