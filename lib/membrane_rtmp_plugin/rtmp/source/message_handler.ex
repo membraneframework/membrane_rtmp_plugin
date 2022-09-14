@@ -157,13 +157,13 @@ defmodule Membrane.RTMP.MessageHandler do
   end
 
   defp do_handle_client_message(%Messages.Audio{data: data}, header, state) do
-    {buffers, state} = get_media_buffers(header, data, state)
-    {:cont, %{state | buffers: buffers}}
+    state = get_media_buffers(header, data, state)
+    {:cont, state}
   end
 
   defp do_handle_client_message(%Messages.Video{data: data}, header, state) do
-    {buffers, state} = get_media_buffers(header, data, state)
-    {:cont, %{state | buffers: buffers}}
+    state = get_media_buffers(header, data, state)
+    {:cont, state}
   end
 
   defp do_handle_client_message(%Messages.Anonymous{name: "deleteStream"}, _header, state) do
@@ -180,16 +180,16 @@ defmodule Membrane.RTMP.MessageHandler do
     send(pid, :need_more_data)
   end
 
-  defp get_media_buffers(header, data, state) do
+  defp get_media_buffers(rtmp_header, data, state) do
     payload =
       unless state.header_sent? do
         get_flv_header()
       else
         <<>>
-      end <> get_flv_body(header, data)
+      end <> get_flv_body(rtmp_header, data)
 
     buffers = [%Buffer{payload: payload} | state.buffers]
-    {buffers, %{state | header_sent?: true}}
+    %{state | header_sent?: true, buffers: buffers}
   end
 
   defp get_flv_header() do

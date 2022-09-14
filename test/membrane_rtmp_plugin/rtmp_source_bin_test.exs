@@ -26,7 +26,7 @@ defmodule Membrane.RTMP.SourceBin.Test do
       ],
       socket_handler: fn socket ->
         options = [
-          module: Membrane.RTMP.Source.Test.Pipeline,
+          module: Membrane.RTMP.Source.TestPipeline,
           custom_args: [socket: socket, test_process: test_process],
           test_process: test_process
         ]

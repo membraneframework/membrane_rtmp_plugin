@@ -28,20 +28,25 @@ defmodule Membrane.RTMP.Source.TestPipeline do
   end
 
   @impl true
-  def handle_notification({:rtmp_source_initialized, source}, :src, _ctx, state) do
-    send(self(), {:rtmp_source_initialized, source})
+  def handle_notification(
+        {:rtmp_source_initialized, _socket, _source} = notification,
+        :src,
+        _ctx,
+        state
+      ) do
+    send(self(), notification)
 
     {:ok, state}
   end
 
   @impl true
-  def handle_other({:rtmp_source_initialized, source}, _ctx, state) do
-    case :gen_tcp.controlling_process(state.socket, source) do
+  def handle_other({:rtmp_source_initialized, socket, source} = notification, _ctx, state) do
+    case :gen_tcp.controlling_process(socket, source) do
       :ok ->
         :ok
 
       {:error, :not_owner} ->
-        Process.send_after(self(), {:rtmp_source_initialized, source}, 200)
+        Process.send_after(self(), notification, 200)
     end
 
     {:ok, state}
