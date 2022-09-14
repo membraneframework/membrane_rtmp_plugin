@@ -17,15 +17,20 @@ defmodule Membrane.RTMP.Source do
     mode: :pull
 
   def_options socket: [
-                spec: non_neg_integer(),
+                spec: :gen_tcp.socket(),
                 description: """
-                Socket on which the source will be receiving the RTMP stream. The socket must be already connect to the RTMP client and be in non-active mode (`active` set to `false`).
+                Socket on which the source will be receiving the RTMP stream. The socket must be already connected to the RTMP client and be in non-active mode (`active` set to `false`).
                 """
               ]
 
+  @typedoc """
+  Notification sent when the RTMP Source element is initialized and it should be granted control over the socket using `:gen_tcp.controlling_process/2`.
+  """
+  @type rtmp_source_initialized_t() :: {:rtmp_source_initialized, :gen_tcp.socket(), pid()}
+
   @impl true
   def handle_init(%__MODULE__{} = opts) do
-    {{:ok, [notify: :rtmp_source_initialized]},
+    {{:ok, [notify: {:rtmp_source_initialized, opts.socket, self()}]},
      Map.from_struct(opts)
      |> Map.merge(%{
        stale_frame: nil,

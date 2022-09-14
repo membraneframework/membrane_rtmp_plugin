@@ -1,10 +1,13 @@
 defmodule Membrane.RTMP.SourceBin do
   @moduledoc """
-  Bin responsible for demuxing and parsing a video stream.
+  Bin responsible for demuxing and parsing an RTMP stream.
 
-  The bin requires the RTMP client to be already connected.
   Outputs single audio and video which are ready for further processing with Membrane Elements.
   At this moment only AAC and H264 codecs are supported.
+
+  ## Usage
+
+  The bin requires the RTMP client to be already connected to the socket. The socket passed to the bin must be in non-active mode (`active` set to `false`). When the `RTMP.Source` is initialized the bin sends `t:Membrane.RTMP.Source.rtmp_source_initialized_t/0` notification. Then, the control of the socket should be granted to the `RTMP.Source` with the `:gen_tcp.controlling_process/2`.
   """
   use Membrane.Bin
 
@@ -23,9 +26,9 @@ defmodule Membrane.RTMP.SourceBin do
     demand_unit: :buffers
 
   def_options socket: [
-                spec: port(),
+                spec: :gen_tcp.socket(),
                 description:
-                  "Socket connected to a client, on which the bin will receive RTMP stream."
+                  "Socket, on which the bin will receive RTMP stream. The socket will be passed to the `RTMP.Source`. The socket must be already connected to the RTMP client and be in non-active mode (`active` set to `false`). "
               ]
 
   @impl true
@@ -64,11 +67,11 @@ defmodule Membrane.RTMP.SourceBin do
 
   @impl true
   def handle_notification(
-        :rtmp_source_initialized,
+        {:rtmp_source_initialized, _socket, _pid} = notification,
         :src,
-        %{children: %{src: %{pid: source_pid}}},
+        _ctx,
         state
       ) do
-    {{:ok, [notify: {:rtmp_source_initialized, source_pid}]}, state}
+    {{:ok, [notify: notification]}, state}
   end
 end

@@ -62,17 +62,4 @@ defmodule Membrane.RTMP.AMFEncoder do
   defp encode_key_value_pair({key, value}) do
     [<<byte_size(key)::16>>, key, do_encode_object(value)]
   end
-
-  @doc """
-  Helper function for debugging binaries by changing them to hex format
-  """
-  @spec to_hex(binary()) :: String.t()
-  def to_hex(message) do
-    message
-    |> Base.encode16(case: :lower)
-    |> String.codepoints()
-    |> Enum.chunk_every(2)
-    |> Enum.flat_map(&[Enum.join(&1)])
-    |> Enum.join(" ")
-  end
 end
