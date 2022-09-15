@@ -42,7 +42,7 @@ defmodule Membrane.RTMP.Source do
        stale_frame: nil,
        buffers: [],
        header_sent?: false,
-       messageparser: MessageParser.init(Handshake.init_server()),
+       message_parser: MessageParser.init(Handshake.init_server()),
        receiver_pid: nil,
        socket_ready?: false,
        # epoch required for performing a handshake with the pipeline
@@ -124,12 +124,13 @@ defmodule Membrane.RTMP.Source do
   def handle_other({:tcp, socket, packet}, _ctx, state) do
     state = %{state | socket: socket}
 
-    {messages, messageparser} = MessageHandler.parse_packet_messages(packet, state.messageparser)
+    {messages, message_parser} =
+      MessageHandler.parse_packet_messages(packet, state.message_parser)
 
     state = MessageHandler.handle_client_messages(messages, state)
     {actions, state} = get_actions(state)
 
-    {{:ok, actions}, %{state | messageparser: messageparser}}
+    {{:ok, actions}, %{state | message_parser: message_parser}}
   end
 
   @impl true

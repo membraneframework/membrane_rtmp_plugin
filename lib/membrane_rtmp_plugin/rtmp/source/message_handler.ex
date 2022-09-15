@@ -16,6 +16,9 @@ defmodule Membrane.RTMP.MessageHandler do
 
   alias Membrane.RTMP.Messages.Serializer
 
+  @windows_acknowledgment_size 2_500_000
+  @peer_bandwidth_size 2_500_000
+
   @spec handle_client_messages(list(), map()) :: map()
   def handle_client_messages([], state) do
     request_packet(state.receiver_pid)
@@ -60,14 +63,12 @@ defmodule Membrane.RTMP.MessageHandler do
   end
 
   defp do_handle_client_message(%Messages.Connect{}, _header, state) do
-    chunk_size = state.messageparser.chunk_size
+    chunk_size = state.message_parser.chunk_size
 
-    # the default value of ffmpeg server
-    %Messages.WindowAcknowledgement{size: 2_500_000}
+    %Messages.WindowAcknowledgement{size: @windows_acknowledgment_size}
     |> send_rtmp_payload(state.socket, chunk_size)
 
-    # the default value of ffmpeg server
-    %Messages.SetPeerBandwidth{size: 2_500_000}
+    %Messages.SetPeerBandwidth{size: @peer_bandwidth_size}
     |> send_rtmp_payload(state.socket, chunk_size)
 
     # stream begin type
@@ -78,7 +79,7 @@ defmodule Membrane.RTMP.MessageHandler do
     %Messages.SetChunkSize{chunk_size: chunk_size}
     |> send_rtmp_payload(state.socket, chunk_size)
 
-    {[tx_id], messageparser} = MessageParser.generate_tx_ids(state.messageparser, 1)
+    {[tx_id], message_parser} = MessageParser.generate_tx_ids(state.message_parser, 1)
 
     tx_id
     |> Responses.connection_success()
@@ -87,7 +88,7 @@ defmodule Membrane.RTMP.MessageHandler do
     Responses.on_bw_done()
     |> send_rtmp_payload(state.socket, chunk_size, chunk_stream_id: 3)
 
-    {:cont, %{state | messageparser: messageparser}}
+    {:cont, %{state | message_parser: message_parser}}
   end
 
   defp do_handle_client_message(
@@ -99,7 +100,7 @@ defmodule Membrane.RTMP.MessageHandler do
       :ok ->
         tx_id
         |> Responses.default_result()
-        |> send_rtmp_payload(state.socket, state.messageparser.chunk_size, chunk_stream_id: 3)
+        |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
 
         {:cont, state}
 
@@ -116,10 +117,10 @@ defmodule Membrane.RTMP.MessageHandler do
     case state.validator.validate_publish(msg) do
       :ok ->
         %Messages.UserControl{event_type: 0, data: <<0, 0, 0, 1>>}
-        |> send_rtmp_payload(state.socket, state.messageparser.chunk_size, chunk_stream_id: 3)
+        |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
 
         Responses.publish_success(stream_key)
-        |> send_rtmp_payload(state.socket, state.messageparser.chunk_size, chunk_stream_id: 3)
+        |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
 
         {:halt, state}
 
@@ -145,7 +146,7 @@ defmodule Membrane.RTMP.MessageHandler do
 
   defp do_handle_client_message(%Messages.FCPublish{}, _header, state) do
     %Messages.Anonymous{name: "onFCPublish", properties: []}
-    |> send_rtmp_payload(state.socket, state.messageparser.chunk_size, chunk_stream_id: 3)
+    |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
 
     {:cont, state}
   end
@@ -155,7 +156,7 @@ defmodule Membrane.RTMP.MessageHandler do
 
     tx_id
     |> Responses.default_result(stream_id)
-    |> send_rtmp_payload(state.socket, state.messageparser.chunk_size, chunk_stream_id: 3)
+    |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
 
     {:cont, state}
   end
@@ -166,7 +167,7 @@ defmodule Membrane.RTMP.MessageHandler do
          state
        ) do
     tx_id
-    |> send_rtmp_payload(state.socket, state.messageparser.chunk_size, chunk_stream_id: 3)
+    |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
 
     {:cont, state}
   end
@@ -249,29 +250,29 @@ defmodule Membrane.RTMP.MessageHandler do
   # if its current buffer contains more than one message, therefore we need to call the `&MessageParser.handle_packet/2`
   # as long as we decide to receive more messages (before starting to relay media packets).
   #
-  # Once we hit `:need_more_data` the function returns the list of parsed messages and the messageparser then is ready
+  # Once we hit `:need_more_data` the function returns the list of parsed messages and the message_parser then is ready
   # to receive more data to continue with emitting new messages.
-  @spec parse_packet_messages(packet :: binary(), messageparser :: struct(), [any()]) ::
-          {[Message.t()], messageparser :: struct()}
-  def parse_packet_messages(packet, messageparser, messages \\ [])
+  @spec parse_packet_messages(packet :: binary(), message_parser :: struct(), [any()]) ::
+          {[Message.t()], message_parser :: struct()}
+  def parse_packet_messages(packet, message_parser, messages \\ [])
 
-  def parse_packet_messages(<<>>, %{buffer: <<>>} = messageparser, messages) do
-    {Enum.reverse(messages), messageparser}
+  def parse_packet_messages(<<>>, %{buffer: <<>>} = message_parser, messages) do
+    {Enum.reverse(messages), message_parser}
   end
 
-  def parse_packet_messages(packet, messageparser, messages) do
-    case MessageParser.handle_packet(packet, messageparser) do
-      {header, message, messageparser} ->
-        parse_packet_messages(<<>>, messageparser, [{header, message} | messages])
+  def parse_packet_messages(packet, message_parser, messages) do
+    case MessageParser.handle_packet(packet, message_parser) do
+      {header, message, message_parser} ->
+        parse_packet_messages(<<>>, message_parser, [{header, message} | messages])
 
-      {:need_more_data, messageparser} ->
-        {Enum.reverse(messages), messageparser}
+      {:need_more_data, message_parser} ->
+        {Enum.reverse(messages), message_parser}
 
-      {:handshake_done, messageparser} ->
-        parse_packet_messages(<<>>, messageparser, messages)
+      {:handshake_done, message_parser} ->
+        parse_packet_messages(<<>>, message_parser, messages)
 
-      {%Handshake.Step{} = step, messageparser} ->
-        parse_packet_messages(<<>>, messageparser, [{nil, step} | messages])
+      {%Handshake.Step{} = step, message_parser} ->
+        parse_packet_messages(<<>>, message_parser, [{nil, step} | messages])
     end
   end
 end

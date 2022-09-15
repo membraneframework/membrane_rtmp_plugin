@@ -50,10 +50,10 @@ defmodule Membrane.RTMP.MessageParser do
   the MessageParser can be further used for generating the next ones.
   """
   @spec generate_tx_ids(t(), n :: non_neg_integer()) :: {list(non_neg_integer()), t()}
-  def generate_tx_ids(%__MODULE__{current_tx_id: tx_id} = messageparser, n) when n > 0 do
+  def generate_tx_ids(%__MODULE__{current_tx_id: tx_id} = message_parser, n) when n > 0 do
     tx_ids = Enum.map(1..n, &(tx_id + &1 - 1))
 
-    {tx_ids, %{messageparser | current_tx_id: tx_id + n}}
+    {tx_ids, %{message_parser | current_tx_id: tx_id + n}}
   end
 
   @spec handle_packet(packet_t(), t()) ::
