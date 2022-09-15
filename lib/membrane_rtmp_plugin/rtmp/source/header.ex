@@ -1,7 +1,5 @@
 defmodule Membrane.RTMP.Header do
-  @moduledoc """
-  RTMP header structure and utility functions.
-  """
+  @moduledoc false
 
   @enforce_keys ~w(chunk_stream_id timestamp type_id stream_id)a
   defstruct [body_size: 0] ++ @enforce_keys

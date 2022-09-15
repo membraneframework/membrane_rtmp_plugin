@@ -1,7 +1,5 @@
 defmodule Membrane.RTMP.Message do
-  @moduledoc """
-  Behaviour for serializing/deserializing RTMP messages.
-  """
+  @moduledoc false
 
   require Membrane.RTMP.Header
 

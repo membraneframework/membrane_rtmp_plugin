@@ -1,4 +1,5 @@
 defmodule Membrane.RTMP.Source.TestValidator do
+  @moduledoc false
   use Membrane.RTMP.MessageValidator
 
   alias Membrane.RTMP.Messages

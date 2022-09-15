@@ -1,6 +1,6 @@
 defmodule Membrane.RTMP.Source.TcpServer do
   @moduledoc """
-  A simple tcp server, which executes given function for each new incoming connection.
+  A simple tcp server, which handles each new incoming connection.
 
   The `socket_handler` function passed inside the options should take the socket returned by `:gen_tcp.accept/1` and return `{:ok, pid}`, where the `pid` describes a process, which will be interacting with the socket. `Membrane.RTMP.Source.TcpServer` will grant that process control over the socket via `:gen_tcp.controlling_process/2`.
   """

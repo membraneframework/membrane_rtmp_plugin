@@ -8,8 +8,8 @@ defmodule Membrane.RTMP.MessageHandler do
   alias Membrane.RTMP.{
     Handshake,
     Header,
-    MessageParser,
     Message,
+    MessageParser,
     Messages,
     Responses
   }
@@ -198,10 +198,10 @@ defmodule Membrane.RTMP.MessageHandler do
 
   defp get_media_buffers(rtmp_header, data, state) do
     payload =
-      unless state.header_sent? do
-        get_flv_header()
-      else
+      if state.header_sent? do
         <<>>
+      else
+        get_flv_header()
       end <> get_flv_body(rtmp_header, data)
 
     buffers = [%Buffer{payload: payload} | state.buffers]

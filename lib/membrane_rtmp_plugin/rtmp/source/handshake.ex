@@ -1,14 +1,8 @@
 defmodule Membrane.RTMP.Handshake do
-  @moduledoc """
-  RTMP handshake structure and utility functions.
-
-  The handshake procedure is described [at](https://rtmp.veriskope.com/docs/spec/#52handshake).
-  """
+  @moduledoc false
 
   defmodule Step do
-    @moduledoc """
-    Structure representing a single handshake step.
-    """
+    @moduledoc false
 
     @enforce_keys [:data, :type]
     defstruct @enforce_keys
@@ -142,9 +136,7 @@ defmodule Membrane.RTMP.Handshake do
   end
 
   defmodule State do
-    @moduledoc """
-    Structure representing the current state of the handshake
-    """
+    @moduledoc false
 
     @enforce_keys [:step]
     defstruct @enforce_keys

@@ -1,7 +1,5 @@
 defmodule Membrane.RTMP.Responses do
-  @moduledoc """
-  Set of common responses that don't require their own structures.
-  """
+  @moduledoc false
 
   alias Membrane.RTMP.Messages
 

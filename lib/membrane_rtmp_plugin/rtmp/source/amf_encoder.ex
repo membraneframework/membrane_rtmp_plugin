@@ -1,14 +1,5 @@
 defmodule Membrane.RTMP.AMFEncoder do
-  @moduledoc """
-  Encoder for AMF format.
-
-  Supported types:
-  - number
-  - boolean
-  - string
-  - key-value pairs object
-  - key-value pairs array
-  """
+  @moduledoc false
 
   @type basic_object_t :: float() | String.t() | map() | :null
   @type list_entry_t :: {key :: String.t(), basic_object_t()}

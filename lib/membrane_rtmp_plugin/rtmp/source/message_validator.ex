@@ -10,12 +10,15 @@ defmodule Membrane.RTMP.MessageValidator do
 
       alias Membrane.RTMP.Messages
 
+      @impl true
       def validate_release_stream(%Messages.ReleaseStream{}), do: :ok
       defoverridable validate_release_stream: 1
 
+      @impl true
       def validate_publish(%Messages.Publish{}), do: :ok
       defoverridable validate_publish: 1
 
+      @impl true
       def validate_set_data_frame(%Messages.SetDataFrame{}), do: :ok
       defoverridable validate_set_data_frame: 1
     end

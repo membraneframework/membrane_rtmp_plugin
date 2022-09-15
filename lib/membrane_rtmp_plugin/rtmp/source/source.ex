@@ -9,7 +9,7 @@ defmodule Membrane.RTMP.Source do
 
   require Membrane.Logger
 
-  alias Membrane.RTMP.{Handshake, MessageParser, MessageHandler}
+  alias Membrane.RTMP.{Handshake, MessageHandler, MessageParser}
 
   def_output_pad :output,
     availability: :always,

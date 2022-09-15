@@ -1,16 +1,5 @@
 defmodule Membrane.RTMP.AMFParser do
-  @moduledoc """
-  Parser for AMF format.
-
-  Supported types:
-  - number
-  - boolean
-  - string
-  - key-value pairs object
-  - key-value pairs array
-  """
-
-  use Bitwise
+  @moduledoc false
 
   @doc """
   Parses message from AMF format to elixir data types.

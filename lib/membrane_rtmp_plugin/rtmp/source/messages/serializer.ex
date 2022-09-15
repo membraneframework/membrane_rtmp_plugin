@@ -1,7 +1,5 @@
 defprotocol Membrane.RTMP.Messages.Serializer do
-  @moduledoc """
-  Protocol for serializing RTMP messages.
-  """
+  @moduledoc false
 
   @doc """
   Serializes an RTMP message (without header) into RTMP body binary format.

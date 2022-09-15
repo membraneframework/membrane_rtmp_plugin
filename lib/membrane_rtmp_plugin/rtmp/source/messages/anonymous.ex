@@ -1,10 +1,5 @@
 defmodule Membrane.RTMP.Messages.Anonymous do
-  @moduledoc """
-  Module representing an arbitrary AMF command.
-
-  Should be used if a message doesn't require its own type
-  like `_result` or other one-use specific messages.
-  """
+  @moduledoc false
 
   @behaviour Membrane.RTMP.Message
 
