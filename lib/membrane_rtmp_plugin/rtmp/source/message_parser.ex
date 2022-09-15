@@ -1,4 +1,4 @@
-defmodule Membrane.RTMP.Interceptor do
+defmodule Membrane.RTMP.MessageParser do
   @moduledoc """
   #{inspect(__MODULE__)} is responsible for parsing
   all the RTMP connection information until the media packets start to flow.
@@ -30,9 +30,9 @@ defmodule Membrane.RTMP.Interceptor do
         }
 
   @doc """
-  Initializes the RTMP interceptor.
+  Initializes the RTMP MessageParser.
 
-  The interceptor starts in a handshake process which is dictated by the passed
+  The MessageParser starts in a handshake process which is dictated by the passed
   handshake state.
   """
   @spec init(Handshake.State.t(), Keyword.t()) :: t()
@@ -53,13 +53,13 @@ defmodule Membrane.RTMP.Interceptor do
   Generates a list of the following transaction tx_ids.
 
   Updates the internal transaction id counter so that
-  the interceptor can be further used for generating the next ones.
+  the MessageParser can be further used for generating the next ones.
   """
   @spec generate_tx_ids(t(), n :: non_neg_integer()) :: {list(non_neg_integer()), t()}
-  def generate_tx_ids(%__MODULE__{current_tx_id: tx_id} = interceptor, n) when n > 0 do
+  def generate_tx_ids(%__MODULE__{current_tx_id: tx_id} = messageparser, n) when n > 0 do
     tx_ids = Enum.map(1..n, &(tx_id + &1 - 1))
 
-    {tx_ids, %{interceptor | current_tx_id: tx_id + n}}
+    {tx_ids, %{messageparser | current_tx_id: tx_id + n}}
   end
 
   @spec handle_packet(packet_t(), t()) ::

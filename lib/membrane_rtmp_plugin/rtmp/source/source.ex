@@ -9,7 +9,7 @@ defmodule Membrane.RTMP.Source do
 
   require Membrane.Logger
 
-  alias Membrane.RTMP.{Handshake, Interceptor, MessageHandler}
+  alias Membrane.RTMP.{Handshake, MessageParser, MessageHandler}
 
   def_output_pad :output,
     availability: :always,
@@ -36,7 +36,7 @@ defmodule Membrane.RTMP.Source do
        stale_frame: nil,
        buffers: [],
        header_sent?: false,
-       interceptor: Interceptor.init(Handshake.init_server()),
+       messageparser: MessageParser.init(Handshake.init_server()),
        receiver_pid: nil,
        socket_ready?: false,
        # epoch required for performing a handshake with the pipeline
@@ -118,12 +118,12 @@ defmodule Membrane.RTMP.Source do
   def handle_other({:tcp, socket, packet}, _ctx, state) do
     state = %{state | socket: socket}
 
-    {messages, interceptor} = MessageHandler.parse_packet_messages(packet, state.interceptor)
+    {messages, messageparser} = MessageHandler.parse_packet_messages(packet, state.messageparser)
 
     state = MessageHandler.handle_client_messages(messages, state)
     {actions, state} = get_actions(state)
 
-    {{:ok, actions}, %{state | interceptor: interceptor}}
+    {{:ok, actions}, %{state | messageparser: messageparser}}
   end
 
   @impl true

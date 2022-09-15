@@ -8,7 +8,7 @@ defmodule Membrane.RTMP.MessageHandler do
   alias Membrane.RTMP.{
     Handshake,
     Header,
-    Interceptor,
+    MessageParser,
     Message,
     Messages,
     Responses
@@ -60,7 +60,7 @@ defmodule Membrane.RTMP.MessageHandler do
   end
 
   defp do_handle_client_message(%Messages.Connect{}, _header, state) do
-    chunk_size = state.interceptor.chunk_size
+    chunk_size = state.messageparser.chunk_size
 
     # the default value of ffmpeg server
     %Messages.WindowAcknowledgement{size: 2_500_000}
@@ -78,7 +78,7 @@ defmodule Membrane.RTMP.MessageHandler do
     %Messages.SetChunkSize{chunk_size: chunk_size}
     |> send_rtmp_payload(state.socket, chunk_size)
 
-    {[tx_id], interceptor} = Interceptor.generate_tx_ids(state.interceptor, 1)
+    {[tx_id], messageparser} = MessageParser.generate_tx_ids(state.messageparser, 1)
 
     tx_id
     |> Responses.connection_success()
@@ -87,7 +87,7 @@ defmodule Membrane.RTMP.MessageHandler do
     Responses.on_bw_done()
     |> send_rtmp_payload(state.socket, chunk_size, chunk_stream_id: 3)
 
-    {:cont, %{state | interceptor: interceptor}}
+    {:cont, %{state | messageparser: messageparser}}
   end
 
   defp do_handle_client_message(
@@ -97,7 +97,7 @@ defmodule Membrane.RTMP.MessageHandler do
        ) do
     tx_id
     |> Responses.default_result()
-    |> send_rtmp_payload(state.socket, state.interceptor.chunk_size, chunk_stream_id: 3)
+    |> send_rtmp_payload(state.socket, state.messageparser.chunk_size, chunk_stream_id: 3)
 
     {:cont, state}
   end
@@ -108,10 +108,10 @@ defmodule Membrane.RTMP.MessageHandler do
          state
        ) do
     %Messages.UserControl{event_type: 0, data: <<0, 0, 0, 1>>}
-    |> send_rtmp_payload(state.socket, state.interceptor.chunk_size, chunk_stream_id: 3)
+    |> send_rtmp_payload(state.socket, state.messageparser.chunk_size, chunk_stream_id: 3)
 
     Responses.publish_success(stream_key)
-    |> send_rtmp_payload(state.socket, state.interceptor.chunk_size, chunk_stream_id: 3)
+    |> send_rtmp_payload(state.socket, state.messageparser.chunk_size, chunk_stream_id: 3)
 
     {:halt, state}
   end
@@ -130,7 +130,7 @@ defmodule Membrane.RTMP.MessageHandler do
 
   defp do_handle_client_message(%Messages.FCPublish{}, _header, state) do
     %Messages.Anonymous{name: "onFCPublish", properties: []}
-    |> send_rtmp_payload(state.socket, state.interceptor.chunk_size, chunk_stream_id: 3)
+    |> send_rtmp_payload(state.socket, state.messageparser.chunk_size, chunk_stream_id: 3)
 
     {:cont, state}
   end
@@ -140,7 +140,7 @@ defmodule Membrane.RTMP.MessageHandler do
 
     tx_id
     |> Responses.default_result(stream_id)
-    |> send_rtmp_payload(state.socket, state.interceptor.chunk_size, chunk_stream_id: 3)
+    |> send_rtmp_payload(state.socket, state.messageparser.chunk_size, chunk_stream_id: 3)
 
     {:cont, state}
   end
@@ -151,7 +151,7 @@ defmodule Membrane.RTMP.MessageHandler do
          state
        ) do
     tx_id
-    |> send_rtmp_payload(state.socket, state.interceptor.chunk_size, chunk_stream_id: 3)
+    |> send_rtmp_payload(state.socket, state.messageparser.chunk_size, chunk_stream_id: 3)
 
     {:cont, state}
   end
@@ -230,33 +230,33 @@ defmodule Membrane.RTMP.MessageHandler do
   # The RTMP connection is based on TCP therefore we are operating on a continuous stream of bytes.
   # In such case packets received on TCP sockets may contain a partial RTMP packet or several full packets.
   #
-  # `Interceptor` is already able to request more data if packet is incomplete but it is not aware
-  # if its current buffer contains more than one message, therefore we need to call the `&Interceptor.handle_packet/2`
+  # `MessageParser` is already able to request more data if packet is incomplete but it is not aware
+  # if its current buffer contains more than one message, therefore we need to call the `&MessageParser.handle_packet/2`
   # as long as we decide to receive more messages (before starting to relay media packets).
   #
-  # Once we hit `:need_more_data` the function returns the list of parsed messages and the interceptor then is ready
+  # Once we hit `:need_more_data` the function returns the list of parsed messages and the messageparser then is ready
   # to receive more data to continue with emitting new messages.
-  @spec parse_packet_messages(packet :: binary(), interceptor :: struct(), [any()]) ::
-          {[Message.t()], interceptor :: struct()}
-  def parse_packet_messages(packet, interceptor, messages \\ [])
+  @spec parse_packet_messages(packet :: binary(), messageparser :: struct(), [any()]) ::
+          {[Message.t()], messageparser :: struct()}
+  def parse_packet_messages(packet, messageparser, messages \\ [])
 
-  def parse_packet_messages(<<>>, %{buffer: <<>>} = interceptor, messages) do
-    {Enum.reverse(messages), interceptor}
+  def parse_packet_messages(<<>>, %{buffer: <<>>} = messageparser, messages) do
+    {Enum.reverse(messages), messageparser}
   end
 
-  def parse_packet_messages(packet, interceptor, messages) do
-    case Interceptor.handle_packet(packet, interceptor) do
-      {header, message, interceptor} ->
-        parse_packet_messages(<<>>, interceptor, [{header, message} | messages])
+  def parse_packet_messages(packet, messageparser, messages) do
+    case MessageParser.handle_packet(packet, messageparser) do
+      {header, message, messageparser} ->
+        parse_packet_messages(<<>>, messageparser, [{header, message} | messages])
 
-      {:need_more_data, interceptor} ->
-        {Enum.reverse(messages), interceptor}
+      {:need_more_data, messageparser} ->
+        {Enum.reverse(messages), messageparser}
 
-      {:handshake_done, interceptor} ->
-        parse_packet_messages(<<>>, interceptor, messages)
+      {:handshake_done, messageparser} ->
+        parse_packet_messages(<<>>, messageparser, messages)
 
-      {%Handshake.Step{} = step, interceptor} ->
-        parse_packet_messages(<<>>, interceptor, [{nil, step} | messages])
+      {%Handshake.Step{} = step, messageparser} ->
+        parse_packet_messages(<<>>, messageparser, [{nil, step} | messages])
     end
   end
 end
