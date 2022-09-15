@@ -167,6 +167,7 @@ defmodule Membrane.RTMP.MessageHandler do
   end
 
   defp do_handle_client_message(%Messages.Anonymous{name: "deleteStream"}, _header, state) do
+    # We could send `:end_of_stream` here, however more reliable method is to wait for `:tcp_closed` message on the socket.
     {:cont, state}
   end
 

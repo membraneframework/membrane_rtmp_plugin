@@ -1,4 +1,4 @@
-defmodule Membrane.RTMP.SourceBin.Test do
+defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   use ExUnit.Case
 
   import Membrane.Testing.Assertions
@@ -9,7 +9,7 @@ defmodule Membrane.RTMP.SourceBin.Test do
   alias Membrane.Testing
 
   @input_file "test/fixtures/testsrc.flv"
-  @port 9009
+  @port 1935
   @local_ip "127.0.0.1"
   @rtmp_stream_url "rtmp://#{@local_ip}:#{@port}/"
 
@@ -42,8 +42,20 @@ defmodule Membrane.RTMP.SourceBin.Test do
 
     assert_pipeline_playback_changed(pipeline, :prepared, :playing)
 
-    assert_sink_buffer(pipeline, :video_sink, %Membrane.Buffer{})
-    assert_sink_buffer(pipeline, :audio_sink, %Membrane.Buffer{})
+    assert_buffers(%{
+      pipeline: pipeline,
+      sink: :video_sink,
+      stream_length: 3000,
+      buffers_expected: div(3000, 42)
+    })
+
+    assert_buffers(%{
+      pipeline: pipeline,
+      sink: :audio_sink,
+      stream_length: 3000,
+      buffers_expected: div(3000, 23)
+    })
+
     assert_end_of_stream(pipeline, :audio_sink, :input, 11_000)
     assert_end_of_stream(pipeline, :video_sink, :input)
 
@@ -81,5 +93,26 @@ defmodule Membrane.RTMP.SourceBin.Test do
     receive do
       {:pipeline_started, pid} -> pid
     end
+  end
+
+  defp assert_buffers(%{last_dts: _dts} = state) do
+    assert_sink_buffer(state.pipeline, state.sink, %Membrane.Buffer{dts: dts} = buffer)
+    assert dts >= state.last_dts
+
+    buffers = state.buffers + 1
+    state = %{state | last_dts: dts, buffers: buffers}
+
+    if dts < state.stream_length do
+      assert_buffers(state)
+    else
+      assert state.buffers >= state.buffers_expected
+    end
+  end
+
+  defp assert_buffers(state) do
+    stream_length = Membrane.Time.milliseconds(state.stream_length)
+
+    Map.merge(%{state | stream_length: stream_length}, %{last_dts: -1, buffers: 0})
+    |> assert_buffers()
   end
 end
