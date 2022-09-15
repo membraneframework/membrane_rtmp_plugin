@@ -21,6 +21,12 @@ defmodule Membrane.RTMP.Source do
                 description: """
                 Socket on which the source will be receiving the RTMP stream. The socket must be already connected to the RTMP client and be in non-active mode (`active` set to `false`).
                 """
+              ],
+              validator: [
+                spec: Membrane.RTMP.StreamValidator,
+                description: """
+                A Module implementing `Membrane.RTMP.MessageValidator` behaviour, used for validating the stream.
+                """
               ]
 
   @typedoc """

@@ -1,7 +1,7 @@
 defmodule Membrane.RTMP.MessageParser do
   @moduledoc """
   #{inspect(__MODULE__)} is responsible for parsing
-  all the RTMP connection information until the media packets start to flow.
+  all the RTMP connection information and deserializing the messages.
 
   The main use-case is to parse things such as `stream_key` or stream
   parameters information being represented by RTMP commands.

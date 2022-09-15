@@ -1,5 +1,7 @@
 defmodule Membrane.RTMP.Messages.ReleaseStream do
-  @moduledoc false
+  @moduledoc """
+  Defines the RTMP `releaseStream` command.
+  """
 
   @behaviour Membrane.RTMP.Message
 

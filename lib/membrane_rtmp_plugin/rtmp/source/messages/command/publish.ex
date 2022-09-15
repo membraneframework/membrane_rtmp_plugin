@@ -1,5 +1,7 @@
 defmodule Membrane.RTMP.Messages.Publish do
-  @moduledoc false
+  @moduledoc """
+  Defines the RTMP `publish` command.
+  """
 
   @behaviour Membrane.RTMP.Message
 

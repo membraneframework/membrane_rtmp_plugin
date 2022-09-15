@@ -11,7 +11,8 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   @input_file "test/fixtures/testsrc.flv"
   @port 1935
   @local_ip "127.0.0.1"
-  @rtmp_stream_url "rtmp://#{@local_ip}:#{@port}/"
+  @stream_key "ala2137"
+  @rtmp_stream_url "rtmp://#{@local_ip}:#{@port}/app/#{@stream_key}"
 
   test "Check if the stream started and that it ends" do
     test_process = self()
@@ -96,7 +97,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   end
 
   defp assert_buffers(%{last_dts: _dts} = state) do
-    assert_sink_buffer(state.pipeline, state.sink, %Membrane.Buffer{dts: dts} = buffer)
+    assert_sink_buffer(state.pipeline, state.sink, %Membrane.Buffer{dts: dts})
     assert dts >= state.last_dts
 
     buffers = state.buffers + 1

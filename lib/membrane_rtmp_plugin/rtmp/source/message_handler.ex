@@ -91,29 +91,41 @@ defmodule Membrane.RTMP.MessageHandler do
   end
 
   defp do_handle_client_message(
-         %Messages.ReleaseStream{tx_id: tx_id, stream_key: _stream_key},
+         %Messages.ReleaseStream{tx_id: tx_id, stream_key: _stream_key} = msg,
          _header,
          state
        ) do
-    tx_id
-    |> Responses.default_result()
-    |> send_rtmp_payload(state.socket, state.messageparser.chunk_size, chunk_stream_id: 3)
+    case state.validator.validate_release_stream(msg) do
+      :ok ->
+        tx_id
+        |> Responses.default_result()
+        |> send_rtmp_payload(state.socket, state.messageparser.chunk_size, chunk_stream_id: 3)
 
-    {:cont, state}
+        {:cont, state}
+
+      {:error, _reason} = error ->
+        {:halt, error}
+    end
   end
 
   defp do_handle_client_message(
-         %Messages.Publish{stream_key: stream_key, publish_type: "live"},
+         %Messages.Publish{stream_key: stream_key, publish_type: "live"} = msg,
          _header,
          state
        ) do
-    %Messages.UserControl{event_type: 0, data: <<0, 0, 0, 1>>}
-    |> send_rtmp_payload(state.socket, state.messageparser.chunk_size, chunk_stream_id: 3)
+    case state.validator.validate_publish(msg) do
+      :ok ->
+        %Messages.UserControl{event_type: 0, data: <<0, 0, 0, 1>>}
+        |> send_rtmp_payload(state.socket, state.messageparser.chunk_size, chunk_stream_id: 3)
 
-    Responses.publish_success(stream_key)
-    |> send_rtmp_payload(state.socket, state.messageparser.chunk_size, chunk_stream_id: 3)
+        Responses.publish_success(stream_key)
+        |> send_rtmp_payload(state.socket, state.messageparser.chunk_size, chunk_stream_id: 3)
 
-    {:halt, state}
+        {:halt, state}
+
+      {:error, _reason} = error ->
+        {:halt, error}
+    end
   end
 
   defp do_handle_client_message(%Messages.Publish{publish_type: _publish_type}, _header, _state) do
@@ -123,9 +135,12 @@ defmodule Membrane.RTMP.MessageHandler do
     {:halt, {:error, :invalid_publish_type}}
   end
 
-  defp do_handle_client_message(%Messages.SetDataFrame{}, _header, state) do
+  defp do_handle_client_message(%Messages.SetDataFrame{} = msg, _header, state) do
     # raise "Received @setDataFrame RTMP message when it should not be possible"
-    {:cont, state}
+    case state.validator.validate_set_data_frame(msg) do
+      :ok -> {:cont, state}
+      {:error, _reason} = error -> {:halt, error}
+    end
   end
 
   defp do_handle_client_message(%Messages.FCPublish{}, _header, state) do

@@ -1,5 +1,7 @@
 defmodule Membrane.RTMP.Messages.SetDataFrame do
-  @moduledoc false
+  @moduledoc """
+  Defines the RTMP `setDataFrame` command.
+  """
 
   @behaviour Membrane.RTMP.Message
 

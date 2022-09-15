@@ -8,11 +8,12 @@ defmodule Membrane.RTMP.Source.TestPipeline do
 
   @impl true
   def handle_init(socket: socket, test_process: test_process) do
-    Process.register(self(), __MODULE__)
-
     spec = %Membrane.ParentSpec{
       children: [
-        src: %Membrane.RTMP.SourceBin{socket: socket},
+        src: %Membrane.RTMP.SourceBin{
+          socket: socket,
+          validator: Membrane.RTMP.Source.TestValidator
+        },
         audio_sink: Testing.Sink,
         video_sink: Testing.Sink
       ],

@@ -29,13 +29,19 @@ defmodule Membrane.RTMP.SourceBin do
                 spec: :gen_tcp.socket(),
                 description:
                   "Socket, on which the bin will receive RTMP stream. The socket will be passed to the `RTMP.Source`. The socket must be already connected to the RTMP client and be in non-active mode (`active` set to `false`). "
+              ],
+              validator: [
+                spec: Membrane.RTMP.StreamValidator,
+                description: """
+                A Module implementing `Membrane.RTMP.MessageValidator` behaviour, used for validating the stream.
+                """
               ]
 
   @impl true
-  def handle_init(%__MODULE__{} = options) do
+  def handle_init(%__MODULE__{} = opts) do
     spec = %ParentSpec{
       children: %{
-        src: %RTMP.Source{socket: options.socket},
+        src: %RTMP.Source{socket: opts.socket, validator: opts.validator},
         demuxer: Membrane.FLV.Demuxer,
         video_parser: %Membrane.H264.FFmpeg.Parser{
           alignment: :au,
