@@ -82,6 +82,7 @@ defmodule Membrane.RTMP.SourceBin do
     {{:ok, [notify: notification]}, state}
   end
 
+  @spec pass_control(:gen_tcp.socket(), pid) :: :ok | {:error, atom}
   def pass_control(socket, source) do
     :gen_tcp.controlling_process(socket, source)
   end

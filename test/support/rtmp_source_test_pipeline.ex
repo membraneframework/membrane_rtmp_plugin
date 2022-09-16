@@ -4,8 +4,8 @@ defmodule Membrane.RTMP.Source.TestPipeline do
 
   import Membrane.ParentSpec
 
-  alias Membrane.Testing
   alias Membrane.RTMP.SourceBin
+  alias Membrane.Testing
 
   @impl true
   def handle_init(socket: socket, test_process: test_process) do
