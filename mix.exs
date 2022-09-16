@@ -8,7 +8,7 @@ defmodule Membrane.RTMP.Mixfile do
     [
       app: :membrane_rtmp_plugin,
       version: @version,
-      elixir: "~> 1.14",
+      elixir: "~> 1.12",
       elixirc_paths: elixirc_paths(Mix.env()),
       compilers: [:unifex, :bundlex] ++ Mix.compilers(),
       start_permanent: Mix.env() == :prod,
