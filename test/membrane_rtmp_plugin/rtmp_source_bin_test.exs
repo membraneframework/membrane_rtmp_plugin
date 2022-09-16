@@ -14,7 +14,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   @stream_key "ala2137"
   @rtmp_stream_url "rtmp://#{@local_ip}:#{@port}/app/#{@stream_key}"
 
-  test "Check if the stream started and that it ends" do
+  test "SourceBin outputs the correct number of audio and video buffers" do
     test_process = self()
 
     options = %TcpServer{
