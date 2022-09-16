@@ -110,7 +110,7 @@ defmodule Membrane.RTMP.MessageHandler do
   end
 
   defp do_handle_client_message(
-         %Messages.Publish{stream_key: stream_key, publish_type: "live"} = msg,
+         %Messages.Publish{stream_key: stream_key} = msg,
          _header,
          state
        ) do
@@ -129,15 +129,7 @@ defmodule Membrane.RTMP.MessageHandler do
     end
   end
 
-  defp do_handle_client_message(%Messages.Publish{publish_type: _publish_type}, _header, _state) do
-    # NOTE: For now we end parsing messages once we receive publish message.
-    # At some point we may want to verify the stream parameters or simply extract
-    # them for further processing.
-    {:halt, {:error, :invalid_publish_type}}
-  end
-
   defp do_handle_client_message(%Messages.SetDataFrame{} = msg, _header, state) do
-    # raise "Received @setDataFrame RTMP message when it should not be possible"
     case state.validator.validate_set_data_frame(msg) do
       :ok -> {:cont, state}
       {:error, _reason} = error -> {:halt, error}

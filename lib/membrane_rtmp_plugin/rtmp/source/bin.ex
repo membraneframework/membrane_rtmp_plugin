@@ -34,7 +34,8 @@ defmodule Membrane.RTMP.SourceBin do
                 spec: Membrane.RTMP.StreamValidator,
                 description: """
                 A Module implementing `Membrane.RTMP.MessageValidator` behaviour, used for validating the stream.
-                """
+                """,
+                default: Membrane.RTMP.DefaultValidator
               ]
 
   @impl true
@@ -79,5 +80,9 @@ defmodule Membrane.RTMP.SourceBin do
         state
       ) do
     {{:ok, [notify: notification]}, state}
+  end
+
+  def pass_control(socket, source) do
+    :gen_tcp.controlling_process(socket, source)
   end
 end

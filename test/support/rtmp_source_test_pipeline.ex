@@ -5,12 +5,13 @@ defmodule Membrane.RTMP.Source.TestPipeline do
   import Membrane.ParentSpec
 
   alias Membrane.Testing
+  alias Membrane.RTMP.SourceBin
 
   @impl true
   def handle_init(socket: socket, test_process: test_process) do
     spec = %Membrane.ParentSpec{
       children: [
-        src: %Membrane.RTMP.SourceBin{
+        src: %SourceBin{
           socket: socket,
           validator: Membrane.RTMP.Source.TestValidator
         },
@@ -42,7 +43,7 @@ defmodule Membrane.RTMP.Source.TestPipeline do
 
   @impl true
   def handle_other({:rtmp_source_initialized, socket, source} = notification, _ctx, state) do
-    case :gen_tcp.controlling_process(socket, source) do
+    case SourceBin.pass_control(socket, source) do
       :ok ->
         :ok
 
