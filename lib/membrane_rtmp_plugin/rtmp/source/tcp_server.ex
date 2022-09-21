@@ -2,7 +2,9 @@ defmodule Membrane.RTMP.Source.TcpServer do
   @moduledoc """
   A simple tcp server, which handles each new incoming connection.
 
-  The `socket_handler` function passed inside the options should take the socket returned by `:gen_tcp.accept/1` and return `{:ok, pid}`, where the `pid` describes a process, which will be interacting with the socket. `Membrane.RTMP.Source.TcpServer` will grant that process control over the socket via `:gen_tcp.controlling_process/2`.
+  The `socket_handler` function passed inside the options should take the socket returned by `:gen_tcp.accept/1`
+  and return `{:ok, pid}`, where the `pid` describes a process, which will be interacting with the socket.
+  `Membrane.RTMP.Source.TcpServer` will grant that process control over the socket via `:gen_tcp.controlling_process/2`.
   """
 
   use Task
@@ -14,7 +16,8 @@ defmodule Membrane.RTMP.Source.TcpServer do
   @typedoc """
   Defines options for the TCP server.
   The `listen_options` are passed to the `:gen_tcp.listen/2` function.
-  The `socket_handler` is a function that takes socket returned by `:gen_tcp.accept/1` and returns the pid of a process, which will be interacting with the socket. TcpServer will grant that process control over the socket via `:gen_tcp.controlling_process/2`.
+  The `socket_handler` is a function that takes socket returned by `:gen_tcp.accept/1` and returns the pid of a process,
+  which will be interacting with the socket. TcpServer will grant that process control over the socket via `:gen_tcp.controlling_process/2`.
   """
   @type t :: %__MODULE__{
           port: :inet.port_number(),

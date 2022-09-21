@@ -21,7 +21,7 @@ defmodule Membrane.RTMP.MessageHandler do
 
   @spec handle_client_messages(list(), map()) :: map()
   def handle_client_messages([], state) do
-    request_packet(state.receiver_pid)
+    request_packet(state.socket)
     state
   end
 
@@ -35,8 +35,7 @@ defmodule Membrane.RTMP.MessageHandler do
         raise error
 
       state ->
-        request_packet(state.receiver_pid)
-
+        request_packet(state.socket)
         state
     end
   end
@@ -51,6 +50,16 @@ defmodule Membrane.RTMP.MessageHandler do
   # 7. [in] release stream -> [out] _result response
   # 8. [in] publish -> [out] user control with stream id, publish success
   # 9. CONNECTED
+  defp do_handle_client_message(%Messages.Audio{data: data}, header, state) do
+    state = get_media_buffers(header, data, state)
+    {:cont, state}
+  end
+
+  defp do_handle_client_message(%Messages.Video{data: data}, header, state) do
+    state = get_media_buffers(header, data, state)
+    {:cont, state}
+  end
+
   defp do_handle_client_message(%Handshake.Step{type: :s0_s1_s2} = step, _header, state) do
     :gen_tcp.send(state.socket, Handshake.Step.serialize(step))
 
@@ -164,16 +173,6 @@ defmodule Membrane.RTMP.MessageHandler do
     {:cont, state}
   end
 
-  defp do_handle_client_message(%Messages.Audio{data: data}, header, state) do
-    state = get_media_buffers(header, data, state)
-    {:cont, state}
-  end
-
-  defp do_handle_client_message(%Messages.Video{data: data}, header, state) do
-    state = get_media_buffers(header, data, state)
-    {:cont, state}
-  end
-
   defp do_handle_client_message(%Messages.Anonymous{name: "deleteStream"}, _header, state) do
     # We could send `:end_of_stream` here, however more reliable method is to wait for `:tcp_closed` message on the socket.
     {:cont, state}
@@ -185,8 +184,8 @@ defmodule Membrane.RTMP.MessageHandler do
     {:cont, state}
   end
 
-  defp request_packet(pid) do
-    send(pid, :need_more_data)
+  defp request_packet(socket) do
+    :ok = :inet.setopts(socket, active: :once)
   end
 
   defp get_media_buffers(rtmp_header, data, state) do

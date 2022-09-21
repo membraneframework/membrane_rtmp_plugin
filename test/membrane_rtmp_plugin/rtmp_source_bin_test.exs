@@ -14,6 +14,10 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   @stream_key "ala2137"
   @rtmp_stream_url "rtmp://#{@local_ip}:#{@port}/app/#{@stream_key}"
 
+  @stream_length_ms 3000
+  @video_frame_duration_ms 42
+  @audio_frame_duration_ms 23
+
   test "SourceBin outputs the correct number of audio and video buffers" do
     test_process = self()
 
@@ -46,18 +50,18 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     assert_buffers(%{
       pipeline: pipeline,
       sink: :video_sink,
-      stream_length: 3000,
-      buffers_expected: div(3000, 42)
+      stream_length: @stream_length_ms,
+      buffers_expected: div(@stream_length_ms, @video_frame_duration_ms)
     })
 
     assert_buffers(%{
       pipeline: pipeline,
       sink: :audio_sink,
-      stream_length: 3000,
-      buffers_expected: div(3000, 23)
+      stream_length: @stream_length_ms,
+      buffers_expected: div(@stream_length_ms, @audio_frame_duration_ms)
     })
 
-    assert_end_of_stream(pipeline, :audio_sink, :input, 11_000)
+    assert_end_of_stream(pipeline, :audio_sink, :input)
     assert_end_of_stream(pipeline, :video_sink, :input)
 
     # Cleanup
@@ -113,7 +117,8 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   defp assert_buffers(state) do
     stream_length = Membrane.Time.milliseconds(state.stream_length)
 
-    Map.merge(%{state | stream_length: stream_length}, %{last_dts: -1, buffers: 0})
+    state
+    |> Map.merge(%{stream_length: stream_length, last_dts: -1, buffers: 0})
     |> assert_buffers()
   end
 end

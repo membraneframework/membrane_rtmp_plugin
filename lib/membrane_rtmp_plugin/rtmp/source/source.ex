@@ -70,9 +70,6 @@ defmodule Membrane.RTMP.Source do
 
   defp receive_loop(socket, target) do
     receive do
-      :need_more_data ->
-        :ok = :inet.setopts(socket, active: :once)
-
       {:tcp, _port, packet} ->
         send(target, {:tcp, socket, packet})
 
@@ -91,7 +88,7 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_demand(_pad, _size, _unit, _ctx, state) when state.socket_ready? do
-    send(state.receiver_pid, :need_more_data)
+    :ok = :inet.setopts(state.socket, active: :once)
     {:ok, state}
   end
 
@@ -103,7 +100,6 @@ defmodule Membrane.RTMP.Source do
   @impl true
   def handle_playing_to_prepared(_ctx, state) do
     send(state.receiver_pid, :terminate)
-    Process.unlink(state.receiver_pid)
     {:ok, %{state | receiver_pid: nil}}
   end
 

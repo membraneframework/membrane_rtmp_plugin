@@ -7,9 +7,14 @@ defmodule Membrane.RTMP.SourceBin do
 
   ## Usage
 
-  The bin requires the RTMP client to be already connected to the socket. The socket passed to the bin must be in non-active mode (`active` set to `false`). When the `RTMP.Source` is initialized the bin sends `t:Membrane.RTMP.Source.rtmp_source_initialized_t/0` notification. Then, the control of the socket should be granted to the `RTMP.Source` with the `:gen_tcp.controlling_process/2`, and the `RTMP.Source` will start reading packets from the socket.
+  The bin requires the RTMP client to be already connected to the socket.
+  The socket passed to the bin must be in non-active mode (`active` set to `false`).
+  When the `RTMP.Source` is initialized the bin sends `t:Membrane.RTMP.Source.rtmp_source_initialized_t/0` notification.
+  Then, the control of the socket should be granted to the `RTMP.Source` with the `:gen_tcp.controlling_process/2`,
+  and the `RTMP.Source` will start reading packets from the socket.
 
-  The bin allows for providing custom validator module, that verifies some of the RTMP messages. The module has do implement the `Membrane.RTMP.MessageValidator` behaviour.
+  The bin allows for providing custom validator module, that verifies some of the RTMP messages.
+  The module has to implement the `Membrane.RTMP.MessageValidator` behaviour.
   """
   use Membrane.Bin
 
@@ -29,8 +34,10 @@ defmodule Membrane.RTMP.SourceBin do
 
   def_options socket: [
                 spec: :gen_tcp.socket(),
-                description:
-                  "Socket, on which the bin will receive RTMP stream. The socket will be passed to the `RTMP.Source`. The socket must be already connected to the RTMP client and be in non-active mode (`active` set to `false`). "
+                description: """
+                Socket, on which the bin will receive RTMP stream. The socket will be passed to the `RTMP.Source`.
+                The socket must be already connected to the RTMP client and be in non-active mode (`active` set to `false`).
+                """
               ],
               validator: [
                 spec: Membrane.RTMP.StreamValidator,

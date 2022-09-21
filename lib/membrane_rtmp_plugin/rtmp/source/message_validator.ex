@@ -2,7 +2,8 @@ defmodule Membrane.RTMP.MessageValidator do
   @moduledoc """
   Behaviour module for implementing RTMP Message validators.
 
-  Allows for verifying some of the RTMP messages. To create a custom validator module use the `__using__/1` macro and override the specific callbacks. By default all other messages will be allowed.
+  Allows for verifying some of the RTMP messages. To create a custom validator module `use MessageValidator`
+  and override the specific callbacks. By default all other messages will be allowed.
   """
   alias Membrane.RTMP.Messages
 
