@@ -191,11 +191,8 @@ defmodule Membrane.RTMP.MessageHandler do
 
   defp get_media_buffers(rtmp_header, data, state) do
     payload =
-      if state.header_sent? do
-        <<>>
-      else
-        get_flv_header()
-      end <> get_flv_body(rtmp_header, data)
+      get_flv_body(rtmp_header, data)
+      |> (&if(state.header_sent?, do: &1, else: get_flv_header() <> &1)).()
 
     buffers = [%Buffer{payload: payload} | state.buffers]
     %{state | header_sent?: true, buffers: buffers}
@@ -244,7 +241,7 @@ defmodule Membrane.RTMP.MessageHandler do
   #
   # Once we hit `:need_more_data` the function returns the list of parsed messages and the message_parser then is ready
   # to receive more data to continue with emitting new messages.
-  @spec parse_packet_messages(packet :: binary(), message_parser :: struct(), [any()]) ::
+  @spec parse_packet_messages(packet :: binary(), message_parser :: struct(), [{any(), any()}]) ::
           {[Message.t()], message_parser :: struct()}
   def parse_packet_messages(packet, message_parser, messages \\ [])
 

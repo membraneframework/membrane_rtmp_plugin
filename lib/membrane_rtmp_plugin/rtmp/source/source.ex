@@ -44,6 +44,8 @@ defmodule Membrane.RTMP.Source do
        message_parser: MessageParser.init(Handshake.init_server()),
        receiver_pid: nil,
        socket_ready?: false,
+       # how many times the Source tries to get control of the socket
+       socket_retries: 3,
        # epoch required for performing a handshake with the pipeline
        epoch: 0
      })}
@@ -103,7 +105,12 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_other(:start_receiving, _ctx, state) do
+  def handle_other(:start_receiving, _ctx, %{socket_retries: 0} = state) do
+    Membrane.Logger.warn("Failed to take control of the socket")
+    {:ok, state}
+  end
+
+  def handle_other(:start_receiving, _ctx, %{socket_retries: retries} = state) do
     case :gen_tcp.controlling_process(state.socket, state.receiver_pid) do
       :ok ->
         :ok = :inet.setopts(state.socket, active: :once)
@@ -111,7 +118,7 @@ defmodule Membrane.RTMP.Source do
 
       {:error, :not_owner} ->
         Process.send_after(self(), :start_receiving, 200)
-        {:ok, state}
+        {:ok, %{state | socket_retries: retries - 1}}
     end
   end
 
