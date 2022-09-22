@@ -140,30 +140,34 @@ defmodule Membrane.RTMP.MessageParser do
   end
 
   defp read_frame(packet, previous_headers, chunk_size) do
-    {%Header{body_size: body_size} = header, rest} = Header.deserialize(packet, previous_headers)
+    case Header.deserialize(packet, previous_headers) do
+      {%Header{body_size: body_size} = header, rest} ->
+        chunked_body_size =
+          if body_size > chunk_size do
+            # if a message's body is greater than the chunk size then
+            # after every chunk_size's bytes there is a 0x03 one byte header that
+            # needs to be stripped and is not counted into the body_size
+            headers_to_strip = div(body_size - 1, chunk_size)
 
-    chunked_body_size =
-      if body_size > chunk_size do
-        # if a message's body is greater than the chunk size then
-        # after every chunk_size's bytes there is a 0x03 one byte header that
-        # needs to be stripped and is not counted into the body_size
-        headers_to_strip = div(body_size - 1, chunk_size)
+            body_size + headers_to_strip
+          else
+            body_size
+          end
 
-        body_size + headers_to_strip
-      else
-        body_size
-      end
+        if chunked_body_size <= byte_size(rest) do
+          <<body::binary-size(chunked_body_size), rest::binary>> = rest
 
-    if chunked_body_size <= byte_size(rest) do
-      <<body::binary-size(chunked_body_size), rest::binary>> = rest
+          combined_body = combine_body_chunks(body, chunk_size)
 
-      combined_body = combine_body_chunks(body, chunk_size)
+          message = Message.deserialize_message(header.type_id, combined_body)
 
-      message = Message.deserialize_message(header.type_id, combined_body)
+          {header, message, rest}
+        else
+          :need_more_data
+        end
 
-      {header, message, rest}
-    else
-      :need_more_data
+      :need_more_data ->
+        :need_more_data
     end
   end
 

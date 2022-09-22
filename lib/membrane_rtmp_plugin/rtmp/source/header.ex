@@ -36,6 +36,10 @@ defmodule Membrane.RTMP.Header do
   @header_type_2 <<0x2::2>>
   @header_type_3 <<0x3::2>>
 
+  @header_type_0_size 11
+  @header_type_1_size 7
+  @header_type_2_size 3
+
   @spec new(Keyword.t()) :: t()
   def new(opts) do
     chunk_stream_id = Keyword.fetch!(opts, :chunk_stream_id)
@@ -63,7 +67,7 @@ defmodule Membrane.RTMP.Header do
   * `0b10` - same as above plus derives `type_id` and `body_size`
   * `0b11` - all values are derived from the previous header with the same `chunk_stream_id`
   """
-  @spec deserialize(binary(), t() | nil) :: {t(), rest :: binary()} | :error
+  @spec deserialize(binary(), t() | nil) :: {t(), rest :: binary()} | :need_more_data | :error
   def deserialize(binary, previous_headers \\ nil)
 
   # only the deserialization of the 0b00 type can have `nil` previous header
@@ -128,6 +132,18 @@ defmodule Membrane.RTMP.Header do
 
     {header, rest}
   end
+
+  def deserialize(<<@header_type_0::bitstring, _chunk_stream_id::6, rest::binary>>, _prev_header)
+      when byte_size(rest) < @header_type_0_size,
+      do: :need_more_data
+
+  def deserialize(<<@header_type_1::bitstring, _chunk_stream_id::6, rest::binary>>, _prev_header)
+      when byte_size(rest) < @header_type_1_size,
+      do: :need_more_data
+
+  def deserialize(<<@header_type_2::bitstring, _chunk_stream_id::6, rest::binary>>, _prev_header)
+      when byte_size(rest) < @header_type_2_size,
+      do: :need_more_data
 
   def deserialize(_binary, _prev_header), do: :error
 
