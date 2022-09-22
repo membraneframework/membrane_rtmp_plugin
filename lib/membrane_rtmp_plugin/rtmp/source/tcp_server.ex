@@ -11,7 +11,7 @@ defmodule Membrane.RTMP.Source.TcpServer do
 
   @enforce_keys [:port, :listen_options, :socket_handler]
 
-  defstruct @enforce_keys
+  defstruct @enforce_keys ++ [:parent]
 
   @typedoc """
   Defines options for the TCP server.
@@ -22,17 +22,19 @@ defmodule Membrane.RTMP.Source.TcpServer do
   @type t :: %__MODULE__{
           port: :inet.port_number(),
           listen_options: [:inet.inet_backend() | :gen_tcp.listen_option()],
-          socket_handler: (:gen_tcp.socket() -> {:ok, pid} | {:error, reason :: any()})
+          socket_handler: (:gen_tcp.socket() -> {:ok, pid} | {:error, reason :: any()}),
+          parent: pid()
         }
 
   @spec start_link(t()) :: {:ok, pid}
   def start_link(options) do
-    Task.start_link(__MODULE__, :run, [Map.from_struct(options)])
+    Task.start_link(__MODULE__, :run, [options])
   end
 
-  @spec run(map()) :: nil
+  @spec run(t()) :: nil
   def run(options) do
     {:ok, socket} = :gen_tcp.listen(options.port, options.listen_options)
+    if options.parent, do: send(options.parent, {:tcp_server_started, socket})
 
     accept_loop(socket, options.socket_handler)
   end

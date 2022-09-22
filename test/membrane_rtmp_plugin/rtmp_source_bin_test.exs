@@ -17,8 +17,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   @audio_frame_duration_ms 23
 
   test "SourceBin outputs the correct number of audio and video buffers" do
-    port = 9000
-    {:ok, _tcp_server} = start_tcp_server(port)
+    {:ok, port} = start_tcp_server()
 
     ffmpeg_task =
       Task.async(fn ->
@@ -52,8 +51,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   end
 
   test "Correct Stream ID is correctly verified" do
-    port = 9002
-    {:ok, _tcp_server} = start_tcp_server(port, Membrane.RTMP.Source.TestVerifier)
+    {:ok, port} = start_tcp_server(Membrane.RTMP.Source.TestVerifier)
 
     ffmpeg_task =
       Task.async(fn ->
@@ -72,8 +70,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   end
 
   test "Wrong Stream ID is denied" do
-    port = 9004
-    {:ok, _tcp_server} = start_tcp_server(port, Membrane.RTMP.Source.TestVerifier)
+    {:ok, port} = start_tcp_server(Membrane.RTMP.Source.TestVerifier)
 
     ffmpeg_task =
       Task.async(fn ->
@@ -94,11 +91,11 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     assert :error = Task.await(ffmpeg_task)
   end
 
-  defp start_tcp_server(port, verifier \\ Membrane.RTMP.DefaultValidator) do
+  defp start_tcp_server(verifier \\ Membrane.RTMP.DefaultValidator) do
     test_process = self()
 
     options = %TcpServer{
-      port: port,
+      port: 0,
       listen_options: [
         :binary,
         packet: :raw,
@@ -113,10 +110,16 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
         ]
 
         Testing.Pipeline.start_link(options)
-      end
+      end,
+      parent: test_process
     }
 
-    TcpServer.start_link(options)
+    {:ok, _tcp_server} = TcpServer.start_link(options)
+
+    receive do
+      {:tcp_server_started, socket} ->
+        :inet.port(socket)
+    end
   end
 
   defp get_stream_url(port, key \\ nil) do
