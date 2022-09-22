@@ -1,5 +1,5 @@
 defmodule Membrane.RTMP.SourceBin.IntegrationTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   import Membrane.Testing.Assertions
 
@@ -9,39 +9,21 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   alias Membrane.Testing
 
   @input_file "test/fixtures/testsrc.flv"
-  @port 1935
   @local_ip "127.0.0.1"
   @stream_key "ala2137"
-  @rtmp_stream_url "rtmp://#{@local_ip}:#{@port}/app/#{@stream_key}"
 
   @stream_length_ms 3000
   @video_frame_duration_ms 42
   @audio_frame_duration_ms 23
 
   test "SourceBin outputs the correct number of audio and video buffers" do
-    test_process = self()
+    port = 9000
+    {:ok, _tcp_server} = start_tcp_server(port)
 
-    options = %TcpServer{
-      port: @port,
-      listen_options: [
-        :binary,
-        packet: :raw,
-        active: false,
-        ip: @local_ip |> String.to_charlist() |> :inet.parse_address() |> elem(1)
-      ],
-      socket_handler: fn socket ->
-        options = [
-          module: Membrane.RTMP.Source.TestPipeline,
-          custom_args: [socket: socket, test_process: test_process],
-          test_process: test_process
-        ]
-
-        Testing.Pipeline.start_link(options)
-      end
-    }
-
-    {:ok, _tcp_server} = TcpServer.start_link(options)
-    ffmpeg_task = Task.async(&start_ffmpeg/0)
+    ffmpeg_task =
+      Task.async(fn ->
+        get_stream_url(port) |> start_ffmpeg()
+      end)
 
     pipeline = await_pipeline_started()
 
@@ -69,7 +51,80 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     assert :ok = Task.await(ffmpeg_task)
   end
 
-  defp start_ffmpeg() do
+  test "Correct Stream ID is correctly verified" do
+    port = 9002
+    {:ok, _tcp_server} = start_tcp_server(port, Membrane.RTMP.Source.TestVerifier)
+
+    ffmpeg_task =
+      Task.async(fn ->
+        get_stream_url(port, @stream_key) |> start_ffmpeg()
+      end)
+
+    pipeline = await_pipeline_started()
+    assert_pipeline_playback_changed(pipeline, :prepared, :playing)
+
+    assert_end_of_stream(pipeline, :audio_sink, :input, @stream_length_ms + 500)
+    assert_end_of_stream(pipeline, :video_sink, :input)
+
+    # Cleanup
+    Testing.Pipeline.terminate(pipeline, blocking?: true)
+    assert :ok = Task.await(ffmpeg_task)
+  end
+
+  test "Wrong Stream ID is denied" do
+    port = 9004
+    {:ok, _tcp_server} = start_tcp_server(port, Membrane.RTMP.Source.TestVerifier)
+
+    ffmpeg_task =
+      Task.async(fn ->
+        get_stream_url(port, @stream_key <> "wrong") |> start_ffmpeg()
+      end)
+
+    pipeline = await_pipeline_started()
+    assert_pipeline_playback_changed(pipeline, :prepared, :playing)
+
+    assert_pipeline_notified(
+      pipeline,
+      :src,
+      {:rtmp_stream_validation_failed, _socket, "wrong stream key"}
+    )
+
+    # Cleanup
+    Testing.Pipeline.terminate(pipeline, blocking?: true)
+    assert :error = Task.await(ffmpeg_task)
+  end
+
+  defp start_tcp_server(port, verifier \\ Membrane.RTMP.DefaultValidator) do
+    test_process = self()
+
+    options = %TcpServer{
+      port: port,
+      listen_options: [
+        :binary,
+        packet: :raw,
+        active: false,
+        ip: @local_ip |> String.to_charlist() |> :inet.parse_address() |> elem(1)
+      ],
+      socket_handler: fn socket ->
+        options = [
+          module: Membrane.RTMP.Source.TestPipeline,
+          custom_args: [socket: socket, test_process: test_process, verifier: verifier],
+          test_process: test_process
+        ]
+
+        Testing.Pipeline.start_link(options)
+      end
+    }
+
+    TcpServer.start_link(options)
+  end
+
+  defp get_stream_url(port, key \\ nil) do
+    "rtmp://#{@local_ip}:#{port}" <>
+      if key, do: "/app/" <> key, else: ""
+  end
+
+  defp start_ffmpeg(stream_url) do
     import FFmpex
     use FFmpex.Options
     Logger.debug("Starting ffmpeg")
@@ -79,7 +134,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
       |> add_global_option(option_y())
       |> add_input_file(@input_file)
       |> add_file_option(option_re())
-      |> add_output_file(@rtmp_stream_url)
+      |> add_output_file(stream_url)
       |> add_file_option(option_f("flv"))
       |> add_file_option(option_vcodec("copy"))
       |> add_file_option(option_acodec("copy"))

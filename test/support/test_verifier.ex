@@ -1,4 +1,4 @@
-defmodule Membrane.RTMP.Source.TestValidator do
+defmodule Membrane.RTMP.Source.TestVerifier do
   @moduledoc false
   use Membrane.RTMP.MessageValidator
 

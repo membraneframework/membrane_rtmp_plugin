@@ -91,6 +91,15 @@ defmodule Membrane.RTMP.SourceBin do
     {{:ok, [notify: notification]}, state}
   end
 
+  def handle_notification(
+        {:rtmp_stream_validation_failed, _socket, _reason} = notification,
+        :src,
+        _ctx,
+        state
+      ) do
+    {{:ok, [notify: notification]}, state}
+  end
+
   @spec pass_control(:gen_tcp.socket(), pid) :: :ok | {:error, atom}
   def pass_control(socket, source) do
     :gen_tcp.controlling_process(socket, source)

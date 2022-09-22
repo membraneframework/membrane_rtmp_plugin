@@ -8,12 +8,12 @@ defmodule Membrane.RTMP.Source.TestPipeline do
   alias Membrane.Testing
 
   @impl true
-  def handle_init(socket: socket, test_process: test_process) do
+  def handle_init(socket: socket, test_process: test_process, verifier: verifier) do
     spec = %Membrane.ParentSpec{
       children: [
         src: %SourceBin{
           socket: socket,
-          validator: Membrane.RTMP.Source.TestValidator
+          validator: verifier
         },
         audio_sink: Testing.Sink,
         video_sink: Testing.Sink
@@ -38,6 +38,10 @@ defmodule Membrane.RTMP.Source.TestPipeline do
       ) do
     send(self(), notification)
 
+    {:ok, state}
+  end
+
+  def handle_notification(_notification, _child, _ctx, state) do
     {:ok, state}
   end
 

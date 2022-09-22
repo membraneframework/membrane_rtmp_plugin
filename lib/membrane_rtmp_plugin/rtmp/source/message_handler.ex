@@ -31,8 +31,9 @@ defmodule Membrane.RTMP.MessageHandler do
       do_handle_client_message(message, header, acc)
     end)
     |> case do
-      {:error, _reason} = error ->
-        raise error
+      {:error, reason} ->
+        :gen_tcp.shutdown(state.socket, :read_write)
+        Map.put(state, :validation_error, reason)
 
       state ->
         request_packet(state.socket)
