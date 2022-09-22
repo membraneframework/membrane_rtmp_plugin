@@ -30,6 +30,8 @@ UNIFEX_TERM try_connect(UnifexEnv *env, State *state) {
     int av_err = avio_open(&state->output_ctx->pb, rtmp_url, AVIO_FLAG_WRITE);
     if (av_err == AVERROR(ECONNREFUSED)) {
       return try_connect_result_error_econnrefused(env);
+    } else if (av_err == AVERROR(ETIMEDOUT)) {
+      return try_connect_result_error_etimedout(env);
     } else if (av_err < 0) {
       return try_connect_result_error(env, av_err2str(av_err));
     }

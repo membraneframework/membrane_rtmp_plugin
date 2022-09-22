@@ -177,7 +177,7 @@ defmodule Membrane.RTMP.Sink do
         demands = ctx.pads |> Map.keys() |> Enum.map(&{:demand, &1})
         {{:ok, [{:playback_change, :resume} | demands]}, state}
 
-      {:error, :econnrefused} ->
+      {:error, error} when error in [:econnrefused, :etimedout] ->
         Process.send_after(self(), :try_connect, @connection_attempt_interval)
 
         Membrane.Logger.warn(
