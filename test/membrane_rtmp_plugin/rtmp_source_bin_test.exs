@@ -83,7 +83,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     assert_pipeline_notified(
       pipeline,
       :src,
-      {:rtmp_stream_validation_failed, _socket, "wrong stream key"}
+      {:stream_validation_failed, "wrong stream key"}
     )
 
     # Cleanup

@@ -9,12 +9,14 @@ defmodule Membrane.RTMP.SourceBin do
 
   The bin requires the RTMP client to be already connected to the socket.
   The socket passed to the bin must be in non-active mode (`active` set to `false`).
-  When the `RTMP.Source` is initialized the bin sends `t:Membrane.RTMP.Source.rtmp_source_initialized_t/0` notification.
-  Then, the control of the socket should be granted to the `RTMP.Source` with the `:gen_tcp.controlling_process/2`,
-  and the `RTMP.Source` will start reading packets from the socket.
+
+  When the `Membrane.RTMP.Source` is initialized the bin sends `t:Membrane.RTMP.Source.socket_control_needed_t/0` notification.
+  Then, the control of the socket should be immediately granted to the `Source` with the `pass_control/2`,
+  and the `Source` will start reading packets from the socket.
 
   The bin allows for providing custom validator module, that verifies some of the RTMP messages.
   The module has to implement the `Membrane.RTMP.MessageValidator` behaviour.
+  If the validation fails, a `t:Membrane.RTMP.Source.stream_validation_failed_t/0` notification is sent.
   """
   use Membrane.Bin
 
@@ -83,7 +85,7 @@ defmodule Membrane.RTMP.SourceBin do
 
   @impl true
   def handle_notification(
-        {:rtmp_source_initialized, _socket, _pid} = notification,
+        {:socket_control_needed, _socket, _pid} = notification,
         :src,
         _ctx,
         state
@@ -92,7 +94,7 @@ defmodule Membrane.RTMP.SourceBin do
   end
 
   def handle_notification(
-        {:rtmp_stream_validation_failed, _socket, _reason} = notification,
+        {:stream_validation_failed, _reason} = notification,
         :src,
         _ctx,
         state
@@ -100,6 +102,11 @@ defmodule Membrane.RTMP.SourceBin do
     {{:ok, [notify: notification]}, state}
   end
 
+  @doc """
+  Passes the control of the socket to the `source`.
+
+  To succeed, the executing process must be in control of the socket, otherwise `{:error, :not_owner}` is returned.
+  """
   @spec pass_control(:gen_tcp.socket(), pid) :: :ok | {:error, atom}
   def pass_control(socket, source) do
     :gen_tcp.controlling_process(socket, source)

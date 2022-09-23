@@ -2,7 +2,13 @@ defmodule Membrane.RTMP.Source do
   @moduledoc """
   Membrane Element for receiving an RTMP stream. Acts as a RTMP Server.
 
-  Upon initialization, the source sends `:rtmp_source_initialized` notification, upon which it should be granted the control over the `socket` via `:gen_tcp.controlling_process/2`.
+  When initializing, the source sends `t:socket_control_needed_t/0` notification,
+  upon which it should be granted the control over the `socket` via `:gen_tcp.controlling_process/2`.
+
+  The Source allows for providing custom validator module, that verifies some of the RTMP messages.
+  The module has to implement the `Membrane.RTMP.MessageValidator` behaviour.
+  If the validation fails, a `t:stream_validation_failed_t/0` notification is sent.
+
   This implementation is limited to only AAC and H264 streams.
   """
   use Membrane.Source
@@ -23,7 +29,7 @@ defmodule Membrane.RTMP.Source do
                 """
               ],
               validator: [
-                spec: Membrane.RTMP.StreamValidator,
+                spec: Membrane.RTMP.MessageValidator,
                 description: """
                 A Module implementing `Membrane.RTMP.MessageValidator` behaviour, used for validating the stream.
                 """
@@ -32,11 +38,15 @@ defmodule Membrane.RTMP.Source do
   @typedoc """
   Notification sent when the RTMP Source element is initialized and it should be granted control over the socket using `:gen_tcp.controlling_process/2`.
   """
-  @type rtmp_source_initialized_t() :: {:rtmp_source_initialized, :gen_tcp.socket(), pid()}
+  @type socket_control_needed_t() :: {:socket_control_needed, :gen_tcp.socket(), pid()}
+  @typedoc """
+  Notification sent when the validator denies incoming RTMP stream.
+  """
+  @type stream_validation_failed_t() :: {:stream_validation_failed, String.t()}
 
   @impl true
   def handle_init(%__MODULE__{} = opts) do
-    {{:ok, [notify: {:rtmp_source_initialized, opts.socket, self()}]},
+    {{:ok, [notify: {:socket_control_needed, opts.socket, self()}]},
      Map.from_struct(opts)
      |> Map.merge(%{
        buffers: [],
@@ -149,7 +159,7 @@ defmodule Membrane.RTMP.Source do
     case state do
       %{validation_error: reason} ->
         state = %{state | buffers: [], socket_ready?: false} |> Map.delete(:validation_error)
-        {[notify: {:rtmp_stream_validation_failed, state.socket, reason}], state}
+        {[notify: {:stream_validation_failed, reason}], state}
 
       %{buffers: [_buf | _rest] = buffers} ->
         {[buffer: {:output, Enum.reverse(buffers)}], %{state | buffers: []}}

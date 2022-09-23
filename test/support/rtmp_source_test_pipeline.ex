@@ -31,7 +31,7 @@ defmodule Membrane.RTMP.Source.TestPipeline do
 
   @impl true
   def handle_notification(
-        {:rtmp_source_initialized, _socket, _source} = notification,
+        {:socket_control_needed, _socket, _source} = notification,
         :src,
         _ctx,
         state
@@ -46,7 +46,7 @@ defmodule Membrane.RTMP.Source.TestPipeline do
   end
 
   @impl true
-  def handle_other({:rtmp_source_initialized, socket, source} = notification, _ctx, state) do
+  def handle_other({:socket_control_needed, socket, source} = notification, _ctx, state) do
     case SourceBin.pass_control(socket, source) do
       :ok ->
         :ok
