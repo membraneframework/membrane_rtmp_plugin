@@ -156,8 +156,6 @@ defmodule Membrane.RTMP.Handshake do
     %State{step: nil}
   end
 
-  Spec
-
   @doc """
   Initializes handshake process as a client.
   """

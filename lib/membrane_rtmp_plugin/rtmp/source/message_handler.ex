@@ -222,7 +222,7 @@ defmodule Membrane.RTMP.MessageHandler do
     chunk_stream_id = Keyword.get(opts, :chunk_stream_id, 2)
 
     header =
-      [chunk_stream_id: 2, type_id: type, body_size: byte_size(body)]
+      [chunk_stream_id: chunk_stream_id, type_id: type, body_size: byte_size(body)]
       |> Keyword.merge(opts)
       |> Header.new()
       |> Header.serialize()
