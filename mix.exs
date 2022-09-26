@@ -1,7 +1,7 @@
 defmodule Membrane.RTMP.Mixfile do
   use Mix.Project
 
-  @version "0.6.1"
+  @version "0.7.0"
   @github_url "https://github.com/membraneframework/membrane_rtmp_plugin"
 
   def project do
