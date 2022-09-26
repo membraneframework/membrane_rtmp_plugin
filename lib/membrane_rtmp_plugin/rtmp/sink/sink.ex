@@ -44,8 +44,7 @@ defmodule Membrane.RTMP.Sink do
                 This URL should be provided by your streaming service."
               ],
               max_attempts: [
-                type: :integer,
-                spec: pos_integer(),
+                spec: pos_integer() | :infinity,
                 default: 1,
                 description: """
                 Maximum number of connection attempts before failing with an error.
@@ -59,7 +58,8 @@ defmodule Membrane.RTMP.Sink do
       raise ArgumentError, "Invalid destination URL provided"
     end
 
-    unless is_integer(options.max_attempts) and options.max_attempts >= 1 do
+    unless options.max_attempts == :infinity or
+             (is_integer(options.max_attempts) and options.max_attempts >= 1) do
       raise ArgumentError, "Invalid max_attempts option value: #{options.max_attempts}"
     end
 
@@ -164,7 +164,7 @@ defmodule Membrane.RTMP.Sink do
 
   @impl true
   def handle_other(:try_connect, _ctx, %{attempts: attempts, max_attempts: max_attempts} = state)
-      when attempts >= max_attempts do
+      when max_attempts != :infinity and attempts >= max_attempts do
     raise "Failed to connect to '#{state.rtmp_url}' #{attempts} times, aborting"
   end
 
