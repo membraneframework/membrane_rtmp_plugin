@@ -8,6 +8,7 @@ spec create(rtmp_url :: string) :: {:ok :: label, state} | {:error :: label, rea
 spec try_connect(state) ::
        (:ok :: label)
        | {:error :: label, :econnrefused :: label}
+       | {:error :: label, :etimedout :: label}
        | {:error :: label, reason :: string}
 
 spec finalize_stream(state) :: :ok :: label
