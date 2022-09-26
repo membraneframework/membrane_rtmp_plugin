@@ -1,4 +1,4 @@
-defmodule Membrane.AVC.Utils do
+defmodule Membrane.RTMP.AVC.Utils do
   @moduledoc false
 
   @spec to_annex_b(binary()) :: binary()

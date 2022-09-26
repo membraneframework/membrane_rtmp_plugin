@@ -10,7 +10,9 @@ defmodule Membrane.RTMP.Source do
   require Membrane.Logger
 
   alias __MODULE__.Native
-  alias Membrane.{AVC, Buffer, Time}
+  alias Membrane.{Buffer, Time}
+
+  alias Membrane.RTMP.AVC.Utils
 
   def_output_pad :audio,
     availability: :always,
@@ -110,7 +112,7 @@ defmodule Membrane.RTMP.Source do
     {:ok, %{state | provider: nil}}
   end
 
-  defp prepare_payload(:video, payload), do: AVC.Utils.to_annex_b(payload)
+  defp prepare_payload(:video, payload), do: Utils.to_annex_b(payload)
   defp prepare_payload(:audio, payload), do: payload
 
   defp get_format_info_actions(native) do
