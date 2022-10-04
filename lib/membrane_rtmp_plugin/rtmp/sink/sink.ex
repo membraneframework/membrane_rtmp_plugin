@@ -211,6 +211,7 @@ defmodule Membrane.RTMP.Sink do
            state.native,
            buffer.payload,
            buffer.dts,
+           if(buffer.pts not in [nil, 0], do: buffer.pts, else: buffer.dts),
            buffer.metadata.h264.key_frame?
          ) do
       {:ok, native} ->
