@@ -166,7 +166,7 @@ defmodule Membrane.RTMP.MessageParser do
           :need_more_data
         end
 
-      :need_more_data ->
+      {:error, :need_more_data} ->
         :need_more_data
     end
   end

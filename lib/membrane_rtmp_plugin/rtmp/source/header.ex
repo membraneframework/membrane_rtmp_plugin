@@ -1,8 +1,8 @@
 defmodule Membrane.RTMP.Header do
   @moduledoc false
 
-  @enforce_keys ~w(chunk_stream_id timestamp type_id stream_id)a
-  defstruct [body_size: 0] ++ @enforce_keys
+  @enforce_keys [:chunk_stream_id, :type_id]
+  defstruct @enforce_keys ++ [body_size: 0, timestamp: 0, stream_id: 0]
 
   @typedoc """
   RTMP header structure.
@@ -42,19 +42,7 @@ defmodule Membrane.RTMP.Header do
 
   @spec new(Keyword.t()) :: t()
   def new(opts) do
-    chunk_stream_id = Keyword.fetch!(opts, :chunk_stream_id)
-    timestamp = Keyword.get(opts, :timestamp, 0)
-    body_size = Keyword.get(opts, :body_size, 0)
-    type_id = Keyword.fetch!(opts, :type_id)
-    stream_id = Keyword.get(opts, :stream_id, 0)
-
-    %__MODULE__{
-      chunk_stream_id: chunk_stream_id,
-      timestamp: timestamp,
-      body_size: body_size,
-      type_id: type_id,
-      stream_id: stream_id
-    }
+    struct!(__MODULE__, opts)
   end
 
   @doc """
@@ -67,7 +55,7 @@ defmodule Membrane.RTMP.Header do
   * `0b10` - same as above plus derives `type_id` and `body_size`
   * `0b11` - all values are derived from the previous header with the same `chunk_stream_id`
   """
-  @spec deserialize(binary(), t() | nil) :: {t(), rest :: binary()} | :need_more_data | :error
+  @spec deserialize(binary(), t() | nil) :: {t(), rest :: binary()} | {:error, :need_more_data}
   def deserialize(binary, previous_headers \\ nil)
 
   # only the deserialization of the 0b00 type can have `nil` previous header
@@ -144,8 +132,6 @@ defmodule Membrane.RTMP.Header do
   def deserialize(<<@header_type_2::bitstring, _chunk_stream_id::6, rest::binary>>, _prev_header)
       when byte_size(rest) < @header_type_2_size,
       do: :need_more_data
-
-  def deserialize(_binary, _prev_header), do: :error
 
   @spec serialize(t()) :: binary()
   def serialize(%__MODULE__{} = header) do
