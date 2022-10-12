@@ -76,11 +76,11 @@ defmodule Pipeline do
   def handle_element_end_of_stream({:sink, _pad}, _ctx, state) do
     Membrane.Pipeline.terminate(self())
     send(state.parent, :pipeline_terminated)
-    {{:ok, playback: :stopped}, state}
+    {:ok, state}
   end
 
   @impl true
-  def handle_element_end_of_stream(child, _ctx, state) do
+  def handle_element_end_of_stream({_child, _pad}, _ctx, state) do
     {:ok, state}
   end
 end

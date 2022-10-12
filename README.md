@@ -19,9 +19,6 @@ def deps do
 end
 ```
 
-## Tcp Server
-The package provides `Membrane.RTMP.Source.TcpServer` module, which is a simple implementation of tcp server. It opens a tcp port and listens for incoming connections. For each new connection, a user-provided function is executed.
-
 ## SourceBin
 
 Requires a socket, which has been connected to the client. It receives RTMP stream, demuxes it and outputs H264 video and AAC audio. 
@@ -31,6 +28,9 @@ After establishing connection with server it waits to receive video and audio st
 Currently only the following codecs are supported:
 - H264 for video
 - AAC for audio
+
+## Tcp Server
+It's a simple implementation of tcp server. It opens a tcp port and listens for incoming connections. For each new connection, a user-provided function is executed.
 
 ### Prerequisites
 In order to successfully build and install the plugin, you need to have **ffmpeg == 4.4** installed on your system
