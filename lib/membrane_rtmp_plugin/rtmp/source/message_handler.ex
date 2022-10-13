@@ -1,6 +1,10 @@
 defmodule Membrane.RTMP.MessageHandler do
   @moduledoc false
 
+  # Module responsible for processing the RTMP messages
+  # Appropriate responses are sent to the messages received during the initialization phase
+  # The data received in video and audio is forwarded to the outputs
+
   require Membrane.Logger
 
   alias Membrane.{Buffer, Logger}
@@ -51,12 +55,9 @@ defmodule Membrane.RTMP.MessageHandler do
   # 7. [in] release stream -> [out] _result response
   # 8. [in] publish -> [out] user control with stream id, publish success
   # 9. CONNECTED
-  defp do_handle_client_message(%Messages.Audio{data: data}, header, state) do
-    state = get_media_buffers(header, data, state)
-    {:cont, state}
-  end
 
-  defp do_handle_client_message(%Messages.Video{data: data}, header, state) do
+  defp do_handle_client_message(%module{data: data}, header, state)
+       when module in [Messages.Audio, Messages.Video] do
     state = get_media_buffers(header, data, state)
     {:cont, state}
   end
@@ -75,19 +76,15 @@ defmodule Membrane.RTMP.MessageHandler do
   defp do_handle_client_message(%Messages.Connect{}, _header, state) do
     chunk_size = state.message_parser.chunk_size
 
-    %Messages.WindowAcknowledgement{size: @windows_acknowledgment_size}
-    |> send_rtmp_payload(state.socket, chunk_size)
-
-    %Messages.SetPeerBandwidth{size: @peer_bandwidth_size}
-    |> send_rtmp_payload(state.socket, chunk_size)
-
-    # stream begin type
-    %Messages.UserControl{event_type: 0x00, data: <<0, 0, 0, 0>>}
-    |> send_rtmp_payload(state.socket, chunk_size)
-
-    # by default the ffmpeg server uses 128 chunk size
-    %Messages.SetChunkSize{chunk_size: chunk_size}
-    |> send_rtmp_payload(state.socket, chunk_size)
+    [
+      %Messages.WindowAcknowledgement{size: @windows_acknowledgment_size},
+      %Messages.SetPeerBandwidth{size: @peer_bandwidth_size},
+      # stream begin type
+      %Messages.UserControl{event_type: 0x00, data: <<0, 0, 0, 0>>},
+      # by default the ffmpeg server uses 128 chunk size
+      %Messages.SetChunkSize{chunk_size: chunk_size}
+    ]
+    |> Enum.each(&send_rtmp_payload(&1, state.socket, chunk_size))
 
     {[tx_id], message_parser} = MessageParser.generate_tx_ids(state.message_parser, 1)
 

@@ -36,7 +36,7 @@ defmodule Membrane.RTMP.MessageParser do
     %__MODULE__{
       state_machine: :handshake,
       buffer: <<>>,
-      # previous_headers keeps previous header for each of the stream chunks
+      # previous header for each of the stream chunks
       previous_headers: %{},
       chunk_size: chunk_size,
       handshake: handshake
@@ -51,7 +51,7 @@ defmodule Membrane.RTMP.MessageParser do
   """
   @spec generate_tx_ids(t(), n :: non_neg_integer()) :: {list(non_neg_integer()), t()}
   def generate_tx_ids(%__MODULE__{current_tx_id: tx_id} = message_parser, n) when n > 0 do
-    tx_ids = Enum.map(1..n, &(tx_id + &1 - 1))
+    tx_ids = Enum.to_list(tx_id..(tx_id + n - 1))
 
     {tx_ids, %{message_parser | current_tx_id: tx_id + n}}
   end
@@ -68,7 +68,7 @@ defmodule Membrane.RTMP.MessageParser do
     payload = buffer <> packet
 
     case read_frame(payload, state.previous_headers, chunk_size) do
-      :need_more_data ->
+      {:error, :need_more_data} ->
         {:need_more_data, %__MODULE__{state | buffer: payload}}
 
       {header, message, rest} ->
@@ -129,7 +129,7 @@ defmodule Membrane.RTMP.MessageParser do
     payload = buffer <> packet
 
     case read_frame(payload, state.previous_headers, chunk_size) do
-      :need_more_data ->
+      {:error, :need_more_data} ->
         {:need_more_data, %__MODULE__{state | buffer: payload}}
 
       {header, message, rest} ->
@@ -163,11 +163,11 @@ defmodule Membrane.RTMP.MessageParser do
 
           {header, message, rest}
         else
-          :need_more_data
+          {:error, :need_more_data}
         end
 
-      {:error, :need_more_data} ->
-        :need_more_data
+      {:error, :need_more_data} = error ->
+        error
     end
   end
 

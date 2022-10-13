@@ -36,33 +36,29 @@ defmodule Membrane.RTMP.Message do
   }
 
   @spec deserialize_message(type_id :: integer(), binary()) :: struct()
-  def deserialize_message(type_id, payload) do
-    case type_id do
-      Header.type(:set_chunk_size) ->
-        Messages.SetChunkSize.deserialize(payload)
+  def deserialize_message(Header.type(:set_chunk_size), payload),
+    do: Messages.SetChunkSize.deserialize(payload)
 
-      Header.type(:user_control_message) ->
-        Messages.UserControl.deserialize(payload)
+  def deserialize_message(Header.type(:user_control_message), payload),
+    do: Messages.UserControl.deserialize(payload)
 
-      Header.type(:window_acknowledgement_size) ->
-        Messages.WindowAcknowledgement.deserialize(payload)
+  def deserialize_message(Header.type(:window_acknowledgement_size), payload),
+    do: Messages.WindowAcknowledgement.deserialize(payload)
 
-      Header.type(:set_peer_bandwidth) ->
-        Messages.SetPeerBandwidth.deserialize(payload)
+  def deserialize_message(Header.type(:set_peer_bandwidth), payload),
+    do: Messages.SetPeerBandwidth.deserialize(payload)
 
-      Header.type(:amf_data) ->
-        message_from_modules(payload, @amf_data_to_module, true)
+  def deserialize_message(Header.type(:amf_data), payload),
+    do: message_from_modules(payload, @amf_data_to_module, true)
 
-      Header.type(:amf_command) ->
-        message_from_modules(payload, @amf_command_to_module)
+  def deserialize_message(Header.type(:amf_command), payload),
+    do: message_from_modules(payload, @amf_command_to_module)
 
-      Header.type(:audio_message) ->
-        Messages.Audio.deserialize(payload)
+  def deserialize_message(Header.type(:audio_message), payload),
+    do: Messages.Audio.deserialize(payload)
 
-      Header.type(:video_message) ->
-        Messages.Video.deserialize(payload)
-    end
-  end
+  def deserialize_message(Header.type(:video_message), payload),
+    do: Messages.Video.deserialize(payload)
 
   @spec chunk_payload(binary(), non_neg_integer(), non_neg_integer()) :: iodata()
   def chunk_payload(paylaod, chunk_stream_id, chunk_size)
