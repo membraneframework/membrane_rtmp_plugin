@@ -5,8 +5,8 @@ defmodule Membrane.RTMP.Messages.Connect do
 
   alias Membrane.RTMP.AMF.Encoder
 
-  @enforce_keys ~w(app type supports_go_away flash_version swf_url tc_url)a
-  defstruct [tx_id: 0] ++ @enforce_keys
+  @enforce_keys [:app, :type, :supports_go_away, :flash_version, :swf_url, :tc_url]
+  defstruct @enforce_keys ++ [tx_id: 0]
 
   @type t :: %__MODULE__{
           app: String.t(),

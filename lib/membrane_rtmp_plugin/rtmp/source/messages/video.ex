@@ -3,8 +3,6 @@ defmodule Membrane.RTMP.Messages.Video do
 
   @behaviour Membrane.RTMP.Message
 
-  alias Membrane.RTMP.Messages.Serializer
-
   @enforce_keys [:data]
   defstruct @enforce_keys
 
@@ -17,7 +15,7 @@ defmodule Membrane.RTMP.Messages.Video do
     %__MODULE__{data: data}
   end
 
-  defimpl Serializer do
+  defimpl Membrane.RTMP.Messages.Serializer do
     require Membrane.RTMP.Header
 
     @impl true

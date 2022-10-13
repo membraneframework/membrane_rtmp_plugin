@@ -3,8 +3,6 @@ defmodule Membrane.RTMP.Messages.Anonymous do
 
   @behaviour Membrane.RTMP.Message
 
-  alias Membrane.RTMP.Messages.Serializer
-
   @enforce_keys [:name, :properties]
   defstruct [tx_id: nil] ++ @enforce_keys
 
@@ -23,7 +21,7 @@ defmodule Membrane.RTMP.Messages.Anonymous do
     %__MODULE__{name: name, tx_id: nil, properties: []}
   end
 
-  defimpl Serializer do
+  defimpl Membrane.RTMP.Messages.Serializer do
     require Membrane.RTMP.Header
 
     alias Membrane.RTMP.AMF.Encoder
