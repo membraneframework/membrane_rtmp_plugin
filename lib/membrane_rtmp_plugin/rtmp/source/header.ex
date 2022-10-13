@@ -123,15 +123,15 @@ defmodule Membrane.RTMP.Header do
 
   def deserialize(<<@header_type_0::bitstring, _chunk_stream_id::6, rest::binary>>, _prev_header)
       when byte_size(rest) < @header_type_0_size,
-      do: :need_more_data
+      do: {:error, :need_more_data}
 
   def deserialize(<<@header_type_1::bitstring, _chunk_stream_id::6, rest::binary>>, _prev_header)
       when byte_size(rest) < @header_type_1_size,
-      do: :need_more_data
+      do: {:error, :need_more_data}
 
   def deserialize(<<@header_type_2::bitstring, _chunk_stream_id::6, rest::binary>>, _prev_header)
       when byte_size(rest) < @header_type_2_size,
-      do: :need_more_data
+      do: {:error, :need_more_data}
 
   @spec serialize(t()) :: binary()
   def serialize(%__MODULE__{} = header) do

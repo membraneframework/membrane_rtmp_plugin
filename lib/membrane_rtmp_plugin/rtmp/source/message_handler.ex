@@ -69,8 +69,9 @@ defmodule Membrane.RTMP.MessageHandler do
     {:cont, %{state | epoch: connection_epoch}}
   end
 
-  defp do_handle_client_message(%Messages.SetChunkSize{chunk_size: _chunk_size}, _header, state) do
-    {:cont, state}
+  defp do_handle_client_message(%Messages.SetChunkSize{chunk_size: chunk_size}, _header, state) do
+    parser = %{state.message_parser | chunk_size: chunk_size}
+    {:cont, %{state | message_parser: parser}}
   end
 
   defp do_handle_client_message(%Messages.Connect{}, _header, state) do
