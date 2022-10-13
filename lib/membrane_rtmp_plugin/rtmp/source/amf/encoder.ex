@@ -35,7 +35,7 @@ defmodule Membrane.RTMP.AMF.Encoder do
   end
 
   # encode string
-  defp do_encode_object(object) when is_binary(object) and byte_size(object) < 65535 do
+  defp do_encode_object(object) when is_binary(object) and byte_size(object) < 65_535 do
     <<0x02, byte_size(object)::16, object::binary>>
   end
 

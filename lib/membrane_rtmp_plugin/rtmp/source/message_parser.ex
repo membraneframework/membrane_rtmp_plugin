@@ -90,12 +90,12 @@ defmodule Membrane.RTMP.MessageParser do
       <<step_data::binary-size(step_size), rest::binary>> = payload
 
       case Handshake.handle_step(step_data, handshake) do
-        {:cont, step, handshake} ->
+        {:continue_handshake, step, handshake} ->
           # continue with the handshake
           {step, %__MODULE__{state | buffer: rest, handshake: handshake}}
 
         # the handshake is done but with last step to return
-        {:ok, step, _handshake} ->
+        {:handshake_finished, step, _handshake} ->
           {step,
            %__MODULE__{
              state
@@ -105,7 +105,7 @@ defmodule Membrane.RTMP.MessageParser do
            }}
 
         # the handshake is done without further steps
-        {:ok, _handshake} ->
+        {:handshake_finished, _handshake} ->
           {:handshake_done,
            %__MODULE__{
              state

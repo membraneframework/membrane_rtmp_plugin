@@ -1,6 +1,8 @@
 defmodule Membrane.RTMP.Handshake.Step do
   @moduledoc false
 
+  # Describes steps in the process of RTMP handshake
+
   @enforce_keys [:data, :type]
   defstruct @enforce_keys
 

@@ -35,8 +35,9 @@ defmodule Membrane.RTMP.Handshake do
   end
 
   @spec handle_step(binary(), State.t()) ::
-          {:ok | :cont, Step.t(), State.t()}
-          | {:ok, State.t()}
+          {:continue_handshake, Step.t(), State.t()}
+          | {:handshake_finished, Step.t(), State.t()}
+          | {:handshake_finished, State.t()}
           | {:error, {:invalid_handshake_step, Step.handshake_type_t()}}
   def handle_step(step_data, state)
 
@@ -47,14 +48,14 @@ defmodule Membrane.RTMP.Handshake do
 
       step = %Step{type: :c2, data: s1}
 
-      {:ok, step, %State{step: step}}
+      {:handshake_finished, step, %State{step: step}}
     end
   end
 
   def handle_step(step_data, %State{step: %Step{type: :s0_s1_s2} = previous_step}) do
     with {:ok, next_step} <- Step.deserialize(:c2, step_data),
          :ok <- Step.verify_next_step(previous_step, next_step) do
-      {:ok, %State{step: next_step}}
+      {:handshake_finished, %State{step: next_step}}
     end
   end
 
@@ -67,7 +68,7 @@ defmodule Membrane.RTMP.Handshake do
         data: generate_c1_s1(time) <> c1
       }
 
-      {:cont, step, %State{step: step}}
+      {:continue_handshake, step, %State{step: step}}
     end
   end
 
