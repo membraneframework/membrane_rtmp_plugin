@@ -91,7 +91,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     assert :error = Task.await(ffmpeg_task)
   end
 
-  defp start_tcp_server(verifier \\ Membrane.RTMP.DefaultValidator) do
+  defp start_tcp_server(verifier \\ Membrane.RTMP.DefaultMessageValidator) do
     test_process = self()
 
     options = %TcpServer{

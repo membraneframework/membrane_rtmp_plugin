@@ -46,7 +46,7 @@ defmodule Membrane.RTMP.SourceBin do
                 description: """
                 A Module implementing `Membrane.RTMP.MessageValidator` behaviour, used for validating the stream.
                 """,
-                default: Membrane.RTMP.DefaultValidator
+                default: Membrane.RTMP.DefaultMessageValidator
               ]
 
   @impl true
