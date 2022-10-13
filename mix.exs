@@ -40,7 +40,7 @@ defmodule Membrane.RTMP.Mixfile do
     [
       {:membrane_core, "~> 0.10"},
       {:unifex, "~> 1.0"},
-      {:membrane_h264_ffmpeg_plugin, "~> 0.21"},
+      {:membrane_h264_ffmpeg_plugin, "~> 0.22"},
       {:membrane_aac_plugin, "~> 0.12"},
       {:membrane_mp4_plugin, "~> 0.16"},
       # testing
