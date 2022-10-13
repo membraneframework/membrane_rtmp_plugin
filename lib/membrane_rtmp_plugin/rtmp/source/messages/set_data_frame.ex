@@ -5,7 +5,7 @@ defmodule Membrane.RTMP.Messages.SetDataFrame do
 
   @behaviour Membrane.RTMP.Message
 
-  alias Membrane.RTMP.AMFEncoder
+  alias Membrane.RTMP.AMF.Encoder
 
   @enforce_keys [:duration, :file_size, :encoder]
   defstruct @enforce_keys ++
@@ -79,11 +79,9 @@ defmodule Membrane.RTMP.Messages.SetDataFrame do
   defimpl Membrane.RTMP.Messages.Serializer do
     require Membrane.RTMP.Header
 
-    alias Membrane.RTMP.AMFEncoder
-
     @impl true
     def serialize(%@for{} = message) do
-      AMFEncoder.encode([@for.to_map(message)])
+      Encoder.encode([@for.to_map(message)])
     end
 
     @impl true

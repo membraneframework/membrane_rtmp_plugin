@@ -26,15 +26,15 @@ defmodule Membrane.RTMP.Messages.Anonymous do
   defimpl Serializer do
     require Membrane.RTMP.Header
 
-    alias Membrane.RTMP.AMFEncoder
+    alias Membrane.RTMP.AMF.Encoder
 
     @impl true
     def serialize(%@for{name: name, tx_id: nil, properties: properties}) do
-      AMFEncoder.encode([name | properties])
+      Encoder.encode([name | properties])
     end
 
     def serialize(%@for{name: name, tx_id: tx_id, properties: properties}) do
-      AMFEncoder.encode([name, tx_id | properties])
+      Encoder.encode([name, tx_id | properties])
     end
 
     @impl true

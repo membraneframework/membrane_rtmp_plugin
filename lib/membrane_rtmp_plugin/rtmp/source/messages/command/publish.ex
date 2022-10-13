@@ -5,7 +5,7 @@ defmodule Membrane.RTMP.Messages.Publish do
 
   @behaviour Membrane.RTMP.Message
 
-  alias Membrane.RTMP.AMFEncoder
+  alias Membrane.RTMP.AMF.Encoder
 
   @enforce_keys [:stream_key, :publish_type]
   defstruct [tx_id: 0] ++ @enforce_keys
@@ -26,11 +26,9 @@ defmodule Membrane.RTMP.Messages.Publish do
   defimpl Membrane.RTMP.Messages.Serializer do
     require Membrane.RTMP.Header
 
-    alias Membrane.RTMP.AMFEncoder
-
     @impl true
     def serialize(%@for{tx_id: tx_id, stream_key: stream_key, publish_type: publish_type}) do
-      AMFEncoder.encode(["publish", tx_id, :null, stream_key, publish_type])
+      Encoder.encode(["publish", tx_id, :null, stream_key, publish_type])
     end
 
     @impl true

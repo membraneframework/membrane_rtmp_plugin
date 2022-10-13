@@ -91,7 +91,7 @@ defmodule Membrane.RTMP.Message do
 
   defp message_from_modules(payload, mapping, required? \\ false) do
     payload
-    |> Membrane.RTMP.AMFParser.parse()
+    |> Membrane.RTMP.AMF.Parser.parse()
     |> then(fn [command | _rest] = arguments ->
       if required? do
         Map.fetch!(mapping, command)

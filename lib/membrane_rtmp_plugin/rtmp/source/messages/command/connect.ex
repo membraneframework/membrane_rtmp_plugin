@@ -3,7 +3,7 @@ defmodule Membrane.RTMP.Messages.Connect do
 
   @behaviour Membrane.RTMP.Message
 
-  alias Membrane.RTMP.AMFEncoder
+  alias Membrane.RTMP.AMF.Encoder
 
   @enforce_keys ~w(app type supports_go_away flash_version swf_url tc_url)a
   defstruct [tx_id: 0] ++ @enforce_keys
@@ -42,11 +42,9 @@ defmodule Membrane.RTMP.Messages.Connect do
   defimpl Membrane.RTMP.Messages.Serializer do
     require Membrane.RTMP.Header
 
-    alias Membrane.RTMP.AMFEncoder
-
     @impl true
     def serialize(%@for{} = msg) do
-      AMFEncoder.encode([
+      Encoder.encode([
         "connect",
         msg.tx_id,
         %{

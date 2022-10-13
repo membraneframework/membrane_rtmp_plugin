@@ -1,4 +1,4 @@
-defmodule Membrane.RTMP.AMFParser do
+defmodule Membrane.RTMP.AMF.Parser do
   @moduledoc false
 
   @doc """
@@ -25,15 +25,13 @@ defmodule Membrane.RTMP.AMFParser do
   # parsing a boolean
   defp parse_value(<<0x01, boolean::8, rest::binary>>) do
     case boolean do
-      0 -> {true, rest}
-      1 -> {false, rest}
+      0 -> {false, rest}
+      1 -> {true, rest}
     end
   end
 
   # parsing a string
-  defp parse_value(<<0x02, size::16, rest::binary>>) do
-    <<string::binary-size(size), rest::binary>> = rest
-
+  defp parse_value(<<0x02, size::16, string::binary-size(size), rest::binary>>) do
     {string, rest}
   end
 
@@ -51,6 +49,10 @@ defmodule Membrane.RTMP.AMFParser do
 
   defp parse_value(<<0x08, _array_size::32, rest::binary>>) do
     parse_object_pairs(rest, [])
+  end
+
+  defp parse_value(_data) do
+    raise "Unknown data type"
   end
 
   # we reached object end

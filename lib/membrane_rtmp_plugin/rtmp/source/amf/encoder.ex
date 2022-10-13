@@ -1,5 +1,7 @@
-defmodule Membrane.RTMP.AMFEncoder do
+defmodule Membrane.RTMP.AMF.Encoder do
   @moduledoc false
+
+  # Encodes a message according to AMF0 (https://en.wikipedia.org/wiki/Action_Message_Format)
 
   @type basic_object_t :: float() | String.t() | map() | :null
   @type list_entry_t :: {key :: String.t(), basic_object_t()}
@@ -33,7 +35,7 @@ defmodule Membrane.RTMP.AMFEncoder do
   end
 
   # encode string
-  defp do_encode_object(object) when is_binary(object) do
+  defp do_encode_object(object) when is_binary(object) and byte_size(object) < 65535 do
     <<0x02, byte_size(object)::16, object::binary>>
   end
 
@@ -50,7 +52,7 @@ defmodule Membrane.RTMP.AMFEncoder do
 
   defp do_encode_object(:null), do: <<0x05>>
 
-  defp encode_key_value_pair({key, value}) do
+  defp encode_key_value_pair({<<key::binary>>, value}) do
     [<<byte_size(key)::16>>, key, do_encode_object(value)]
   end
 end
