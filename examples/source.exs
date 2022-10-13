@@ -17,7 +17,7 @@ defmodule Pipeline do
   @output_file "received.flv"
 
   @impl true
-  def handle_init(socket: socket, parent: parent) do
+  def handle_init(socket: socket) do
     spec = %ParentSpec{
       children: %{
         source: %Membrane.RTMP.SourceBin{
@@ -38,7 +38,7 @@ defmodule Pipeline do
       ]
     }
 
-    {{:ok, spec: spec, playback: :playing}, %{parent: parent}}
+    {{:ok, spec: spec, playback: :playing}, %{}}
   end
 
   # Once the source initializes, we grant it the control over the tcp socket
@@ -75,7 +75,6 @@ defmodule Pipeline do
   @impl true
   def handle_element_end_of_stream({:sink, _pad}, _ctx, state) do
     Membrane.Pipeline.terminate(self())
-    send(state.parent, :pipeline_terminated)
     {:ok, state}
   end
 
@@ -102,14 +101,24 @@ defmodule Example do
       ],
       socket_handler: fn socket ->
         # On new connection a pipeline is started
-        Pipeline.start_link(socket: socket, parent: parent)
+        {:ok, pipeline} = Pipeline.start_link(socket: socket)
+        send(parent, {:pipeline_spawned, pipeline})
+        {:ok, pipeline}
       end
     }
 
     Membrane.RTMP.Source.TcpServer.start_link(server_options)
 
+    pipeline =
+      receive do
+        {:pipeline_spawned, pid} ->
+          pid
+      end
+
+    ref = Process.monitor(pipeline)
+
     receive do
-      :pipeline_terminated ->
+      {:DOWN, ^ref, :process, _obj, _reason} ->
         :ok
     end
   end
