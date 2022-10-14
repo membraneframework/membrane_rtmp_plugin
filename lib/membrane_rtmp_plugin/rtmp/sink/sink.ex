@@ -221,7 +221,9 @@ defmodule Membrane.RTMP.Sink do
     if ready? do
       {pad, buffer} =
         Enum.min_by(fb, fn {_, buffer} ->
-          Buffer.get_dts_or_pts(buffer)
+          buffer
+          |> Buffer.get_dts_or_pts()
+          |> Ratio.ceil()
         end)
 
       case write_frame(state, pad, buffer) do
