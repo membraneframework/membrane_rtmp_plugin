@@ -129,16 +129,16 @@ defmodule Membrane.RTMP.Sink do
     end
   end
 
+  def handle_write(pad, buffer, _ctx, %{ready: false} = state) do
+    fill_frame_buffer(state, pad, buffer)
+  end
+
   @impl true
   def handle_write(pad, buffer, _ctx, %{forward_mode: true} = state) do
     case write_frame(state, pad, buffer) do
       {:ok, state} -> {{:ok, demand: pad}, state}
       {:error, reason} -> {:error, reason}
     end
-  end
-
-  def handle_write(pad, buffer, _ctx, %{ready: false} = state) do
-    fill_frame_buffer(state, pad, buffer)
   end
 
   def handle_write(pad, buffer, _ctx, state) do
