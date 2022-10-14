@@ -12,16 +12,17 @@ defmodule Membrane.RTMP.Sink do
   require Membrane.Logger
 
   alias __MODULE__.Native
-  alias Membrane.{AAC, MP4}
+  alias Membrane.{AAC, MP4, Buffer}
 
   @supported_protocols ["rtmp://", "rtmps://"]
   @connection_attempt_interval 500
   @default_state %{
     attempts: 0,
     native: nil,
-    buffered_frame: nil,
+    # Keys here are the pad names.
+    frame_buffer: %{audio: nil, video: nil},
     ready: false,
-    current_timestamps: %{}
+    forward_mode: false,
   }
 
   def_input_pad :audio,
@@ -129,26 +130,22 @@ defmodule Membrane.RTMP.Sink do
   end
 
   @impl true
-  def handle_write(pad, buffer, _ctx, %{ready: false} = state) do
-    state = Map.put(state, :buffered_frame, {pad, buffer})
-    {:ok, state}
+  def handle_write(pad, buffer, _ctx, %{forward_mode: true} = state) do
+    case write_frame(state, pad, buffer) do
+      {:ok, state} -> {{:ok, demand: pad}, state}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
-  @impl true
-  def handle_write(
-        pad,
-        buffer,
-        _ctx,
-        %{ready: true, buffered_frame: {frame_pad, frame}} = state
-      ) do
-    state = write_frame(state, frame_pad, frame) |> write_frame(pad, buffer)
-    {{:ok, demand: get_demand(state)}, Map.put(state, :buffered_frame, nil)}
+  def handle_write(_pad, _buffer, _ctx, %{ready: false}) do
+    {:error, "unasked buffer received"}
   end
 
-  @impl true
   def handle_write(pad, buffer, _ctx, state) do
-    state = write_frame(state, pad, buffer)
-    {{:ok, demand: get_demand(state)}, state}
+    case fill_frame_buffer(state, pad, buffer) do
+      {:ok, state} -> write_frame_interleaved(state)
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @impl true
@@ -157,25 +154,35 @@ defmodule Membrane.RTMP.Sink do
       Native.finalize_stream(state.native)
       {:ok, state}
     else
-      state = Map.update!(state, :current_timestamps, &Map.delete(&1, pad))
-      {{:ok, demand: get_demand(state)}, state}
+      # The interleave logic does not work if either one of the inputs does not
+      # produce buffers. From this point on we act as a "forward" filter.
+      other_pad = case pad do
+        :audio -> :video
+        :video -> :audio
+      end
+
+      case flush_frame_buffer(state) do
+        {:ok, state} -> 
+          {{:ok, {:demand, other_pad}}, %{state | forward_mode: true}}
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
   end
 
   @impl true
   def handle_other(:try_connect, _ctx, %{attempts: attempts, max_attempts: max_attempts} = state)
       when max_attempts != :infinity and attempts >= max_attempts do
-    raise "Failed to connect to '#{state.rtmp_url}' #{attempts} times, aborting"
+    {:error, "failed to connect to '#{state.rtmp_url}' #{attempts} times, aborting"}
   end
 
-  def handle_other(:try_connect, ctx, state) do
+  def handle_other(:try_connect, _ctx, state) do
     state = %{state | attempts: state.attempts + 1}
 
     case Native.try_connect(state.native) do
       :ok ->
         Membrane.Logger.debug("Correctly initialized connection with: #{state.rtmp_url}")
-        demands = ctx.pads |> Map.keys() |> Enum.map(&{:demand, &1})
-        {{:ok, [{:playback_change, :resume} | demands]}, state}
+        {{:ok, [{:playback_change, :resume} | build_demand(state)]}, state}
 
       {:error, error} when error in [:econnrefused, :etimedout] ->
         Process.send_after(self(), :try_connect, @connection_attempt_interval)
@@ -187,8 +194,59 @@ defmodule Membrane.RTMP.Sink do
         {:ok, state}
 
       {:error, reason} ->
-        raise "Failed to connect to '#{state.rtmp_url}': #{reason}"
+        {:error, "Failed to connect to '#{state.rtmp_url}': #{reason}"}
     end
+  end
+
+  defp build_demand(%{frame_buffer: fb}) do
+    fb
+    |> Enum.filter(fn {_pad, buffer} -> buffer == nil end)
+    |> Enum.map(fn {pad, _} -> {:demand, {pad, 1}} end)
+  end
+
+  defp fill_frame_buffer(state, pad, buffer) do
+    if get_in(state, [:frame_buffer, pad]) != nil do
+      {:error, "attempted to overwrite frame buffer on pad #{inspect pad}"}
+    else
+      {:ok, put_in(state, [:frame_buffer, pad], buffer)}
+    end
+  end
+
+  defp write_frame_interleaved(state = %{frame_buffer: fb = %{audio: audio, video: video}}) do
+    ready? = audio != nil and video != nil
+    if ready? do
+      {pad, buffer} = Enum.min_by(fb, fn {_, left}, {_, right} ->
+        Buffer.get_dts_or_pts(left) <= Buffer.get_dts_or_pts(right)
+      end)
+
+      case write_frame(state, pad, buffer) do
+        {:ok, state} ->
+          state = put_in(state, [:frame_buffer, pad], nil)
+          {{:ok, build_demand(state)}, state}
+        {:error, reason} ->
+          {:error, reason}
+      end
+    else
+      # We still have to wait for the other frame.
+      {:ok, state}
+    end
+  end
+
+  defp flush_frame_buffer(state = %{frame_buffer: fb}) do
+    pads_with_buffer =
+      fb
+      |> Enum.filter(fn {_pad, buffer} -> buffer != nil end)
+      |> Enum.sort(fn {_, left}, {_, right} -> Buffer.get_dts_or_pts(left) <= Buffer.get_dts_or_pts(right) end)
+
+    Enum.reduce(pads_with_buffer, {:ok, state}, fn
+      {pad, buffer}, {:ok, state} ->
+        case write_frame(state, pad, buffer) do
+          {:ok, state} -> {:ok, put_in(state, [:frame_buffer, pad], nil)}
+          {:error, reason} -> {:error, reason}
+        end
+      {_pad, _buffer}, {:error, reason} ->
+        {:error, reason}
+    end)
   end
 
   defp write_frame(state, :audio, buffer) do
@@ -196,13 +254,9 @@ defmodule Membrane.RTMP.Sink do
 
     case Native.write_audio_frame(state.native, buffer.payload, buffer_pts) do
       {:ok, native} ->
-        Map.put(state, :native, native)
-        |> Map.update!(:current_timestamps, fn curr_tmps ->
-          Map.put(curr_tmps, :audio, buffer_pts)
-        end)
-
+        {:ok, Map.put(state, :native, native)}
       {:error, reason} ->
-        raise("Writing audio frame failed with reason: #{reason}")
+        {:error, "writing audio frame failed with reason: #{inspect reason}"}
     end
   end
 
@@ -214,20 +268,9 @@ defmodule Membrane.RTMP.Sink do
            buffer.metadata.h264.key_frame?
          ) do
       {:ok, native} ->
-        Map.put(state, :native, native)
-        |> Map.update!(:current_timestamps, fn curr_tmps ->
-          Map.put(curr_tmps, :video, buffer.dts)
-        end)
-
+        {:ok, Map.put(state, :native, native)}
       {:error, reason} ->
-        raise("Writing video frame failed with reason: #{reason}")
+        {:error, "writing video frame failed with reason: #{inspect reason}"}
     end
-  end
-
-  defp get_demand(state) do
-    {pad, _timestamp} =
-      state.current_timestamps |> Enum.min_by(fn {_pad, timestamp} -> timestamp end)
-
-    {pad, 1}
   end
 end
