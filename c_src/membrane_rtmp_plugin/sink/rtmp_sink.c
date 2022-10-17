@@ -156,8 +156,6 @@ UNIFEX_TERM write_video_frame(UnifexEnv *env, State *state,
       av_rescale_q(dts, MEMBRANE_TIME_BASE, video_stream_time_base);
   int64_t pts_scaled =
       av_rescale_q(pts, MEMBRANE_TIME_BASE, video_stream_time_base);
-  // Packet PTS is set to DTS since PTS coming with H264 buffer can be out of
-  // order which is not accepted by FFmpeg.
   packet->dts = dts_scaled;
   packet->pts = pts_scaled;
 
