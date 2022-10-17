@@ -123,7 +123,7 @@ UNIFEX_TERM init_audio_stream(UnifexEnv *env, State *state, int channels,
 }
 
 UNIFEX_TERM write_video_frame(UnifexEnv *env, State *state,
-                              UnifexPayload *frame, int64_t dts,
+                              UnifexPayload *frame, int64_t dts, int64_t pts,
                               int is_key_frame) {
   if (state->video_stream_index == -1) {
     return write_video_frame_result_error(
@@ -154,10 +154,10 @@ UNIFEX_TERM write_video_frame(UnifexEnv *env, State *state,
 
   int64_t dts_scaled =
       av_rescale_q(dts, MEMBRANE_TIME_BASE, video_stream_time_base);
-  // Packet PTS is set to DTS since PTS coming with H264 buffer can be out of
-  // order which is not accepted by FFmpeg.
+  int64_t pts_scaled =
+      av_rescale_q(pts, MEMBRANE_TIME_BASE, video_stream_time_base);
   packet->dts = dts_scaled;
-  packet->pts = dts_scaled;
+  packet->pts = pts_scaled;
 
   packet->duration = dts_scaled - state->current_video_dts;
   state->current_video_dts = dts_scaled;
