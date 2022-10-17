@@ -99,8 +99,10 @@ defmodule Membrane.RTMP.MessageHandler do
     {:cont, %{state | message_parser: message_parser}}
   end
 
+  # According to ffmpeg's documentation, this command should make the server release channel for a media stream
+  # We are simply acknowleding the message
   defp do_handle_client_message(
-         %Messages.ReleaseStream{tx_id: tx_id, stream_key: _stream_key} = msg,
+         %Messages.ReleaseStream{tx_id: tx_id} = msg,
          _header,
          state
        ) do
@@ -137,6 +139,7 @@ defmodule Membrane.RTMP.MessageHandler do
     end
   end
 
+  # A message containing stream metadata
   defp do_handle_client_message(%Messages.SetDataFrame{} = msg, _header, state) do
     case state.validator.validate_set_data_frame(msg) do
       :ok -> {:cont, state}
@@ -144,6 +147,8 @@ defmodule Membrane.RTMP.MessageHandler do
     end
   end
 
+  # According to ffmpeg's documentation, this command should prepare the server to receive media streams
+  # We are simply acknowleding the message
   defp do_handle_client_message(%Messages.FCPublish{}, _header, state) do
     %Messages.Anonymous{name: "onFCPublish", properties: []}
     |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
@@ -161,6 +166,7 @@ defmodule Membrane.RTMP.MessageHandler do
     {:cont, state}
   end
 
+  # Check bandwidth message
   defp do_handle_client_message(
          %Messages.Anonymous{name: "_checkbw", tx_id: tx_id},
          _header,
@@ -189,8 +195,10 @@ defmodule Membrane.RTMP.MessageHandler do
 
   defp get_media_buffers(rtmp_header, data, state) do
     payload =
-      get_flv_body(rtmp_header, data)
-      |> (&if(state.header_sent?, do: &1, else: get_flv_header() <> &1)).()
+      get_flv_tag(rtmp_header, data)
+      # in case header hasn't been sent, add it at the beginning of the stream
+      # and add PreviousTagSize, which is 0 for the first tag
+      |> (&if(state.header_sent?, do: &1, else: get_flv_header() <> <<0::32>> <> &1)).()
 
     buffers = [%Buffer{payload: payload} | state.buffers]
     %{state | header_sent?: true, buffers: buffers}
@@ -200,7 +208,7 @@ defmodule Membrane.RTMP.MessageHandler do
     <<"FLV", 0x01::8, 0::5, 1::1, 0::1, 1::1, 9::32>>
   end
 
-  defp get_flv_body(
+  defp get_flv_tag(
          %Membrane.RTMP.Header{
            timestamp: timestamp,
            body_size: data_size,
@@ -209,8 +217,10 @@ defmodule Membrane.RTMP.MessageHandler do
          },
          payload
        ) do
-    <<0::32, type_id::8, data_size::24, timestamp::24, 0::8, stream_id::24,
-      payload::binary-size(data_size)>>
+    tag_size = data_size + 11
+
+    <<type_id::8, data_size::24, timestamp::24, 0::8, stream_id::24,
+      payload::binary-size(data_size), tag_size::32>>
   end
 
   defp send_rtmp_payload(message, socket, chunk_size, opts \\ []) do
