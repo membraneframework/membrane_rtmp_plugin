@@ -12,7 +12,7 @@ defmodule Membrane.RTMP.Sink do
   require Membrane.Logger
 
   alias __MODULE__.Native
-  alias Membrane.{AAC, MP4, Buffer}
+  alias Membrane.{AAC, Buffer, MP4}
 
   @supported_protocols ["rtmp://", "rtmps://"]
   @connection_attempt_interval 500
@@ -211,7 +211,7 @@ defmodule Membrane.RTMP.Sink do
     {:ok, state}
   end
 
-  defp write_frame_interleaved(state = %{frame_buffer: frame_buffer}) do
+  defp write_frame_interleaved(%{frame_buffer: frame_buffer} = state) do
     {pad, buffer} =
       Enum.min_by(frame_buffer, fn {_, buffer} ->
         buffer
@@ -227,7 +227,7 @@ defmodule Membrane.RTMP.Sink do
     {{:ok, build_demand(state)}, state}
   end
 
-  defp flush_frame_buffer(state = %{frame_buffer: frame_buffer}) do
+  defp flush_frame_buffer(%{frame_buffer: frame_buffer} = state) do
     pads_with_buffer =
       frame_buffer
       |> Enum.filter(fn {_pad, buffer} -> buffer != nil end)
