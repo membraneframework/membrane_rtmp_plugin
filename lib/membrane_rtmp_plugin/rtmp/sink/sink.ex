@@ -22,6 +22,9 @@ defmodule Membrane.RTMP.Sink do
     # Keys here are the pad names.
     frame_buffer: %{audio: nil, video: nil},
     ready?: false,
+    # Activated when one of the source inputs gets closed. Interleaving is
+    # disabled, frame buffer is flushed and from that point buffers on the
+    # remaining pad are simply forwarded to the output.
     forward_mode?: false
   }
 
