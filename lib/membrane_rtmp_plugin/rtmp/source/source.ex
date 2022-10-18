@@ -49,7 +49,7 @@ defmodule Membrane.RTMP.Source do
     {{:ok, [notify: {:socket_control_needed, opts.socket, self()}]},
      Map.from_struct(opts)
      |> Map.merge(%{
-       buffers: [],
+       actions: [],
        header_sent?: false,
        message_parser: MessageParser.init(Handshake.init_server()),
        receiver_pid: nil,
@@ -157,12 +157,12 @@ defmodule Membrane.RTMP.Source do
 
   defp get_actions(state) do
     case state do
-      %{validation_error: reason} ->
-        state = %{state | buffers: [], socket_ready?: false} |> Map.delete(:validation_error)
-        {[notify: {:stream_validation_failed, reason}], state}
+      %{validation_error: notification} ->
+        state = %{state | actions: [], socket_ready?: false} |> Map.delete(:validation_error)
+        {[notification], state}
 
-      %{buffers: [_buf | _rest] = buffers} ->
-        {[buffer: {:output, Enum.reverse(buffers)}], %{state | buffers: []}}
+      %{actions: [_buf | _rest] = actions} ->
+        {actions, %{state | actions: []}}
 
       _state ->
         {[], state}

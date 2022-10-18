@@ -35,13 +35,13 @@ defmodule Membrane.RTMP.MessageHandler do
       do_handle_client_message(message, header, acc)
     end)
     |> case do
-      {:error, reason} ->
+      {:error, _msg} = error ->
         :gen_tcp.shutdown(state.socket, :read_write)
-        Map.put(state, :validation_error, reason)
+        get_validation_action(state, error)
 
       state ->
         request_packet(state.socket)
-        state
+        %{state | actions: Enum.reverse(state.actions)}
     end
   end
 
@@ -58,7 +58,7 @@ defmodule Membrane.RTMP.MessageHandler do
 
   defp do_handle_client_message(%module{data: data}, header, state)
        when module in [Messages.Audio, Messages.Video] do
-    state = get_media_buffers(header, data, state)
+    state = get_media_actions(header, data, state)
     {:cont, state}
   end
 
@@ -107,12 +107,12 @@ defmodule Membrane.RTMP.MessageHandler do
          state
        ) do
     case state.validator.validate_release_stream(msg) do
-      :ok ->
+      {:ok, _msg} = result ->
         tx_id
         |> Responses.default_result()
         |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
 
-        {:cont, state}
+        {:cont, get_validation_action(state, result)}
 
       {:error, _reason} = error ->
         {:halt, error}
@@ -125,14 +125,14 @@ defmodule Membrane.RTMP.MessageHandler do
          state
        ) do
     case state.validator.validate_publish(msg) do
-      :ok ->
+      {:ok, _msg} = result ->
         %Messages.UserControl{event_type: 0, data: <<0, 0, 0, 1>>}
         |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
 
         Responses.publish_success(stream_key)
         |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
 
-        {:halt, state}
+        {:cont, get_validation_action(state, result)}
 
       {:error, _reason} = error ->
         {:halt, error}
@@ -142,8 +142,11 @@ defmodule Membrane.RTMP.MessageHandler do
   # A message containing stream metadata
   defp do_handle_client_message(%Messages.SetDataFrame{} = msg, _header, state) do
     case state.validator.validate_set_data_frame(msg) do
-      :ok -> {:cont, state}
-      {:error, _reason} = error -> {:halt, error}
+      {:ok, _msg} = result ->
+        {:cont, get_validation_action(state, result)}
+
+      {:error, _reason} = error ->
+        {:halt, error}
     end
   end
 
@@ -193,13 +196,13 @@ defmodule Membrane.RTMP.MessageHandler do
     :ok = :inet.setopts(socket, active: :once)
   end
 
-  defp get_media_buffers(rtmp_header, data, state) do
+  defp get_media_actions(rtmp_header, data, state) do
     payload =
       get_flv_tag(rtmp_header, data)
       |> (&if(state.header_sent?, do: &1, else: get_flv_header() <> &1)).()
 
-    buffers = [%Buffer{payload: payload} | state.buffers]
-    %{state | header_sent?: true, buffers: buffers}
+    actions = [{:buffer, {:output, %Buffer{payload: payload}}} | state.actions]
+    %{state | header_sent?: true, actions: actions}
   end
 
   defp get_flv_header() do
@@ -242,6 +245,16 @@ defmodule Membrane.RTMP.MessageHandler do
     payload = Message.chunk_payload(body, chunk_stream_id, chunk_size)
 
     :gen_tcp.send(socket, [header | payload])
+  end
+
+  defp get_validation_action(state, result) do
+    notification =
+      case result do
+        {:ok, msg} -> {:notify, {:stream_validation_success, msg}}
+        {:error, msg} -> {:notify, {:stream_validation_error, msg}}
+      end
+
+    Map.update!(state, :actions, &[notification | &1])
   end
 
   # The RTMP connection is based on TCP therefore we are operating on a continuous stream of bytes.

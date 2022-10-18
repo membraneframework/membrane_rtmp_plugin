@@ -94,11 +94,12 @@ defmodule Membrane.RTMP.SourceBin do
   end
 
   def handle_notification(
-        {:stream_validation_failed, _reason} = notification,
+        {type, _reason} = notification,
         :src,
         _ctx,
         state
-      ) do
+      )
+      when type in [:stream_validation_success, :stream_validation_error] do
     {{:ok, [notify: notification]}, state}
   end
 
