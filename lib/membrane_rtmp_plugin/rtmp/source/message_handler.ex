@@ -196,16 +196,20 @@ defmodule Membrane.RTMP.MessageHandler do
   defp get_media_buffers(rtmp_header, data, state) do
     payload =
       get_flv_tag(rtmp_header, data)
-      # in case header hasn't been sent, add it at the beginning of the stream
-      # and add PreviousTagSize, which is 0 for the first tag
-      |> (&if(state.header_sent?, do: &1, else: get_flv_header() <> <<0::32>> <> &1)).()
+      |> (&if(state.header_sent?, do: &1, else: get_flv_header() <> &1)).()
 
     buffers = [%Buffer{payload: payload} | state.buffers]
     %{state | header_sent?: true, buffers: buffers}
   end
 
   defp get_flv_header() do
-    <<"FLV", 0x01::8, 0::5, 1::1, 0::1, 1::1, 9::32>>
+    alias Membrane.FLV
+
+    {header, 0} =
+      FLV.Serializer.serialize(%FLV.Header{audio_present?: true, video_present?: true}, 0)
+
+    # Add PreviousTagSize, which is 0 for the first tag
+    header <> <<0::32>>
   end
 
   defp get_flv_tag(

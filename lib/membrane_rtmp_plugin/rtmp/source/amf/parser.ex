@@ -24,10 +24,7 @@ defmodule Membrane.RTMP.AMF.Parser do
 
   # parsing a boolean
   defp parse_value(<<0x01, boolean::8, rest::binary>>) do
-    case boolean do
-      0 -> {false, rest}
-      1 -> {true, rest}
-    end
+    {boolean == 1, rest}
   end
 
   # parsing a string

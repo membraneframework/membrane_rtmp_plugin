@@ -52,7 +52,7 @@ defmodule Membrane.RTMP.AMF.Encoder do
 
   defp do_encode_object(:null), do: <<0x05>>
 
-  defp encode_key_value_pair({<<key::binary>>, value}) do
+  defp encode_key_value_pair({<<key::binary>>, value}) when byte_size(key) < 65_535 do
     [<<byte_size(key)::16>>, key, do_encode_object(value)]
   end
 end
