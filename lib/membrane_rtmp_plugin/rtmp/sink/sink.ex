@@ -21,8 +21,8 @@ defmodule Membrane.RTMP.Sink do
     native: nil,
     # Keys here are the pad names.
     frame_buffer: %{audio: nil, video: nil},
-    ready: false,
-    forward_mode: false
+    ready?: false,
+    forward_mode?: false
   }
 
   def_input_pad :audio,
@@ -129,28 +129,24 @@ defmodule Membrane.RTMP.Sink do
     end
   end
 
+  @impl true
   def handle_write(pad, buffer, _ctx, %{ready: false} = state) do
-    fill_frame_buffer(state, pad, buffer)
+    {:ok, fill_frame_buffer(state, pad, buffer)}
   end
 
-  @impl true
-  def handle_write(pad, buffer, _ctx, %{forward_mode: true} = state) do
-    case write_frame(state, pad, buffer) do
-      {:ok, state} -> {{:ok, demand: pad}, state}
-      {:error, reason} -> {:error, reason}
-    end
+  def handle_write(pad, buffer, _ctx, %{forward_mode?: true} = state) do
+    {{:ok, demand: pad}, write_frame(state, pad, buffer)}
   end
 
   def handle_write(pad, buffer, _ctx, state) do
-    case fill_frame_buffer(state, pad, buffer) do
-      {:ok, state} -> write_frame_interleaved(state)
-      {:error, reason} -> {:error, reason}
-    end
+    state
+    |> fill_frame_buffer(pad, buffer)
+    |> write_frame_interleaved()
   end
 
   @impl true
-  def handle_end_of_stream(pad, ctx, state) do
-    if ctx.pads |> Map.values() |> Enum.all?(& &1.end_of_stream?) do
+  def handle_end_of_stream(pad, _ctx, state) do
+    if state.forward_mode? do
       Native.finalize_stream(state.native)
       {:ok, state}
     else
@@ -162,20 +158,15 @@ defmodule Membrane.RTMP.Sink do
           :video -> :audio
         end
 
-      case flush_frame_buffer(state) do
-        {:ok, state} ->
-          {{:ok, demand: other_pad}, %{state | forward_mode: true}}
-
-        {:error, reason} ->
-          {:error, reason}
-      end
+      state = flush_frame_buffer(state)
+      {{:ok, demand: other_pad}, %{state | forward_mode?: true}}
     end
   end
 
   @impl true
   def handle_other(:try_connect, _ctx, %{attempts: attempts, max_attempts: max_attempts} = state)
       when max_attempts != :infinity and attempts >= max_attempts do
-    {:error, "failed to connect to '#{state.rtmp_url}' #{attempts} times, aborting"}
+    raise "failed to connect to '#{state.rtmp_url}' #{attempts} times, aborting"
   end
 
   def handle_other(:try_connect, _ctx, state) do
@@ -197,66 +188,57 @@ defmodule Membrane.RTMP.Sink do
         {:ok, state}
 
       {:error, reason} ->
-        {:error, "Failed to connect to '#{state.rtmp_url}': #{reason}"}
+        raise "failed to connect to '#{state.rtmp_url}': #{reason}"
     end
   end
 
-  defp build_demand(%{frame_buffer: fb}) do
-    fb
+  defp build_demand(%{frame_buffer: frame_buffer}) do
+    frame_buffer
     |> Enum.filter(fn {_pad, buffer} -> buffer == nil end)
     |> Enum.map(fn {pad, _} -> {:demand, pad} end)
   end
 
   defp fill_frame_buffer(state, pad, buffer) do
-    if get_in(state, [:frame_buffer, pad]) != nil do
-      {:error, "attempted to overwrite frame buffer on pad #{inspect(pad)}"}
+    if get_in(state, [:frame_buffer, pad]) == nil do
+      put_in(state, [:frame_buffer, pad], buffer)
     else
-      {:ok, put_in(state, [:frame_buffer, pad], buffer)}
+      raise "attempted to overwrite frame buffer on pad #{inspect(pad)}"
     end
   end
 
-  defp write_frame_interleaved(state = %{frame_buffer: fb = %{audio: audio, video: video}}) do
-    ready? = audio != nil and video != nil
-
-    if ready? do
-      {pad, buffer} =
-        Enum.min_by(fb, fn {_, buffer} ->
-          buffer
-          |> Buffer.get_dts_or_pts()
-          |> Ratio.ceil()
-        end)
-
-      case write_frame(state, pad, buffer) do
-        {:ok, state} ->
-          state = put_in(state, [:frame_buffer, pad], nil)
-          {{:ok, build_demand(state)}, state}
-
-        {:error, reason} ->
-          {:error, reason}
-      end
-    else
-      # We still have to wait for the other frame.
-      {:ok, state}
-    end
+  defp write_frame_interleaved(state = %{frame_buffer: %{audio: audio, video: video}}) when audio == nil or video == nil do
+    # We still have to wait for the other frame.
+    {:ok, state}
   end
 
-  defp flush_frame_buffer(state = %{frame_buffer: fb}) do
+  defp write_frame_interleaved(state = %{frame_buffer: frame_buffer}) do
+    {pad, buffer} =
+      Enum.min_by(frame_buffer, fn {_, buffer} ->
+        buffer
+        |> Buffer.get_dts_or_pts()
+        |> Ratio.ceil()
+      end)
+
+    state =
+      state
+      |> write_frame(pad, buffer)
+      |> put_in([:frame_buffer, pad], nil)
+
+    {{:ok, build_demand(state)}, state}
+  end
+
+  defp flush_frame_buffer(state = %{frame_buffer: frame_buffer}) do
     pads_with_buffer =
-      fb
+      frame_buffer
       |> Enum.filter(fn {_pad, buffer} -> buffer != nil end)
       |> Enum.sort(fn {_, left}, {_, right} ->
         Buffer.get_dts_or_pts(left) <= Buffer.get_dts_or_pts(right)
       end)
 
-    Enum.reduce(pads_with_buffer, {:ok, state}, fn
-      {pad, buffer}, {:ok, state} ->
-        case write_frame(state, pad, buffer) do
-          {:ok, state} -> {:ok, put_in(state, [:frame_buffer, pad], nil)}
-          {:error, reason} -> {:error, reason}
-        end
-
-      {_pad, _buffer}, {:error, reason} ->
-        {:error, reason}
+    Enum.reduce(pads_with_buffer, state, fn {pad, buffer}, state ->
+      state
+      |> write_frame(pad, buffer)
+      |> put_in([:frame_buffer, pad], nil)
     end)
   end
 
@@ -265,10 +247,10 @@ defmodule Membrane.RTMP.Sink do
 
     case Native.write_audio_frame(state.native, buffer.payload, buffer_pts) do
       {:ok, native} ->
-        {:ok, Map.put(state, :native, native)}
+        Map.put(state, :native, native)
 
       {:error, reason} ->
-        {:error, "writing audio frame failed with reason: #{inspect(reason)}"}
+        raise "writing audio frame failed with reason: #{inspect(reason)}"
     end
   end
 
@@ -280,10 +262,10 @@ defmodule Membrane.RTMP.Sink do
            buffer.metadata.h264.key_frame?
          ) do
       {:ok, native} ->
-        {:ok, Map.put(state, :native, native)}
+        Map.put(state, :native, native)
 
       {:error, reason} ->
-        {:error, "writing video frame failed with reason: #{inspect(reason)}"}
+        raise "writing video frame failed with reason: #{inspect(reason)}"
     end
   end
 end
