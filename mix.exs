@@ -38,13 +38,14 @@ defmodule Membrane.RTMP.Mixfile do
 
   defp deps do
     [
-      {:membrane_core, "~> 0.10.0"},
+      {:membrane_core, "~> 0.10"},
       {:unifex, "~> 1.0"},
-      {:membrane_h264_ffmpeg_plugin, "~> 0.21.1"},
-      {:membrane_aac_plugin, "~> 0.12.1"},
-      {:membrane_mp4_plugin, "~> 0.16.0"},
+      {:membrane_h264_ffmpeg_plugin, "~> 0.21"},
+      {:membrane_aac_plugin, "~> 0.12"},
+      {:membrane_mp4_plugin, "~> 0.16"},
+      {:membrane_flv_plugin, "~> 0.3"},
       # testing
-      {:membrane_hackney_plugin, "~> 0.8.0", only: :test},
+      {:membrane_hackney_plugin, "~> 0.8", only: :test},
       {:ffmpex, "~> 0.7", only: :test},
       # development
       {:ex_doc, "~> 0.28", only: :dev, runtime: false},
