@@ -170,7 +170,7 @@ UNIFEX_TERM write_video_frame(UnifexEnv *env, State *state,
   write_frame_result = write_video_frame_result_ok(env, state);
 
 end:
-  av_packet_unref(packet);
+  av_packet_free(&packet);
   return write_frame_result;
 }
 
@@ -217,7 +217,7 @@ UNIFEX_TERM write_audio_frame(UnifexEnv *env, State *state,
   write_frame_result = write_audio_frame_result_ok(env, state);
 
 end:
-  av_packet_unref(packet);
+  av_packet_free(&packet);
   return write_frame_result;
 }
 
