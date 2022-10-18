@@ -206,7 +206,8 @@ defmodule Membrane.RTMP.Sink do
     end
   end
 
-  defp write_frame_interleaved(state = %{frame_buffer: %{audio: audio, video: video}}) when audio == nil or video == nil do
+  defp write_frame_interleaved(state = %{frame_buffer: %{audio: audio, video: video}})
+       when audio == nil or video == nil do
     # We still have to wait for the other frame.
     {:ok, state}
   end
