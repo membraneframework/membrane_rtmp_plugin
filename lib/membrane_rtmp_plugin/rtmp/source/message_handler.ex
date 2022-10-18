@@ -37,7 +37,7 @@ defmodule Membrane.RTMP.MessageHandler do
     |> case do
       {:error, _msg} = error ->
         :gen_tcp.shutdown(state.socket, :read_write)
-        get_validation_action(state, error)
+        validation_action(state, error)
 
       state ->
         request_packet(state.socket)
@@ -112,7 +112,7 @@ defmodule Membrane.RTMP.MessageHandler do
         |> Responses.default_result()
         |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
 
-        {:cont, get_validation_action(state, result)}
+        {:cont, validation_action(state, result)}
 
       {:error, _reason} = error ->
         {:halt, error}
@@ -132,7 +132,7 @@ defmodule Membrane.RTMP.MessageHandler do
         Responses.publish_success(stream_key)
         |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
 
-        {:cont, get_validation_action(state, result)}
+        {:cont, validation_action(state, result)}
 
       {:error, _reason} = error ->
         {:halt, error}
@@ -143,7 +143,7 @@ defmodule Membrane.RTMP.MessageHandler do
   defp do_handle_client_message(%Messages.SetDataFrame{} = msg, _header, state) do
     case state.validator.validate_set_data_frame(msg) do
       {:ok, _msg} = result ->
-        {:cont, get_validation_action(state, result)}
+        {:cont, validation_action(state, result)}
 
       {:error, _reason} = error ->
         {:halt, error}
@@ -247,11 +247,11 @@ defmodule Membrane.RTMP.MessageHandler do
     :gen_tcp.send(socket, [header | payload])
   end
 
-  defp get_validation_action(state, result) do
+  defp validation_action(state, result) do
     notification =
       case result do
         {:ok, msg} -> {:notify, {:stream_validation_success, msg}}
-        {:error, msg} -> {:notify, {:stream_validation_error, msg}}
+        {:error, reason} -> {:notify, {:stream_validation_error, reason}}
       end
 
     Map.update!(state, :actions, &[notification | &1])

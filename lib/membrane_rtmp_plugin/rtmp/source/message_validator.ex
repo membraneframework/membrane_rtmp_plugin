@@ -7,6 +7,8 @@ defmodule Membrane.RTMP.MessageValidator do
   """
   alias Membrane.RTMP.Messages
 
+  @type validation_result_t :: {:ok, message :: any()} | {:error, reason :: any()}
+
   defmacro __using__(_) do
     quote do
       @behaviour Membrane.RTMP.MessageValidator
@@ -28,16 +30,15 @@ defmodule Membrane.RTMP.MessageValidator do
   @doc """
   Validates the `t:Membrane.RTMP.Messages.ReleaseStream.t/0` message.
   """
-  @callback validate_release_stream(Messages.ReleaseStream.t()) ::
-              {:ok | :error, message :: any()}
+  @callback validate_release_stream(Messages.ReleaseStream.t()) :: validation_result_t()
 
   @doc """
   Validates the `t:Membrane.RTMP.Messages.Publish.t/0` message.
   """
-  @callback validate_publish(Messages.Publish.t()) :: {:ok | :error, message :: any()}
+  @callback validate_publish(Messages.Publish.t()) :: validation_result_t()
 
   @doc """
   Validates the `t:Membrane.RTMP.Messages.SetDataFrame.t/0` message.
   """
-  @callback validate_set_data_frame(Messages.SetDataFrame.t()) :: {:ok | :error, message :: any()}
+  @callback validate_set_data_frame(Messages.SetDataFrame.t()) :: validation_result_t()
 end
