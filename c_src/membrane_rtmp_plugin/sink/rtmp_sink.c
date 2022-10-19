@@ -30,6 +30,8 @@ UNIFEX_TERM try_connect(UnifexEnv *env, State *state) {
     int av_err = avio_open(&state->output_ctx->pb, rtmp_url, AVIO_FLAG_WRITE);
     if (av_err == AVERROR(ECONNREFUSED)) {
       return try_connect_result_error_econnrefused(env);
+    } else if (av_err == AVERROR(ETIMEDOUT)) {
+      return try_connect_result_error_etimedout(env);
     } else if (av_err < 0) {
       return try_connect_result_error(env, av_err2str(av_err));
     }
@@ -121,7 +123,7 @@ UNIFEX_TERM init_audio_stream(UnifexEnv *env, State *state, int channels,
 }
 
 UNIFEX_TERM write_video_frame(UnifexEnv *env, State *state,
-                              UnifexPayload *frame, int64_t dts,
+                              UnifexPayload *frame, int64_t dts, int64_t pts,
                               int is_key_frame) {
   if (state->video_stream_index == -1) {
     return write_video_frame_result_error(
@@ -132,6 +134,10 @@ UNIFEX_TERM write_video_frame(UnifexEnv *env, State *state,
       state->output_ctx->streams[state->video_stream_index]->time_base;
   AVPacket *packet = av_packet_alloc();
 
+  uint8_t* data = (uint8_t *)av_malloc(frame->size);
+  memcpy(data, frame->data, frame->size);
+  av_packet_from_data(packet, data, frame->size);
+
   UNIFEX_TERM write_frame_result;
 
   if (is_key_frame) {
@@ -139,8 +145,6 @@ UNIFEX_TERM write_video_frame(UnifexEnv *env, State *state,
   }
 
   packet->stream_index = state->video_stream_index;
-  packet->size = frame->size;
-  packet->data = (uint8_t *)av_malloc(frame->size);
 
   if (!packet->data) {
     write_frame_result =
@@ -148,19 +152,17 @@ UNIFEX_TERM write_video_frame(UnifexEnv *env, State *state,
     goto end;
   }
 
-  memcpy(packet->data, frame->data, frame->size);
-
   int64_t dts_scaled =
       av_rescale_q(dts, MEMBRANE_TIME_BASE, video_stream_time_base);
-  // Packet PTS is set to DTS since PTS coming with H264 buffer can be out of
-  // order which is not accepted by FFmpeg.
+  int64_t pts_scaled =
+      av_rescale_q(pts, MEMBRANE_TIME_BASE, video_stream_time_base);
   packet->dts = dts_scaled;
-  packet->pts = dts_scaled;
+  packet->pts = pts_scaled;
 
   packet->duration = dts_scaled - state->current_video_dts;
   state->current_video_dts = dts_scaled;
 
-  if (av_interleaved_write_frame(state->output_ctx, packet)) {
+  if (av_write_frame(state->output_ctx, packet)) {
     write_frame_result =
         write_video_frame_result_error(env, "Failed writing video frame");
     goto end;
@@ -168,7 +170,6 @@ UNIFEX_TERM write_video_frame(UnifexEnv *env, State *state,
   write_frame_result = write_video_frame_result_ok(env, state);
 
 end:
-  av_packet_unref(packet);
   av_packet_free(&packet);
   return write_frame_result;
 }
@@ -185,18 +186,20 @@ UNIFEX_TERM write_audio_frame(UnifexEnv *env, State *state,
       state->output_ctx->streams[state->audio_stream_index]->time_base;
   AVPacket *packet = av_packet_alloc();
 
+  uint8_t* data = (uint8_t *)av_malloc(frame->size);
+  memcpy(data, frame->data, frame->size);
+  av_packet_from_data(packet, data, frame->size);
+
   UNIFEX_TERM write_frame_result;
 
   packet->stream_index = state->audio_stream_index;
-  packet->size = frame->size;
 
-  packet->data = (uint8_t *)av_malloc(frame->size);
   if (!packet->data) {
     write_frame_result =
         unifex_raise(env, "Failed allocating audio frame data.");
     goto end;
   }
-  memcpy(packet->data, frame->data, frame->size);
+
   int64_t pts_scaled =
       av_rescale_q(pts, MEMBRANE_TIME_BASE, audio_stream_time_base);
   // Packet DTS is set to PTS since AAC buffers do not contain DTS
@@ -206,7 +209,7 @@ UNIFEX_TERM write_audio_frame(UnifexEnv *env, State *state,
   packet->duration = pts_scaled - state->current_audio_pts;
   state->current_audio_pts = pts_scaled;
 
-  if (av_interleaved_write_frame(state->output_ctx, packet)) {
+  if (av_write_frame(state->output_ctx, packet)) {
     write_frame_result =
         write_audio_frame_result_error(env, "Failed writing audio frame");
     goto end;
@@ -214,7 +217,6 @@ UNIFEX_TERM write_audio_frame(UnifexEnv *env, State *state,
   write_frame_result = write_audio_frame_result_ok(env, state);
 
 end:
-  av_packet_unref(packet);
   av_packet_free(&packet);
   return write_frame_result;
 }
