@@ -18,6 +18,30 @@ defmodule Membrane.RTMP.Sink.Test do
   end
 
   @tag :tmp_dir
+  test "Checks if audio and video are interleaved correctly", %{tmp_dir: tmp_dir} do
+    output_file = Path.join(tmp_dir, "rtmp_sink_interleave_test.flv")
+
+    rtmp_server = Task.async(fn -> start_rtmp_server(output_file) end)
+    {:ok, sink_pipeline_pid} = start_interleaving_sink_pipeline(@rtmp_server_url)
+
+    # There's an RC - there's no way to ensure RTMP server starts to listen before pipeline is started
+    # so it may retry a few times before succeeding
+    assert_pipeline_playback_changed(sink_pipeline_pid, :prepared, :playing, 5000)
+
+    assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, :video, 5_000)
+    assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, :audio, 5_000)
+
+    assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, :video, 5_000)
+    assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, :audio, 5_000)
+
+    Membrane.Testing.Pipeline.terminate(sink_pipeline_pid, blocking?: true)
+    # RTMP server should terminate when the connection is closed
+    assert :ok = Task.await(rtmp_server)
+
+    assert File.exists?(output_file)
+  end
+
+  @tag :tmp_dir
   test "Check if audio and video streams are correctly received by RTMP server instance", %{
     flv_output_file: flv_output_file
   } do
@@ -41,6 +65,36 @@ defmodule Membrane.RTMP.Sink.Test do
 
     assert File.exists?(flv_output_file)
     assert File.stat!(flv_output_file).size == File.stat!(@reference_flv_path).size
+  end
+
+  defp start_interleaving_sink_pipeline(rtmp_url) do
+    import Membrane.ParentSpec
+
+    options = [
+      children: [
+        rtmp_sink: %Membrane.RTMP.Sink{rtmp_url: rtmp_url, max_attempts: 5}
+      ],
+      links: [
+        link(:video_source, %Membrane.File.Source{location: "test/fixtures/video.msr"})
+        |> to(:video_deserializer, Membrane.Stream.Deserializer)
+        |> to(:video_parser, %Membrane.H264.FFmpeg.Parser{
+          alignment: :au,
+          attach_nalus?: true,
+          skip_until_parameters?: true
+        })
+        |> to(:video_payloader, Membrane.MP4.Payloader.H264)
+        |> via_in(:video)
+        |> to(:rtmp_sink),
+        link(:audio_source, %Membrane.File.Source{location: "test/fixtures/audio.msr"})
+        |> to(:audio_deserializer, Membrane.Stream.Deserializer)
+        |> to(:audio_parser, Membrane.AAC.Parser)
+        |> via_in(:audio)
+        |> to(:rtmp_sink)
+      ],
+      test_process: self()
+    ]
+
+    Pipeline.start_link(options)
   end
 
   defp start_sink_pipeline(rtmp_url) do

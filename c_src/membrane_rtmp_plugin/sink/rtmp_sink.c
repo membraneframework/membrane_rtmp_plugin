@@ -134,6 +134,10 @@ UNIFEX_TERM write_video_frame(UnifexEnv *env, State *state,
       state->output_ctx->streams[state->video_stream_index]->time_base;
   AVPacket *packet = av_packet_alloc();
 
+  uint8_t* data = (uint8_t *)av_malloc(frame->size);
+  memcpy(data, frame->data, frame->size);
+  av_packet_from_data(packet, data, frame->size);
+
   UNIFEX_TERM write_frame_result;
 
   if (is_key_frame) {
@@ -141,16 +145,12 @@ UNIFEX_TERM write_video_frame(UnifexEnv *env, State *state,
   }
 
   packet->stream_index = state->video_stream_index;
-  packet->size = frame->size;
-  packet->data = (uint8_t *)av_malloc(frame->size);
 
   if (!packet->data) {
     write_frame_result =
         unifex_raise(env, "Failed allocating video frame data");
     goto end;
   }
-
-  memcpy(packet->data, frame->data, frame->size);
 
   int64_t dts_scaled =
       av_rescale_q(dts, MEMBRANE_TIME_BASE, video_stream_time_base);
@@ -162,7 +162,7 @@ UNIFEX_TERM write_video_frame(UnifexEnv *env, State *state,
   packet->duration = dts_scaled - state->current_video_dts;
   state->current_video_dts = dts_scaled;
 
-  if (av_interleaved_write_frame(state->output_ctx, packet)) {
+  if (av_write_frame(state->output_ctx, packet)) {
     write_frame_result =
         write_video_frame_result_error(env, "Failed writing video frame");
     goto end;
@@ -170,7 +170,6 @@ UNIFEX_TERM write_video_frame(UnifexEnv *env, State *state,
   write_frame_result = write_video_frame_result_ok(env, state);
 
 end:
-  av_packet_unref(packet);
   av_packet_free(&packet);
   return write_frame_result;
 }
@@ -187,18 +186,20 @@ UNIFEX_TERM write_audio_frame(UnifexEnv *env, State *state,
       state->output_ctx->streams[state->audio_stream_index]->time_base;
   AVPacket *packet = av_packet_alloc();
 
+  uint8_t* data = (uint8_t *)av_malloc(frame->size);
+  memcpy(data, frame->data, frame->size);
+  av_packet_from_data(packet, data, frame->size);
+
   UNIFEX_TERM write_frame_result;
 
   packet->stream_index = state->audio_stream_index;
-  packet->size = frame->size;
 
-  packet->data = (uint8_t *)av_malloc(frame->size);
   if (!packet->data) {
     write_frame_result =
         unifex_raise(env, "Failed allocating audio frame data.");
     goto end;
   }
-  memcpy(packet->data, frame->data, frame->size);
+
   int64_t pts_scaled =
       av_rescale_q(pts, MEMBRANE_TIME_BASE, audio_stream_time_base);
   // Packet DTS is set to PTS since AAC buffers do not contain DTS
@@ -208,7 +209,7 @@ UNIFEX_TERM write_audio_frame(UnifexEnv *env, State *state,
   packet->duration = pts_scaled - state->current_audio_pts;
   state->current_audio_pts = pts_scaled;
 
-  if (av_interleaved_write_frame(state->output_ctx, packet)) {
+  if (av_write_frame(state->output_ctx, packet)) {
     write_frame_result =
         write_audio_frame_result_error(env, "Failed writing audio frame");
     goto end;
@@ -216,7 +217,6 @@ UNIFEX_TERM write_audio_frame(UnifexEnv *env, State *state,
   write_frame_result = write_audio_frame_result_ok(env, state);
 
 end:
-  av_packet_unref(packet);
   av_packet_free(&packet);
   return write_frame_result;
 }
