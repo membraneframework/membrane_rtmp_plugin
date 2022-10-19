@@ -263,7 +263,7 @@ defmodule Membrane.RTMP.Sink do
            state.native,
            buffer.payload,
            buffer.dts,
-           buffer.pts,
+           buffer.pts || buffer.dts,
            buffer.metadata.h264.key_frame?
          ) do
       {:ok, native} ->
