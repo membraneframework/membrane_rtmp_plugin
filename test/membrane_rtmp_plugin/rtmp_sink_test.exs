@@ -102,6 +102,14 @@ defmodule Membrane.RTMP.Sink.Test do
 
     options = [
       children: [
+        video_source: %Membrane.Hackney.Source{
+          location: @input_video_url,
+          hackney_opts: [follow_redirect: true]
+        },
+        audio_source: %Membrane.Hackney.Source{
+          location: @input_audio_url,
+          hackney_opts: [follow_redirect: true]
+        },
         video_parser: %Membrane.H264.FFmpeg.Parser{
           framerate: {30, 1},
           alignment: :au,
@@ -110,14 +118,6 @@ defmodule Membrane.RTMP.Sink.Test do
         },
         audio_parser: %Membrane.AAC.Parser{
           out_encapsulation: :none
-        },
-        video_source: %Membrane.Hackney.Source{
-          location: @input_video_url,
-          hackney_opts: [follow_redirect: true]
-        },
-        audio_source: %Membrane.Hackney.Source{
-          location: @input_audio_url,
-          hackney_opts: [follow_redirect: true]
         },
         video_payloader: Membrane.MP4.Payloader.H264,
         rtmp_sink: %Membrane.RTMP.Sink{rtmp_url: rtmp_url, max_attempts: 5}
