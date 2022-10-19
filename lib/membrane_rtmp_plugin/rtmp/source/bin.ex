@@ -1,9 +1,22 @@
 defmodule Membrane.RTMP.SourceBin do
   @moduledoc """
-  Bin responsible for spawning new RTMP server.
+  Bin responsible for demuxing and parsing an RTMP stream.
 
-  It will receive RTMP stream from the client, parse it and demux it, outputting single audio and video which are ready for further processing with Membrane Elements.
-  At this moment only AAC and H264 codecs are support
+  Outputs single audio and video which are ready for further processing with Membrane Elements.
+  At this moment only AAC and H264 codecs are supported.
+
+  ## Usage
+
+  The bin requires the RTMP client to be already connected to the socket.
+  The socket passed to the bin must be in non-active mode (`active` set to `false`).
+
+  When the `Membrane.RTMP.Source` is initialized the bin sends `t:Membrane.RTMP.Source.socket_control_needed_t/0` notification.
+  Then, the control of the socket should be immediately granted to the `Source` with the `pass_control/2`,
+  and the `Source` will start reading packets from the socket.
+
+  The bin allows for providing custom validator module, that verifies some of the RTMP messages.
+  The module has to implement the `Membrane.RTMP.MessageValidator` behaviour.
+  If the validation fails, a `t:Membrane.RTMP.Source.stream_validation_failed_t/0` notification is sent.
   """
   use Membrane.Bin
 
@@ -21,34 +34,27 @@ defmodule Membrane.RTMP.SourceBin do
     mode: :pull,
     demand_unit: :buffers
 
-  def_options port: [
-                spec: 1..65_535,
-                description: "Port on which the server will listen"
-              ],
-              local_ip: [
-                spec: binary(),
-                default: "127.0.0.1",
-                description:
-                  "IP address on which the server will listen. This is useful if you have more than one network interface"
-              ],
-              timeout: [
-                spec: Time.t() | :infinity,
-                default: :infinity,
+  def_options socket: [
+                spec: :gen_tcp.socket(),
                 description: """
-                Time during which the connection with the client must be established before handle_prepared_to_playing fails.
-
-                Duration given must be a multiply of one second or atom `:infinity`.
+                Socket, on which the bin will receive RTMP stream. The socket will be passed to the `RTMP.Source`.
+                The socket must be already connected to the RTMP client and be in non-active mode (`active` set to `false`).
                 """
+              ],
+              validator: [
+                spec: Membrane.RTMP.StreamValidator,
+                description: """
+                A Module implementing `Membrane.RTMP.MessageValidator` behaviour, used for validating the stream.
+                """,
+                default: Membrane.RTMP.DefaultMessageValidator
               ]
 
   @impl true
-  def handle_init(%__MODULE__{} = options) do
-    url = "rtmp://#{options.local_ip}:#{options.port}"
-    source = %RTMP.Source{url: url, timeout: options.timeout}
-
+  def handle_init(%__MODULE__{} = opts) do
     spec = %ParentSpec{
       children: %{
-        src: source,
+        src: %RTMP.Source{socket: opts.socket, validator: opts.validator},
+        demuxer: Membrane.FLV.Demuxer,
         video_parser: %Membrane.H264.FFmpeg.Parser{
           alignment: :au,
           attach_nalus?: true,
@@ -60,11 +66,50 @@ defmodule Membrane.RTMP.SourceBin do
         }
       },
       links: [
-        link(:src) |> via_out(:audio) |> to(:audio_parser) |> to_bin_output(:audio),
-        link(:src) |> via_out(:video) |> to(:video_parser) |> to_bin_output(:video)
+        link(:src) |> to(:demuxer),
+        #
+        link(:demuxer)
+        |> via_out(Pad.ref(:audio, 0))
+        |> to(:audio_parser)
+        |> to_bin_output(:audio),
+        #
+        link(:demuxer)
+        |> via_out(Pad.ref(:video, 0))
+        |> to(:video_parser)
+        |> to_bin_output(:video)
       ]
     }
 
     {{:ok, spec: spec}, %{}}
+  end
+
+  @impl true
+  def handle_notification(
+        {:socket_control_needed, _socket, _pid} = notification,
+        :src,
+        _ctx,
+        state
+      ) do
+    {{:ok, [notify: notification]}, state}
+  end
+
+  def handle_notification(
+        {type, _reason} = notification,
+        :src,
+        _ctx,
+        state
+      )
+      when type in [:stream_validation_success, :stream_validation_error] do
+    {{:ok, [notify: notification]}, state}
+  end
+
+  @doc """
+  Passes the control of the socket to the `source`.
+
+  To succeed, the executing process must be in control of the socket, otherwise `{:error, :not_owner}` is returned.
+  """
+  @spec pass_control(:gen_tcp.socket(), pid) :: :ok | {:error, atom}
+  def pass_control(socket, source) do
+    :gen_tcp.controlling_process(socket, source)
   end
 end
