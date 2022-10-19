@@ -61,6 +61,12 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     pipeline = await_pipeline_started()
     assert_pipeline_playback_changed(pipeline, :prepared, :playing)
 
+    assert_pipeline_notified(
+      pipeline,
+      :src,
+      {:stream_validation_success, "correct stream key"}
+    )
+
     assert_end_of_stream(pipeline, :audio_sink, :input, @stream_length_ms + 500)
     assert_end_of_stream(pipeline, :video_sink, :input)
 
@@ -83,7 +89,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     assert_pipeline_notified(
       pipeline,
       :src,
-      {:stream_validation_failed, "wrong stream key"}
+      {:stream_validation_error, "wrong stream key"}
     )
 
     # Cleanup

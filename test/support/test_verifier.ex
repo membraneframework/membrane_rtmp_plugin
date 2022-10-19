@@ -9,7 +9,7 @@ defmodule Membrane.RTMP.Source.TestVerifier do
   @impl true
   def validate_publish(%Messages.Publish{stream_key: stream_key}) do
     if stream_key == @stream_key do
-      :ok
+      {:ok, "correct stream key"}
     else
       {:error, "wrong stream key"}
     end
