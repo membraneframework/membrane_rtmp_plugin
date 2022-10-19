@@ -35,9 +35,10 @@ defmodule Membrane.RTMP.MessageHandler do
       do_handle_client_message(message, header, acc)
     end)
     |> case do
-      {:error, _msg} = error ->
+      {:error, :stream_validation, state} ->
         :gen_tcp.shutdown(state.socket, :read_write)
-        validation_action(state, error)
+
+        state
 
       state ->
         request_packet(state.socket)
@@ -101,6 +102,7 @@ defmodule Membrane.RTMP.MessageHandler do
 
   # According to ffmpeg's documentation, this command should make the server release channel for a media stream
   # We are simply acknowleding the message
+  @validation_stage :release_stream
   defp do_handle_client_message(
          %Messages.ReleaseStream{tx_id: tx_id} = msg,
          _header,
@@ -112,13 +114,14 @@ defmodule Membrane.RTMP.MessageHandler do
         |> Responses.default_result()
         |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
 
-        {:cont, validation_action(state, result)}
+        {:cont, validation_action(state, @validation_stage, result)}
 
       {:error, _reason} = error ->
-        {:halt, error}
+        {:halt, {:error, :stream_validation, validation_action(state, @validation_stage, error)}}
     end
   end
 
+  @validation_stage :publish
   defp do_handle_client_message(
          %Messages.Publish{stream_key: stream_key} = msg,
          _header,
@@ -132,21 +135,22 @@ defmodule Membrane.RTMP.MessageHandler do
         Responses.publish_success(stream_key)
         |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
 
-        {:cont, validation_action(state, result)}
+        {:cont, validation_action(state, @validation_stage, result)}
 
       {:error, _reason} = error ->
-        {:halt, error}
+        {:halt, {:error, :stream_validation, validation_action(state, @validation_stage, error)}}
     end
   end
 
   # A message containing stream metadata
+  @validation_stage :set_data_frame
   defp do_handle_client_message(%Messages.SetDataFrame{} = msg, _header, state) do
     case state.validator.validate_set_data_frame(msg) do
       {:ok, _msg} = result ->
-        {:cont, validation_action(state, result)}
+        {:cont, validation_action(state, @validation_stage, result)}
 
       {:error, _reason} = error ->
-        {:halt, error}
+        {:halt, {:error, :stream_validation, validation_action(state, @validation_stage, error)}}
     end
   end
 
@@ -247,11 +251,11 @@ defmodule Membrane.RTMP.MessageHandler do
     :gen_tcp.send(socket, [header | payload])
   end
 
-  defp validation_action(state, result) do
+  defp validation_action(state, stage, result) do
     notification =
       case result do
-        {:ok, msg} -> {:notify, {:stream_validation_success, msg}}
-        {:error, reason} -> {:notify, {:stream_validation_error, reason}}
+        {:ok, msg} -> {:notify, {:stream_validation_success, stage, msg}}
+        {:error, reason} -> {:notify, {:stream_validation_error, stage, reason}}
       end
 
     Map.update!(state, :actions, &[notification | &1])

@@ -39,10 +39,20 @@ defmodule Membrane.RTMP.Source do
   Notification sent when the RTMP Source element is initialized and it should be granted control over the socket using `:gen_tcp.controlling_process/2`.
   """
   @type socket_control_needed_t() :: {:socket_control_needed, :gen_tcp.socket(), pid()}
+
+  @type validation_stage_t :: :publish | :release_stream | :set_data_frame
+
+  @typedoc """
+  Notification sent when the validator approves given validation stage..
+  """
+  @type stream_validation_success_t() ::
+          {:stream_validation_success, validation_stage_t(), result :: any()}
+
   @typedoc """
   Notification sent when the validator denies incoming RTMP stream.
   """
-  @type stream_validation_failed_t() :: {:stream_validation_failed, String.t()}
+  @type stream_validation_failed_t() ::
+          {:stream_validation_failed, validation_stage_t(), reason :: any()}
 
   @impl true
   def handle_init(%__MODULE__{} = opts) do
@@ -157,11 +167,7 @@ defmodule Membrane.RTMP.Source do
 
   defp get_actions(state) do
     case state do
-      %{validation_error: notification} ->
-        state = %{state | actions: [], socket_ready?: false} |> Map.delete(:validation_error)
-        {[notification], state}
-
-      %{actions: [_buf | _rest] = actions} ->
+      %{actions: [_action | _rest] = actions} ->
         {actions, %{state | actions: []}}
 
       _state ->
