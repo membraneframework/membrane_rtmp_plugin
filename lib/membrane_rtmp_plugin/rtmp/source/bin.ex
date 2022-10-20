@@ -94,7 +94,7 @@ defmodule Membrane.RTMP.SourceBin do
   end
 
   def handle_notification(
-        {type, _reason} = notification,
+        {type, _stage, _reason} = notification,
         :src,
         _ctx,
         state
