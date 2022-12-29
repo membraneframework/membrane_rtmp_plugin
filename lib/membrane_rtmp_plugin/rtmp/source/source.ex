@@ -44,7 +44,7 @@ defmodule Membrane.RTMP.Source do
   @type validation_stage_t :: :publish | :release_stream | :set_data_frame
 
   @typedoc """
-  Notification sent when the validator approves given validation stage..
+  Notification sent when the validator approves given validation stage.
   """
   @type stream_validation_success_t() ::
           {:stream_validation_success, validation_stage_t(), result :: any()}
