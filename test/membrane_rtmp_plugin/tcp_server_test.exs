@@ -1,5 +1,5 @@
 defmodule Membrane.RTMP.Source.TcpServerTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   alias Membrane.RTMP.Source.TcpServer
 
@@ -33,7 +33,7 @@ defmodule Membrane.RTMP.Source.TcpServerTest do
       end
     }
 
-    TcpServer.start_link(server_options)
+    {:ok, _pid} = TcpServer.start_link(server_options)
 
     Process.sleep(500)
 

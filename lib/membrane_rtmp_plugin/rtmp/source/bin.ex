@@ -23,13 +23,13 @@ defmodule Membrane.RTMP.SourceBin do
   alias Membrane.{AAC, H264, RTMP}
 
   def_output_pad :video,
-    caps: H264,
+    accepted_format: H264,
     availability: :always,
     mode: :pull,
     demand_unit: :buffers
 
   def_output_pad :audio,
-    caps: AAC,
+    accepted_format: AAC,
     availability: :always,
     mode: :pull,
     demand_unit: :buffers
@@ -50,57 +50,53 @@ defmodule Membrane.RTMP.SourceBin do
               ]
 
   @impl true
-  def handle_init(%__MODULE__{} = opts) do
-    spec = %ParentSpec{
-      children: %{
-        src: %RTMP.Source{socket: opts.socket, validator: opts.validator},
-        demuxer: Membrane.FLV.Demuxer,
-        video_parser: %Membrane.H264.FFmpeg.Parser{
-          alignment: :au,
-          attach_nalus?: true,
-          skip_until_keyframe?: true
-        },
-        audio_parser: %Membrane.AAC.Parser{
-          in_encapsulation: :none,
-          out_encapsulation: :none
-        }
-      },
-      links: [
-        link(:src) |> to(:demuxer),
-        #
-        link(:demuxer)
-        |> via_out(Pad.ref(:audio, 0))
-        |> to(:audio_parser)
-        |> to_bin_output(:audio),
-        #
-        link(:demuxer)
-        |> via_out(Pad.ref(:video, 0))
-        |> to(:video_parser)
-        |> to_bin_output(:video)
-      ]
-    }
+  def handle_init(_ctx, %__MODULE__{} = opts) do
+    structure = [
+      child(:src, %RTMP.Source{socket: opts.socket, validator: opts.validator})
+      |> child(:demuxer, Membrane.FLV.Demuxer),
+      #
+      child(:audio_parser, %Membrane.AAC.Parser{
+        in_encapsulation: :none,
+        out_encapsulation: :none
+      }),
+      child(:video_parser, %Membrane.H264.FFmpeg.Parser{
+        alignment: :au,
+        attach_nalus?: true,
+        skip_until_keyframe?: true
+      }),
+      #
+      get_child(:demuxer)
+      |> via_out(Pad.ref(:audio, 0))
+      |> get_child(:audio_parser)
+      |> bin_output(:audio),
+      #
+      get_child(:demuxer)
+      |> via_out(Pad.ref(:video, 0))
+      |> get_child(:video_parser)
+      |> bin_output(:video)
+    ]
 
-    {{:ok, spec: spec}, %{}}
+    {[spec: structure], %{}}
   end
 
   @impl true
-  def handle_notification(
+  def handle_child_notification(
         {:socket_control_needed, _socket, _pid} = notification,
         :src,
         _ctx,
         state
       ) do
-    {{:ok, [notify: notification]}, state}
+    {[notify_parent: notification], state}
   end
 
-  def handle_notification(
+  def handle_child_notification(
         {type, _stage, _reason} = notification,
         :src,
         _ctx,
         state
       )
       when type in [:stream_validation_success, :stream_validation_error] do
-    {{:ok, [notify: notification]}, state}
+    {[notify_parent: notification], state}
   end
 
   @doc """
@@ -108,7 +104,7 @@ defmodule Membrane.RTMP.SourceBin do
 
   To succeed, the executing process must be in control of the socket, otherwise `{:error, :not_owner}` is returned.
   """
-  @spec pass_control(:gen_tcp.socket(), pid) :: :ok | {:error, atom}
+  @spec pass_control(:gen_tcp.socket(), pid()) :: :ok | {:error, atom()}
   def pass_control(socket, source) do
     :gen_tcp.controlling_process(socket, source)
   end

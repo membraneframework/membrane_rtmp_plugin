@@ -38,17 +38,21 @@ defmodule Membrane.RTMP.Mixfile do
 
   defp deps do
     [
-      {:membrane_core, "~> 0.10.0"},
-      {:unifex, "~> 1.0"},
-      {:membrane_h264_ffmpeg_plugin, "~> 0.22.0"},
-      {:membrane_aac_plugin, "~> 0.12.1"},
-      {:membrane_mp4_plugin, "~> 0.16.0"},
-      {:membrane_flv_plugin, "~> 0.3.1"},
-      {:membrane_file_plugin, "~> 0.12.0"},
+      {:membrane_core, "~> 0.11.2"},
+      {:unifex, "~> 1.1.0"},
+      {:membrane_h264_ffmpeg_plugin,
+       github: "membraneframework/membrane_h264_ffmpeg_plugin",
+       branch: "jp/fix-last-timestamp-dts"},
+      {:membrane_aac_plugin, "~> 0.13.0"},
+      {:membrane_mp4_plugin,
+       github: "membraneframework/membrane_mp4_plugin", branch: "core-0.11"},
+      {:membrane_flv_plugin,
+       github: "membraneframework/membrane_flv_plugin", branch: "core-0.11"},
+      {:membrane_file_plugin, "~> 0.13.2"},
       # testing
-      {:membrane_hackney_plugin, "~> 0.8.2", only: :test},
+      {:membrane_hackney_plugin, "~> 0.9.0", only: :test},
       {:ffmpex, "~> 0.10.0", only: :test},
-      {:membrane_stream_plugin, "~> 0.1.0", only: :test},
+      {:membrane_stream_plugin, "~> 0.2.0", only: :test},
       # development
       {:ex_doc, "~> 0.28", only: :dev, runtime: false},
       {:dialyxir, "~> 1.1", only: :dev, runtime: false},
