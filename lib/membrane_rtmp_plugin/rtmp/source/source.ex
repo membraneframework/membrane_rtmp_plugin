@@ -109,7 +109,7 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_demand(_pad, _size, _unit, _ctx, state) when state.socket_ready? do
-    :ok = :inet.setopts(state.socket, active: :once)
+    :inet.setopts(state.socket, active: :once)
     {:ok, state}
   end
 
