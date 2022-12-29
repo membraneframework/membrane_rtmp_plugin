@@ -197,7 +197,7 @@ defmodule Membrane.RTMP.MessageHandler do
   end
 
   defp request_packet(socket) do
-    :ok = :inet.setopts(socket, active: :once)
+    :inet.setopts(socket, active: :once)
   end
 
   defp get_media_actions(rtmp_header, data, state) do
