@@ -54,6 +54,13 @@ defmodule Membrane.RTMP.Source do
   @type stream_validation_failed_t() ::
           {:stream_validation_failed, validation_stage_t(), reason :: any()}
 
+  @typedoc """
+  Notification sent when the socket has been closed but no media data has flown through it.
+
+  This notification is only sent when the `:output` pad never reaches `:start_of_stream`.
+  """
+  @type unexpected_socket_closed_t() :: :unexpected_socket_closed
+
   @impl true
   def handle_init(%__MODULE__{} = opts) do
     {{:ok, [notify: {:socket_control_needed, opts.socket, self()}]},
@@ -156,8 +163,12 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_other({:tcp_closed, _port}, _ctx, state) do
-    {{:ok, end_of_stream: :output}, state}
+  def handle_other({:tcp_closed, _socket}, ctx, state) do
+    if ctx.pads.output.start_of_stream? do
+      {{:ok, end_of_stream: :output}, state}
+    else
+      {{:ok, notify: :unexpected_socket_closed}, state}
+    end
   end
 
   @impl true
