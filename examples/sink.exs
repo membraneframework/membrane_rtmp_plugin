@@ -4,9 +4,8 @@
 # ffmpeg -y -listen 1 -f flv -i rtmp://localhost:1935 -c copy dest.flv
 
 Mix.install([
-  {:membrane_realtimer_plugin,
-   github: "membraneframework/membrane_realtimer_plugin", branch: "core-0.11"},
-  {:membrane_hackney_plugin, "~> 0.9.0"},
+  :membrane_realtimer_plugin,
+  :membrane_hackney_plugin,
   {:membrane_rtmp_plugin, path: __DIR__ |> Path.join("..") |> Path.expand()}
 ])
 

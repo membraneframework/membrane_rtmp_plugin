@@ -3,10 +3,10 @@
 # ffmpeg -re -i test/fixtures/testsrc.flv -f flv -c:v copy -c:a copy rtmp://localhost:5000
 
 Mix.install([
-  {:membrane_aac_plugin, "~> 0.13.0"},
-  {:membrane_mp4_plugin, github: "membraneframework/membrane_mp4_plugin", branch: "core-0.11"},
-  {:membrane_flv_plugin, github: "membraneframework/membrane_flv_plugin", branch: "core-0.11"},
-  {:membrane_file_plugin, "~> 0.13.2"},
+  :membrane_aac_plugin,
+  :membrane_mp4_plugin,
+  :membrane_flv_plugin,
+  :membrane_file_plugin,
   {:membrane_rtmp_plugin, path: __DIR__ |> Path.join("..") |> Path.expand()}
 ])
 
