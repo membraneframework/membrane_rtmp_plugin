@@ -26,7 +26,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
 
     pipeline = await_pipeline_started()
 
-    assert_pipeline_playback_changed(pipeline, :prepared, :playing)
+    assert_pipeline_play(pipeline)
 
     assert_buffers(%{
       pipeline: pipeline,
@@ -59,7 +59,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
       end)
 
     pipeline = await_pipeline_started()
-    assert_pipeline_playback_changed(pipeline, :prepared, :playing)
+    assert_pipeline_play(pipeline)
 
     assert_pipeline_notified(
       pipeline,
@@ -84,7 +84,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
       end)
 
     pipeline = await_pipeline_started()
-    assert_pipeline_playback_changed(pipeline, :prepared, :playing)
+    assert_pipeline_play(pipeline)
 
     assert_pipeline_notified(
       pipeline,
@@ -111,11 +111,12 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
       socket_handler: fn socket ->
         options = [
           module: Membrane.RTMP.Source.TestPipeline,
-          custom_args: [socket: socket, test_process: test_process, verifier: verifier],
+          custom_args: %{socket: socket, test_process: test_process, verifier: verifier},
           test_process: test_process
         ]
 
-        Testing.Pipeline.start_link(options)
+        {:ok, _supervisor_pid, pipeline_pid} = Testing.Pipeline.start_link(options)
+        {:ok, pipeline_pid}
       end,
       parent: test_process
     }
@@ -152,8 +153,15 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
       {:ok, ""} ->
         :ok
 
-      error ->
-        Logger.error(inspect(error))
+      {:error, {error, exit_code}} ->
+        Logger.error(
+          """
+          FFmpeg exited with a non-zero exit code (#{exit_code}) and the error message:
+          #{error}
+          """
+          |> String.trim()
+        )
+
         :error
     end
   end

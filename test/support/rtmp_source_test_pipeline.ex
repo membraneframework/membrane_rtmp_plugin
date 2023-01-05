@@ -2,35 +2,29 @@ defmodule Membrane.RTMP.Source.TestPipeline do
   @moduledoc false
   use Membrane.Pipeline
 
-  import Membrane.ParentSpec
-
   alias Membrane.RTMP.SourceBin
   alias Membrane.Testing
 
   @impl true
-  def handle_init(socket: socket, test_process: test_process, verifier: verifier) do
-    spec = %Membrane.ParentSpec{
-      children: [
-        src: %SourceBin{
-          socket: socket,
-          validator: verifier
-        },
-        audio_sink: Testing.Sink,
-        video_sink: Testing.Sink
-      ],
-      links: [
-        link(:src) |> via_out(:audio) |> to(:audio_sink),
-        link(:src) |> via_out(:video) |> to(:video_sink)
-      ]
-    }
+  def handle_init(_ctx, %{socket: socket, test_process: test_process, verifier: verifier}) do
+    structure = [
+      child(:src, %SourceBin{
+        socket: socket,
+        validator: verifier
+      }),
+      child(:audio_sink, Testing.Sink),
+      child(:video_sink, Testing.Sink),
+      get_child(:src) |> via_out(:audio) |> get_child(:audio_sink),
+      get_child(:src) |> via_out(:video) |> get_child(:video_sink)
+    ]
 
     send(test_process, {:pipeline_started, self()})
 
-    {{:ok, [spec: spec, playback: :playing]}, %{socket: socket}}
+    {[spec: structure, playback: :playing], %{socket: socket}}
   end
 
   @impl true
-  def handle_notification(
+  def handle_child_notification(
         {:socket_control_needed, _socket, _source} = notification,
         :src,
         _ctx,
@@ -38,15 +32,15 @@ defmodule Membrane.RTMP.Source.TestPipeline do
       ) do
     send(self(), notification)
 
-    {:ok, state}
+    {[], state}
   end
 
-  def handle_notification(_notification, _child, _ctx, state) do
-    {:ok, state}
+  def handle_child_notification(_notification, _child, _ctx, state) do
+    {[], state}
   end
 
   @impl true
-  def handle_other({:socket_control_needed, socket, source} = notification, _ctx, state) do
+  def handle_info({:socket_control_needed, socket, source} = notification, _ctx, state) do
     case SourceBin.pass_control(socket, source) do
       :ok ->
         :ok
@@ -55,6 +49,6 @@ defmodule Membrane.RTMP.Source.TestPipeline do
         Process.send_after(self(), notification, 200)
     end
 
-    {:ok, state}
+    {[], state}
   end
 end

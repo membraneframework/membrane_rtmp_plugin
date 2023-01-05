@@ -3,12 +3,11 @@
 # ffmpeg -re -i test/fixtures/testsrc.flv -f flv -c:v copy -c:a copy rtmp://localhost:5000
 
 Mix.install([
-  {:membrane_core, "~> 0.10"},
-  {:membrane_rtmp_plugin, path: __DIR__ |> Path.join("../") |> Path.expand()},
-  :membrane_file_plugin,
+  :membrane_aac_plugin,
   :membrane_mp4_plugin,
   :membrane_flv_plugin,
-  :membrane_aac_plugin
+  :membrane_file_plugin,
+  {:membrane_rtmp_plugin, path: __DIR__ |> Path.join("..") |> Path.expand()}
 ])
 
 defmodule Pipeline do
@@ -17,33 +16,29 @@ defmodule Pipeline do
   @output_file "received.flv"
 
   @impl true
-  def handle_init(socket: socket) do
-    spec = %ParentSpec{
-      children: %{
-        source: %Membrane.RTMP.SourceBin{
-          socket: socket
-        },
-        video_payloader: Membrane.MP4.Payloader.H264,
-        muxer: Membrane.FLV.Muxer,
-        sink: %Membrane.File.Sink{location: @output_file}
-      },
-      links: [
-        link(:source) |> via_out(:audio) |> via_in(Pad.ref(:audio, 0)) |> to(:muxer),
-        link(:source)
-        |> via_out(:video)
-        |> to(:video_payloader)
-        |> via_in(Pad.ref(:video, 0))
-        |> to(:muxer),
-        link(:muxer) |> to(:sink)
-      ]
-    }
+  def handle_init(_ctx, socket: socket) do
+    structure = [
+      child(:source, %Membrane.RTMP.SourceBin{
+        socket: socket
+      }),
+      child(:video_payloader, Membrane.MP4.Payloader.H264),
+      child(:muxer, Membrane.FLV.Muxer),
+      child(:sink, %Membrane.File.Sink{location: @output_file}),
+      get_child(:source) |> via_out(:audio) |> via_in(Pad.ref(:audio, 0)) |> get_child(:muxer),
+      get_child(:source)
+      |> via_out(:video)
+      |> get_child(:video_payloader)
+      |> via_in(Pad.ref(:video, 0))
+      |> get_child(:muxer),
+      get_child(:muxer) |> get_child(:sink)
+    ]
 
-    {{:ok, spec: spec, playback: :playing}, %{}}
+    {[spec: structure, playback: :playing], %{}}
   end
 
   # Once the source initializes, we grant it the control over the tcp socket
   @impl true
-  def handle_notification(
+  def handle_child_notification(
         {:socket_control_needed, _socket, _source} = notification,
         :source,
         _ctx,
@@ -51,15 +46,15 @@ defmodule Pipeline do
       ) do
     send(self(), notification)
 
-    {:ok, state}
+    {[], state}
   end
 
-  def handle_notification(_notification, _child, _ctx, state) do
-    {:ok, state}
+  def handle_child_notification(_notification, _child, _ctx, state) do
+    {[], state}
   end
 
   @impl true
-  def handle_other({:socket_control_needed, socket, source} = notification, _ctx, state) do
+  def handle_info({:socket_control_needed, socket, source} = notification, _ctx, state) do
     case Membrane.RTMP.SourceBin.pass_control(socket, source) do
       :ok ->
         :ok
@@ -68,19 +63,18 @@ defmodule Pipeline do
         Process.send_after(self(), notification, 200)
     end
 
-    {:ok, state}
+    {[], state}
   end
 
   # The rest of the module is used for self-termination of the pipeline after processing finishes
   @impl true
-  def handle_element_end_of_stream({:sink, _pad}, _ctx, state) do
-    Membrane.Pipeline.terminate(self())
-    {:ok, state}
+  def handle_element_end_of_stream(:sink, _pad, _ctx, state) do
+    {[terminate: :shutdown], state}
   end
 
   @impl true
-  def handle_element_end_of_stream({_child, _pad}, _ctx, state) do
-    {:ok, state}
+  def handle_element_end_of_stream(_child, _pad, _ctx, state) do
+    {[], state}
   end
 end
 
@@ -101,7 +95,7 @@ defmodule Example do
       ],
       socket_handler: fn socket ->
         # On new connection a pipeline is started
-        {:ok, pipeline} = Pipeline.start_link(socket: socket)
+        {:ok, _supervisor, pipeline} = Pipeline.start_link(socket: socket)
         send(parent, {:pipeline_spawned, pipeline})
         {:ok, pipeline}
       end

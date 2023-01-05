@@ -1,10 +1,11 @@
 defmodule Membrane.RTMP.Sink do
   @moduledoc """
   Membrane element being client-side of RTMP streams.
-  To work successfuly it requires to receive both audio and video streams in AAC and H264 format respectively. Currently it supports only:
+  To work successfuly it requires to receive both audio and video streams in AAC and H264 format respectively.
+  Currently it supports only:
     - RTMP proper - "plain" RTMP protocol
     - RTMPS - RTMP over TLS/SSL
-  other RTMP veriants - RTMPT, RTMPE, RTMFP are not supported.
+  other RTMP variants - RTMPT, RTMPE, RTMFP are not supported.
   Implementation based on FFmpeg.
   """
   use Membrane.Sink
@@ -16,36 +17,25 @@ defmodule Membrane.RTMP.Sink do
 
   @supported_protocols ["rtmp://", "rtmps://"]
   @connection_attempt_interval 500
-  @default_state %{
-    attempts: 0,
-    native: nil,
-    # Keys here are the pad names.
-    frame_buffer: %{audio: nil, video: nil},
-    ready?: false,
-    # Activated when one of the source inputs gets closed. Interleaving is
-    # disabled, frame buffer is flushed and from that point buffers on the
-    # remaining pad are simply forwarded to the output.
-    forward_mode?: false
-  }
 
   def_input_pad :audio,
     availability: :always,
-    caps: AAC,
+    accepted_format: AAC,
     mode: :pull,
     demand_unit: :buffers
 
   def_input_pad :video,
     availability: :always,
-    caps: MP4.Payload,
+    accepted_format: MP4.Payload,
     mode: :pull,
     demand_unit: :buffers
 
   def_options rtmp_url: [
-                type: :string,
                 spec: String.t(),
-                description:
-                  "Destination URL of the stream. It needs to start with rtmp:// or rtmps:// depending on the protocol variant.
-                This URL should be provided by your streaming service."
+                description: """
+                Destination URL of the stream. It needs to start with rtmp:// or rtmps:// depending on the protocol variant.
+                This URL should be provided by your streaming service.
+                """
               ],
               max_attempts: [
                 spec: pos_integer() | :infinity,
@@ -57,7 +47,7 @@ defmodule Membrane.RTMP.Sink do
               ]
 
   @impl true
-  def handle_init(options) do
+  def handle_init(_ctx, options) do
     unless String.starts_with?(options.rtmp_url, @supported_protocols) do
       raise ArgumentError, "Invalid destination URL provided"
     end
@@ -67,78 +57,101 @@ defmodule Membrane.RTMP.Sink do
       raise ArgumentError, "Invalid max_attempts option value: #{options.max_attempts}"
     end
 
-    {:ok, options |> Map.from_struct() |> Map.merge(@default_state)}
+    state =
+      options
+      |> Map.from_struct()
+      |> Map.merge(%{
+        attempts: 0,
+        native: nil,
+        # Keys here are the pad names.
+        frame_buffer: %{audio: nil, video: nil},
+        ready?: false,
+        # Activated when one of the source inputs gets closed. Interleaving is
+        # disabled, frame buffer is flushed and from that point buffers on the
+        # remaining pad are simply forwarded to the output.
+        forward_mode?: false
+      })
+
+    {[], state}
   end
 
   @impl true
-  def handle_prepared_to_playing(_ctx, state) do
+  def handle_setup(_ctx, state) do
     {:ok, native} = Native.create(state.rtmp_url)
-    send(self(), :try_connect)
 
-    {{:ok, playback_change: :suspend}, %{state | native: native}}
+    state
+    |> Map.put(:native, native)
+    |> try_connect()
+    |> then(&{[], &1})
   end
 
   @impl true
-  def handle_playing_to_prepared(_ctx, state) do
-    state = Map.merge(state, @default_state)
-    Membrane.Logger.debug("Stream correctly closed")
-    {:ok, state}
+  def handle_playing(_ctx, state) do
+    {build_demand(state), state}
   end
 
   @impl true
-  def handle_caps(
+  def handle_stream_format(
         :video,
-        %MP4.Payload{content: %MP4.Payload.AVC1{avcc: avc_config}} = caps,
+        %MP4.Payload{content: %MP4.Payload.AVC1{avcc: avc_config}} = stream_format,
         _ctx,
         state
       ) do
-    case Native.init_video_stream(state.native, caps.width, caps.height, avc_config) do
-      {:ok, ready, native} ->
+    case Native.init_video_stream(
+           state.native,
+           stream_format.width,
+           stream_format.height,
+           avc_config
+         ) do
+      {:ok, ready?, native} ->
         Membrane.Logger.debug("Correctly initialized video stream.")
-        state = Map.merge(state, %{native: native, ready: ready})
-        {:ok, state}
+        {[], %{state | native: native, ready?: ready?}}
 
-      {:error, :caps_resent} ->
+      {:error, :stream_format_resent} ->
         Membrane.Logger.error(
-          "Input caps redefined on pad :video. RTMP Sink does not support changing stream parameters"
+          "Input stream format redefined on pad :video. RTMP Sink does not support dynamic stream parameters"
         )
 
-        {:ok, state}
+        {[], state}
     end
   end
 
   @impl true
-  def handle_caps(:audio, %Membrane.AAC{} = caps, _ctx, state) do
-    profile = AAC.profile_to_aot_id(caps.profile)
-    sr_index = AAC.sample_rate_to_sampling_frequency_id(caps.sample_rate)
-    channel_configuration = AAC.channels_to_channel_config_id(caps.channels)
-    frame_length_id = AAC.samples_per_frame_to_frame_length_id(caps.samples_per_frame)
+  def handle_stream_format(:audio, %Membrane.AAC{} = stream_format, _ctx, state) do
+    profile = AAC.profile_to_aot_id(stream_format.profile)
+    sr_index = AAC.sample_rate_to_sampling_frequency_id(stream_format.sample_rate)
+    channel_configuration = AAC.channels_to_channel_config_id(stream_format.channels)
+    frame_length_id = AAC.samples_per_frame_to_frame_length_id(stream_format.samples_per_frame)
 
     aac_config =
       <<profile::5, sr_index::4, channel_configuration::4, frame_length_id::1, 0::1, 0::1>>
 
-    case Native.init_audio_stream(state.native, caps.channels, caps.sample_rate, aac_config) do
-      {:ok, ready, native} ->
+    case Native.init_audio_stream(
+           state.native,
+           stream_format.channels,
+           stream_format.sample_rate,
+           aac_config
+         ) do
+      {:ok, ready?, native} ->
         Membrane.Logger.debug("Correctly initialized audio stream.")
-        state = Map.merge(state, %{native: native, ready: ready})
-        {:ok, state}
+        {[], %{state | native: native, ready?: ready?}}
 
-      {:error, :caps_resent} ->
+      {:error, :stream_format_resent} ->
         Membrane.Logger.error(
-          "Input caps redefined on pas :audio. RTMP Sink does not support changing stream paremeters"
+          "Input stream format redefined on pad :audio. RTMP Sink does not support dynamic stream parameters"
         )
 
-        {:ok, state}
+        {[], state}
     end
   end
 
   @impl true
-  def handle_write(pad, buffer, _ctx, %{ready: false} = state) do
-    {:ok, fill_frame_buffer(state, pad, buffer)}
+  def handle_write(pad, buffer, _ctx, %{ready?: false} = state) do
+    {[], fill_frame_buffer(state, pad, buffer)}
   end
 
   def handle_write(pad, buffer, _ctx, %{forward_mode?: true} = state) do
-    {{:ok, demand: pad}, write_frame(state, pad, buffer)}
+    {[demand: pad], write_frame(state, pad, buffer)}
   end
 
   def handle_write(pad, buffer, _ctx, state) do
@@ -151,7 +164,7 @@ defmodule Membrane.RTMP.Sink do
   def handle_end_of_stream(pad, _ctx, state) do
     if state.forward_mode? do
       Native.finalize_stream(state.native)
-      {:ok, state}
+      {[], state}
     else
       # The interleave logic does not work if either one of the inputs does not
       # produce buffers. From this point on we act as a "forward" filter.
@@ -162,43 +175,42 @@ defmodule Membrane.RTMP.Sink do
         end
 
       state = flush_frame_buffer(state)
-      {{:ok, demand: other_pad}, %{state | forward_mode?: true}}
+      {[demand: other_pad], %{state | forward_mode?: true}}
     end
   end
 
-  @impl true
-  def handle_other(:try_connect, _ctx, %{attempts: attempts, max_attempts: max_attempts} = state)
-      when max_attempts != :infinity and attempts >= max_attempts do
+  defp try_connect(%{attempts: attempts, max_attempts: max_attempts} = state)
+       when max_attempts != :infinity and attempts >= max_attempts do
     raise "failed to connect to '#{state.rtmp_url}' #{attempts} times, aborting"
   end
 
-  def handle_other(:try_connect, _ctx, state) do
+  defp try_connect(state) do
     state = %{state | attempts: state.attempts + 1}
 
     case Native.try_connect(state.native) do
       :ok ->
         Membrane.Logger.debug("Correctly initialized connection with: #{state.rtmp_url}")
 
-        {{:ok, [{:playback_change, :resume} | build_demand(state)]}, state}
+        state
 
       {:error, error} when error in [:econnrefused, :etimedout] ->
-        Process.send_after(self(), :try_connect, @connection_attempt_interval)
-
         Membrane.Logger.warn(
           "Connection to #{state.rtmp_url} refused, retrying in #{@connection_attempt_interval}ms"
         )
 
-        {:ok, state}
+        Process.sleep(@connection_attempt_interval)
+
+        try_connect(state)
 
       {:error, reason} ->
-        raise "failed to connect to '#{state.rtmp_url}': #{reason}"
+        raise "failed to connect to '#{state.rtmp_url}': #{inspect(reason)}"
     end
   end
 
   defp build_demand(%{frame_buffer: frame_buffer}) do
     frame_buffer
     |> Enum.filter(fn {_pad, buffer} -> buffer == nil end)
-    |> Enum.map(fn {pad, _} -> {:demand, pad} end)
+    |> Enum.map(fn {pad, _buffer} -> {:demand, pad} end)
   end
 
   defp fill_frame_buffer(state, pad, buffer) do
@@ -209,15 +221,15 @@ defmodule Membrane.RTMP.Sink do
     end
   end
 
-  defp write_frame_interleaved(state = %{frame_buffer: %{audio: audio, video: video}})
+  defp write_frame_interleaved(%{frame_buffer: %{audio: audio, video: video}} = state)
        when audio == nil or video == nil do
     # We still have to wait for the other frame.
-    {:ok, state}
+    {[], state}
   end
 
   defp write_frame_interleaved(%{frame_buffer: frame_buffer} = state) do
     {pad, buffer} =
-      Enum.min_by(frame_buffer, fn {_, buffer} ->
+      Enum.min_by(frame_buffer, fn {_pad, buffer} ->
         buffer
         |> Buffer.get_dts_or_pts()
         |> Ratio.ceil()
@@ -228,7 +240,7 @@ defmodule Membrane.RTMP.Sink do
       |> write_frame(pad, buffer)
       |> put_in([:frame_buffer, pad], nil)
 
-    {{:ok, build_demand(state)}, state}
+    {build_demand(state), state}
   end
 
   defp flush_frame_buffer(%{frame_buffer: frame_buffer} = state) do

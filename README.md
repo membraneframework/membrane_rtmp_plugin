@@ -5,7 +5,7 @@
 [![CircleCI](https://circleci.com/gh/membraneframework/membrane_rtmp_plugin.svg?style=svg)](https://circleci.com/gh/membraneframework/membrane_rtmp_plugin)
 
 This package provides RTMP server which receives an RTMP stream from a client and an element for streaming to an RTMP server.
-It is part of [Membrane Multimedia Framework](https://membraneframework.org).
+It is a part of [Membrane Multimedia Framework](https://membraneframework.org).
 
 ## Installation
 
@@ -14,14 +14,13 @@ The package can be installed by adding `membrane_rtmp_plugin` to your list of de
 ```elixir
 def deps do
   [
-    {:membrane_rtmp_plugin, "~> 0.9.1"}
+    {:membrane_rtmp_plugin, "~> 0.10.0"}
   ]
 end
 ```
 
 ## SourceBin
-
-Requires a socket, which has been connected to the client. It receives RTMP stream, demuxes it and outputs H264 video and AAC audio. 
+Requires a socket, which has been connected to the client. It receives RTMP stream, demuxes it and outputs H264 video and AAC audio.
 
 ## Client
 After establishing connection with server it waits to receive video and audio streams. Once both streams are received they are streamed to the server.
@@ -29,7 +28,7 @@ Currently only the following codecs are supported:
 - H264 for video
 - AAC for audio
 
-## Tcp Server
+## TCP Server
 It's a simple implementation of tcp server. It opens a tcp port and listens for incoming connections. For each new connection, a user-provided function is executed.
 
 ### Prerequisites
@@ -62,7 +61,7 @@ RTMP server that will receive this stream can be launched with ffmpeg by running
 
 ```bash
 export RTMP_URL=rtmp://localhost:1935
-ffmpeg -listen 1 -f flv -i rtmp://localhost:1935 -c copy dest.flv
+ffmpeg -y -listen 1 -f flv -i rtmp://localhost:1935 -c copy dest.flv
 ```
 
 It will receive stream and once streaming is completed dump it to .flv file. If you are using the command above, please remember to run it **before** the streaming script.

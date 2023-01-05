@@ -254,8 +254,8 @@ defmodule Membrane.RTMP.MessageHandler do
   defp validation_action(state, stage, result) do
     notification =
       case result do
-        {:ok, msg} -> {:notify, {:stream_validation_success, stage, msg}}
-        {:error, reason} -> {:notify, {:stream_validation_error, stage, reason}}
+        {:ok, msg} -> {:notify_parent, {:stream_validation_success, stage, msg}}
+        {:error, reason} -> {:notify_parent, {:stream_validation_error, stage, reason}}
       end
 
     Map.update!(state, :actions, &[notification | &1])
