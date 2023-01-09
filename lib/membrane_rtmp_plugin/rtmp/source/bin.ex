@@ -35,10 +35,19 @@ defmodule Membrane.RTMP.SourceBin do
     demand_unit: :buffers
 
   def_options socket: [
-                spec: :gen_tcp.socket(),
+                spec: :gen_tcp.socket() | :ssl.sslsocket(),
                 description: """
-                Socket, on which the bin will receive RTMP stream. The socket will be passed to the `RTMP.Source`.
+                Socket, on which the bin will receive RTMP or RTMPS stream. The socket will be passed to the `RTMP.Source`.
                 The socket must be already connected to the RTMP client and be in non-active mode (`active` set to `false`).
+
+                In case of RTMPS the `use_ssl?` options must be set to true.
+                """
+              ],
+              use_ssl?: [
+                spec: boolean(),
+                default: false,
+                description: """
+                Tells whether the passed socket is a regular TCP socket or SSL one.
                 """
               ],
               validator: [
@@ -52,7 +61,11 @@ defmodule Membrane.RTMP.SourceBin do
   @impl true
   def handle_init(_ctx, %__MODULE__{} = opts) do
     structure = [
-      child(:src, %RTMP.Source{socket: opts.socket, validator: opts.validator})
+      child(:src, %RTMP.Source{
+        socket: opts.socket,
+        validator: opts.validator,
+        use_ssl?: opts.use_ssl?
+      })
       |> child(:demuxer, Membrane.FLV.Demuxer),
       #
       child(:audio_parser, %Membrane.AAC.Parser{
@@ -81,11 +94,12 @@ defmodule Membrane.RTMP.SourceBin do
 
   @impl true
   def handle_child_notification(
-        {:socket_control_needed, _socket, _pid} = notification,
+        {type, _socket, _pid} = notification,
         :src,
         _ctx,
         state
-      ) do
+      )
+      when type in [:socket_control_needed, :ssl_socket_control_needed] do
     {[notify_parent: notification], state}
   end
 
@@ -107,5 +121,15 @@ defmodule Membrane.RTMP.SourceBin do
   @spec pass_control(:gen_tcp.socket(), pid()) :: :ok | {:error, atom()}
   def pass_control(socket, source) do
     :gen_tcp.controlling_process(socket, source)
+  end
+
+  @doc """
+  Passes the control of the ssl socket to the `source`.
+
+  To succeed, the executing process must be in control of the socket, otherwise `{:error, :not_owner}` is returned.
+  """
+  @spec secure_pass_control(:ssl.sslsocket(), pid()) :: :ok | {:error, any()}
+  def secure_pass_control(socket, source) do
+    :ssl.controlling_process(socket, source)
   end
 end

@@ -6,9 +6,15 @@ defmodule Membrane.RTMP.Source.TestPipeline do
   alias Membrane.Testing
 
   @impl true
-  def handle_init(_ctx, %{socket: socket, test_process: test_process, verifier: verifier}) do
+  def handle_init(_ctx, %{
+        socket: socket,
+        test_process: test_process,
+        verifier: verifier,
+        use_ssl?: use_ssl?
+      }) do
     structure = [
       child(:src, %SourceBin{
+        use_ssl?: use_ssl?,
         socket: socket,
         validator: verifier
       }),
@@ -42,6 +48,19 @@ defmodule Membrane.RTMP.Source.TestPipeline do
   @impl true
   def handle_info({:socket_control_needed, socket, source} = notification, _ctx, state) do
     case SourceBin.pass_control(socket, source) do
+      :ok ->
+        :ok
+
+      {:error, :not_owner} ->
+        Process.send_after(self(), notification, 200)
+    end
+
+    {[], state}
+  end
+
+  @impl true
+  def handle_info({:secure_socket_control_needed, socket, source} = notification, _ctx, state) do
+    case SourceBin.secure_pass_control(socket, source) do
       :ok ->
         :ok
 
