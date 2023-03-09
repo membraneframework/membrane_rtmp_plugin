@@ -5,7 +5,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
 
   require Logger
 
-  alias Membrane.RTMP.Source.TcpServer
+  alias Membrane.RTMP.Source.{SslServer, TcpServer}
   alias Membrane.Testing
 
   @input_file "test/fixtures/testsrc.flv"
@@ -22,6 +22,41 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     ffmpeg_task =
       Task.async(fn ->
         get_stream_url(port) |> start_ffmpeg()
+      end)
+
+    pipeline = await_pipeline_started()
+
+    assert_pipeline_play(pipeline)
+
+    assert_buffers(%{
+      pipeline: pipeline,
+      sink: :video_sink,
+      stream_length: @stream_length_ms,
+      buffers_expected: div(@stream_length_ms, @video_frame_duration_ms)
+    })
+
+    assert_buffers(%{
+      pipeline: pipeline,
+      sink: :audio_sink,
+      stream_length: @stream_length_ms,
+      buffers_expected: div(@stream_length_ms, @audio_frame_duration_ms)
+    })
+
+    assert_end_of_stream(pipeline, :audio_sink, :input)
+    assert_end_of_stream(pipeline, :video_sink, :input)
+
+    # Cleanup
+    Testing.Pipeline.terminate(pipeline, blocking?: true)
+    assert :ok = Task.await(ffmpeg_task)
+  end
+
+  @tag :rtmps
+  test "SourceBin allows for RTMPS connection" do
+    {:ok, port} = start_ssl_server()
+
+    ffmpeg_task =
+      Task.async(fn ->
+        get_stream_url(port, nil, true) |> start_ffmpeg()
       end)
 
     pipeline = await_pipeline_started()
@@ -111,7 +146,12 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
       socket_handler: fn socket ->
         options = [
           module: Membrane.RTMP.Source.TestPipeline,
-          custom_args: %{socket: socket, test_process: test_process, verifier: verifier},
+          custom_args: %{
+            socket: socket,
+            test_process: test_process,
+            verifier: verifier,
+            use_ssl?: false
+          },
           test_process: test_process
         ]
 
@@ -129,8 +169,52 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     end
   end
 
-  defp get_stream_url(port, key \\ nil) do
-    "rtmp://#{@local_ip}:#{port}" <>
+  @port 9797
+  defp start_ssl_server() do
+    test_process = self()
+    verifier = Membrane.RTMP.DefaultMessageValidator
+
+    certfile = System.get_env("CERT_PATH")
+    keyfile = System.get_env("CERT_KEY_PATH")
+
+    options = %SslServer{
+      port: @port,
+      listen_options: [
+        :binary,
+        packet: :raw,
+        active: false,
+        ip: @local_ip |> String.to_charlist() |> :inet.parse_address() |> elem(1),
+        certfile: certfile,
+        keyfile: keyfile
+      ],
+      socket_handler: fn socket ->
+        options = [
+          module: Membrane.RTMP.Source.TestPipeline,
+          custom_args: %{
+            socket: socket,
+            test_process: test_process,
+            verifier: verifier,
+            use_ssl?: true
+          },
+          test_process: test_process
+        ]
+
+        {:ok, _supervisor_pid, pipeline_pid} = Testing.Pipeline.start_link(options)
+        {:ok, pipeline_pid}
+      end,
+      parent: test_process
+    }
+
+    {:ok, _ssl_server} = SslServer.start_link(options)
+
+    receive do
+      {:ssl_server_started, _socket} ->
+        {:ok, @port}
+    end
+  end
+
+  defp get_stream_url(port, key \\ nil, use_ssl? \\ false) do
+    "rtmp#{if use_ssl?, do: "s", else: ""}://#{@local_ip}:#{port}" <>
       if key, do: "/app/" <> key, else: ""
   end
 
