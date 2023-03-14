@@ -1,7 +1,7 @@
 defmodule Membrane.RTMP.Mixfile do
   use Mix.Project
 
-  @version "0.10.0"
+  @version "0.11.0"
   @github_url "https://github.com/membraneframework/membrane_rtmp_plugin"
 
   def project do
@@ -40,10 +40,10 @@ defmodule Membrane.RTMP.Mixfile do
     [
       {:membrane_core, "~> 0.11.2"},
       {:unifex, "~> 1.1.0"},
-      {:membrane_h264_ffmpeg_plugin, "~> 0.25.1"},
+      {:membrane_h264_ffmpeg_plugin, "~> 0.25.4"},
       {:membrane_aac_plugin, "~> 0.13.0"},
-      {:membrane_mp4_plugin, "~> 0.18.0"},
-      {:membrane_flv_plugin, "~> 0.4.0"},
+      {:membrane_mp4_plugin, "~> 0.19.0"},
+      {:membrane_flv_plugin, "~> 0.5.0"},
       {:membrane_file_plugin, "~> 0.13.2"},
       # testing
       {:membrane_hackney_plugin, "~> 0.9.0", only: :test},
