@@ -1,7 +1,7 @@
 defmodule Membrane.RTMP.Mixfile do
   use Mix.Project
 
-  @version "0.11.0"
+  @version "0.11.1"
   @github_url "https://github.com/membraneframework/membrane_rtmp_plugin"
 
   def project do
@@ -10,7 +10,7 @@ defmodule Membrane.RTMP.Mixfile do
       version: @version,
       elixir: "~> 1.12",
       elixirc_paths: elixirc_paths(Mix.env()),
-      compilers: [:unifex, :bundlex] ++ Mix.compilers(),
+      compilers: [:unifex, :bundlex] ++ Mix.compilers() ++ maybe_add_rambo(),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       dialyzer: dialyzer(),
@@ -67,6 +67,13 @@ defmodule Membrane.RTMP.Mixfile do
     else
       opts
     end
+  end
+
+  # for Mac M1 it is necessary to include rambo compiler (used by :ffmpex)
+  if Mix.env() == :test do
+    def maybe_add_rambo(), do: [:rambo]
+  else
+    def maybe_add_rambo(), do: []
   end
 
   defp package do

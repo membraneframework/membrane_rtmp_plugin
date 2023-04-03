@@ -2,7 +2,7 @@ defmodule Membrane.RTMP.Header do
   @moduledoc false
 
   @enforce_keys [:chunk_stream_id, :type_id]
-  defstruct @enforce_keys ++ [body_size: 0, timestamp: 0, stream_id: 0]
+  defstruct @enforce_keys ++ [body_size: 0, timestamp: 0, timestamp_delta: 0, stream_id: 0]
 
   @typedoc """
   RTMP header structure.
@@ -83,6 +83,7 @@ defmodule Membrane.RTMP.Header do
     header = %__MODULE__{
       chunk_stream_id: chunk_stream_id,
       timestamp: previous_headers[chunk_stream_id].timestamp + timestamp_delta,
+      timestamp_delta: timestamp_delta,
       body_size: body_size,
       type_id: type_id,
       stream_id: previous_headers[chunk_stream_id].stream_id
@@ -98,6 +99,7 @@ defmodule Membrane.RTMP.Header do
     header = %__MODULE__{
       chunk_stream_id: chunk_stream_id,
       timestamp: previous_headers[chunk_stream_id].timestamp + timestamp_delta,
+      timestamp_delta: timestamp_delta,
       body_size: previous_headers[chunk_stream_id].body_size,
       type_id: previous_headers[chunk_stream_id].type_id,
       stream_id: previous_headers[chunk_stream_id].stream_id
@@ -110,12 +112,11 @@ defmodule Membrane.RTMP.Header do
         <<@header_type_3::bitstring, chunk_stream_id::6, rest::binary>>,
         previous_headers
       ) do
+    previous_header = previous_headers[chunk_stream_id]
+
     header = %__MODULE__{
-      chunk_stream_id: chunk_stream_id,
-      timestamp: previous_headers[chunk_stream_id].timestamp,
-      body_size: previous_headers[chunk_stream_id].body_size,
-      type_id: previous_headers[chunk_stream_id].type_id,
-      stream_id: previous_headers[chunk_stream_id].stream_id
+      previous_header
+      | timestamp: previous_header.timestamp + previous_header.timestamp_delta
     }
 
     {header, rest}
