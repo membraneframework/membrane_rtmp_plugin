@@ -14,7 +14,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
 
   @stream_length_ms 3000
   @video_frame_duration_ms 42
-  @audio_frame_duration_ms 23
+  @audio_frame_duration_ms 24
 
   test "SourceBin outputs the correct number of audio and video buffers" do
     {:ok, port} = start_tcp_server()
