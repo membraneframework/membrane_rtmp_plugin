@@ -2,7 +2,14 @@ defmodule Membrane.RTMP.Header do
   @moduledoc false
 
   @enforce_keys [:chunk_stream_id, :type_id]
-  defstruct @enforce_keys ++ [body_size: 0, timestamp: 0, timestamp_delta: 0, stream_id: 0]
+  defstruct @enforce_keys ++
+              [
+                body_size: 0,
+                timestamp: 0,
+                timestamp_delta: 0,
+                extended_timestamp?: false,
+                stream_id: 0
+              ]
 
   @typedoc """
   RTMP header structure.
@@ -36,6 +43,8 @@ defmodule Membrane.RTMP.Header do
   @header_type_2 <<0x2::2>>
   @header_type_3 <<0x3::2>>
 
+  @extended_timestamp_marker <<0xFFFFFF::24>>
+
   @header_type_0_size 11
   @header_type_1_size 7
   @header_type_2_size 3
@@ -60,6 +69,23 @@ defmodule Membrane.RTMP.Header do
 
   # only the deserialization of the 0b00 type can have `nil` previous header
   def deserialize(
+        <<@header_type_0::bitstring, chunk_stream_id::6, @extended_timestamp_marker,
+          body_size::24, type_id::8, stream_id::32, timestamp::32, rest::binary>>,
+        _previous_headers
+      ) do
+    header = %__MODULE__{
+      chunk_stream_id: chunk_stream_id,
+      timestamp: timestamp,
+      extended_timestamp?: true,
+      body_size: body_size,
+      type_id: type_id,
+      stream_id: stream_id
+    }
+
+    {header, rest}
+  end
+
+  def deserialize(
         <<@header_type_0::bitstring, chunk_stream_id::6, timestamp::24, body_size::24, type_id::8,
           stream_id::32, rest::binary>>,
         _previous_headers
@@ -76,6 +102,24 @@ defmodule Membrane.RTMP.Header do
   end
 
   def deserialize(
+        <<@header_type_1::bitstring, chunk_stream_id::6, @extended_timestamp_marker,
+          body_size::24, type_id::8, timestamp_delta::32, rest::binary>>,
+        previous_headers
+      ) do
+    header = %__MODULE__{
+      chunk_stream_id: chunk_stream_id,
+      timestamp: previous_headers[chunk_stream_id].timestamp + timestamp_delta,
+      timestamp_delta: timestamp_delta,
+      extended_timestamp?: true,
+      body_size: body_size,
+      type_id: type_id,
+      stream_id: previous_headers[chunk_stream_id].stream_id
+    }
+
+    {header, rest}
+  end
+
+  def deserialize(
         <<@header_type_1::bitstring, chunk_stream_id::6, timestamp_delta::24, body_size::24,
           type_id::8, rest::binary>>,
         previous_headers
@@ -86,6 +130,24 @@ defmodule Membrane.RTMP.Header do
       timestamp_delta: timestamp_delta,
       body_size: body_size,
       type_id: type_id,
+      stream_id: previous_headers[chunk_stream_id].stream_id
+    }
+
+    {header, rest}
+  end
+
+  def deserialize(
+        <<@header_type_2::bitstring, chunk_stream_id::6, @extended_timestamp_marker,
+          timestamp_delta::32, rest::binary>>,
+        previous_headers
+      ) do
+    header = %__MODULE__{
+      chunk_stream_id: chunk_stream_id,
+      timestamp: previous_headers[chunk_stream_id].timestamp + timestamp_delta,
+      timestamp_delta: timestamp_delta,
+      extended_timestamp?: true,
+      body_size: previous_headers[chunk_stream_id].body_size,
+      type_id: previous_headers[chunk_stream_id].type_id,
       stream_id: previous_headers[chunk_stream_id].stream_id
     }
 
@@ -114,12 +176,28 @@ defmodule Membrane.RTMP.Header do
       ) do
     previous_header = previous_headers[chunk_stream_id]
 
-    header = %__MODULE__{
-      previous_header
-      | timestamp: previous_header.timestamp + previous_header.timestamp_delta
-    }
+    if previous_header.extended_timestamp? do
+      case rest do
+        <<timestamp_delta::32, rest::binary>> ->
+          header = %__MODULE__{
+            previous_header
+            | timestamp: previous_header.timestamp + timestamp_delta,
+              timestamp_delta: timestamp_delta
+          }
 
-    {header, rest}
+          {header, rest}
+
+        _other ->
+          {:error, :need_more_data}
+      end
+    else
+      header = %__MODULE__{
+        previous_header
+        | timestamp: previous_header.timestamp + previous_header.timestamp_delta
+      }
+
+      {header, rest}
+    end
   end
 
   def deserialize(<<@header_type_0::bitstring, _chunk_stream_id::6, rest::binary>>, _prev_header)

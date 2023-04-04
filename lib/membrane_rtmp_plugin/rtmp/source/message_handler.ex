@@ -234,7 +234,9 @@ defmodule Membrane.RTMP.MessageHandler do
        ) do
     tag_size = data_size + 11
 
-    <<type_id::8, data_size::24, timestamp::24, 0::8, stream_id::24,
+    <<upper_timestamp::8, lower_timestamp::24>> = <<timestamp::32>>
+
+    <<type_id::8, data_size::24, lower_timestamp::24, upper_timestamp::8, stream_id::24,
       payload::binary-size(data_size), tag_size::32>>
   end
 
