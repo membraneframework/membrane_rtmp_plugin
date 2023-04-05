@@ -88,7 +88,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   # maximum timestamp in milliseconds
   @extended_timestamp_tag 0xFFFFFF
   test "SourceBin gracefully handles timestamp overflow" do
-    # offset half a second second in the past
+    # offset half a second in the past
     offset = @extended_timestamp_tag / 1_000 - 0.5
 
     {:ok, port} = start_tcp_server(Membrane.RTMP.Source.TestVerifier)
@@ -263,17 +263,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
       |> add_file_option(option_f("flv"))
       |> add_file_option(option_vcodec("copy"))
       |> add_file_option(option_acodec("copy"))
-      |> then(fn command ->
-        if ts_offset = Keyword.get(opts, :ts_offset) do
-          add_file_option(command, %FFmpex.Option{
-            name: "-output_ts_offset",
-            argument: ts_offset,
-            contexts: [:output]
-          })
-        else
-          command
-        end
-      end)
+      |> maybe_add_file_timestamps_offset(opts)
 
     case FFmpex.execute(command) do
       {:ok, ""} ->
@@ -290,6 +280,22 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
 
         :error
     end
+  end
+
+  defp maybe_add_file_timestamps_offset(command, options) do
+    if ts_offset = Keyword.get(options, :ts_offset) do
+      add_file_timestamps_offset(command, ts_offset)
+    else
+      command
+    end
+  end
+
+  defp add_file_timestamps_offset(command, offset) do
+    FFmpex.add_file_option(command, %FFmpex.Option{
+      name: "-output_ts_offset",
+      argument: offset,
+      contexts: [:output]
+    })
   end
 
   defp await_pipeline_started() do
