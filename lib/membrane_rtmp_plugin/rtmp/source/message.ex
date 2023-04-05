@@ -71,18 +71,22 @@ defmodule Membrane.RTMP.Message do
   def chunk_payload(payload, chunk_stream_id, chunk_size),
     do: do_chunk_payload(payload, chunk_stream_id, chunk_size, [])
 
-  defp do_chunk_payload(payload, chunk_stream_id, chunk_size, acc)
-       when byte_size(payload) > chunk_size do
-    <<chunk::binary-size(chunk_size), rest::binary>> = payload
+  defp do_chunk_payload(
+         payload,
+         chunk_stream_id,
+         chunk_size,
+         acc
+       ) do
+    case payload do
+      <<chunk::binary-size(chunk_size), rest::binary>> ->
+        acc = [<<0b11::2, chunk_stream_id::6>>, chunk | acc]
 
-    acc = [<<0b11::2, chunk_stream_id::6>>, chunk | acc]
+        do_chunk_payload(rest, chunk_stream_id, chunk_size, acc)
 
-    do_chunk_payload(rest, chunk_stream_id, chunk_size, acc)
-  end
-
-  defp do_chunk_payload(payload, _chunk_stream_id, _chunk_size, acc) do
-    [payload | acc]
-    |> Enum.reverse()
+      payload ->
+        [payload | acc]
+        |> Enum.reverse()
+    end
   end
 
   defp message_from_modules(payload, mapping, required? \\ false) do

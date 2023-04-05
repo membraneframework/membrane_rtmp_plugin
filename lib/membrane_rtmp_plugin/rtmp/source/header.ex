@@ -45,10 +45,6 @@ defmodule Membrane.RTMP.Header do
 
   @extended_timestamp_marker <<0xFFFFFF::24>>
 
-  @header_type_0_size 11
-  @header_type_1_size 7
-  @header_type_2_size 3
-
   @spec new(Keyword.t()) :: t()
   def new(opts) do
     struct!(__MODULE__, opts)
@@ -69,54 +65,22 @@ defmodule Membrane.RTMP.Header do
 
   # only the deserialization of the 0b00 type can have `nil` previous header
   def deserialize(
-        <<@header_type_0::bitstring, chunk_stream_id::6, @extended_timestamp_marker,
-          body_size::24, type_id::8, stream_id::32, timestamp::32, rest::binary>>,
-        _previous_headers
-      ) do
-    header = %__MODULE__{
-      chunk_stream_id: chunk_stream_id,
-      timestamp: timestamp,
-      extended_timestamp?: true,
-      body_size: body_size,
-      type_id: type_id,
-      stream_id: stream_id
-    }
-
-    {header, rest}
-  end
-
-  def deserialize(
         <<@header_type_0::bitstring, chunk_stream_id::6, timestamp::24, body_size::24, type_id::8,
           stream_id::32, rest::binary>>,
         _previous_headers
       ) do
-    header = %__MODULE__{
-      chunk_stream_id: chunk_stream_id,
-      timestamp: timestamp,
-      body_size: body_size,
-      type_id: type_id,
-      stream_id: stream_id
-    }
+    with {timestamp, extended_timestamp?, rest} <- extract_timestamp(rest, timestamp) do
+      header = %__MODULE__{
+        chunk_stream_id: chunk_stream_id,
+        timestamp: timestamp,
+        extended_timestamp?: extended_timestamp?,
+        body_size: body_size,
+        type_id: type_id,
+        stream_id: stream_id
+      }
 
-    {header, rest}
-  end
-
-  def deserialize(
-        <<@header_type_1::bitstring, chunk_stream_id::6, @extended_timestamp_marker,
-          body_size::24, type_id::8, timestamp_delta::32, rest::binary>>,
-        previous_headers
-      ) do
-    header = %__MODULE__{
-      chunk_stream_id: chunk_stream_id,
-      timestamp: previous_headers[chunk_stream_id].timestamp + timestamp_delta,
-      timestamp_delta: timestamp_delta,
-      extended_timestamp?: true,
-      body_size: body_size,
-      type_id: type_id,
-      stream_id: previous_headers[chunk_stream_id].stream_id
-    }
-
-    {header, rest}
+      {header, rest}
+    end
   end
 
   def deserialize(
@@ -124,50 +88,38 @@ defmodule Membrane.RTMP.Header do
           type_id::8, rest::binary>>,
         previous_headers
       ) do
-    header = %__MODULE__{
-      chunk_stream_id: chunk_stream_id,
-      timestamp: previous_headers[chunk_stream_id].timestamp + timestamp_delta,
-      timestamp_delta: timestamp_delta,
-      body_size: body_size,
-      type_id: type_id,
-      stream_id: previous_headers[chunk_stream_id].stream_id
-    }
+    with {timestamp_delta, extended_timestamp?, rest} <- extract_timestamp(rest, timestamp_delta) do
+      header = %__MODULE__{
+        chunk_stream_id: chunk_stream_id,
+        timestamp: previous_headers[chunk_stream_id].timestamp + timestamp_delta,
+        timestamp_delta: timestamp_delta,
+        extended_timestamp?: extended_timestamp?,
+        body_size: body_size,
+        type_id: type_id,
+        stream_id: previous_headers[chunk_stream_id].stream_id
+      }
 
-    {header, rest}
-  end
-
-  def deserialize(
-        <<@header_type_2::bitstring, chunk_stream_id::6, @extended_timestamp_marker,
-          timestamp_delta::32, rest::binary>>,
-        previous_headers
-      ) do
-    header = %__MODULE__{
-      chunk_stream_id: chunk_stream_id,
-      timestamp: previous_headers[chunk_stream_id].timestamp + timestamp_delta,
-      timestamp_delta: timestamp_delta,
-      extended_timestamp?: true,
-      body_size: previous_headers[chunk_stream_id].body_size,
-      type_id: previous_headers[chunk_stream_id].type_id,
-      stream_id: previous_headers[chunk_stream_id].stream_id
-    }
-
-    {header, rest}
+      {header, rest}
+    end
   end
 
   def deserialize(
         <<@header_type_2::bitstring, chunk_stream_id::6, timestamp_delta::24, rest::binary>>,
         previous_headers
       ) do
-    header = %__MODULE__{
-      chunk_stream_id: chunk_stream_id,
-      timestamp: previous_headers[chunk_stream_id].timestamp + timestamp_delta,
-      timestamp_delta: timestamp_delta,
-      body_size: previous_headers[chunk_stream_id].body_size,
-      type_id: previous_headers[chunk_stream_id].type_id,
-      stream_id: previous_headers[chunk_stream_id].stream_id
-    }
+    with {timestamp_delta, extended_timestamp?, rest} <- extract_timestamp(rest, timestamp_delta) do
+      header = %__MODULE__{
+        chunk_stream_id: chunk_stream_id,
+        timestamp: previous_headers[chunk_stream_id].timestamp + timestamp_delta,
+        timestamp_delta: timestamp_delta,
+        extended_timestamp?: extended_timestamp?,
+        body_size: previous_headers[chunk_stream_id].body_size,
+        type_id: previous_headers[chunk_stream_id].type_id,
+        stream_id: previous_headers[chunk_stream_id].stream_id
+      }
 
-    {header, rest}
+      {header, rest}
+    end
   end
 
   def deserialize(
@@ -177,18 +129,15 @@ defmodule Membrane.RTMP.Header do
     previous_header = previous_headers[chunk_stream_id]
 
     if previous_header.extended_timestamp? do
-      case rest do
-        <<timestamp_delta::32, rest::binary>> ->
-          header = %__MODULE__{
-            previous_header
-            | timestamp: previous_header.timestamp + timestamp_delta,
-              timestamp_delta: timestamp_delta
-          }
+      with {timestamp_delta, _extended_timestamp?, rest} <-
+             extract_timestamp(rest, @extended_timestamp_marker) do
+        header = %__MODULE__{
+          previous_header
+          | timestamp: previous_header.timestamp + timestamp_delta,
+            timestamp_delta: timestamp_delta
+        }
 
-          {header, rest}
-
-        _other ->
-          {:error, :need_more_data}
+        {header, rest}
       end
     else
       header = %__MODULE__{
@@ -200,16 +149,22 @@ defmodule Membrane.RTMP.Header do
     end
   end
 
-  def deserialize(<<@header_type_0::bitstring, _chunk_stream_id::6, rest::binary>>, _prev_header)
-      when byte_size(rest) < @header_type_0_size,
+  def deserialize(
+        <<@header_type_0::bitstring, _chunk_stream_id::6, _rest::binary>>,
+        _prev_header
+      ),
       do: {:error, :need_more_data}
 
-  def deserialize(<<@header_type_1::bitstring, _chunk_stream_id::6, rest::binary>>, _prev_header)
-      when byte_size(rest) < @header_type_1_size,
+  def deserialize(
+        <<@header_type_1::bitstring, _chunk_stream_id::6, _rest::binary>>,
+        _prev_header
+      ),
       do: {:error, :need_more_data}
 
-  def deserialize(<<@header_type_2::bitstring, _chunk_stream_id::6, rest::binary>>, _prev_header)
-      when byte_size(rest) < @header_type_2_size,
+  def deserialize(
+        <<@header_type_2::bitstring, _chunk_stream_id::6, _rest::binary>>,
+        _prev_header
+      ),
       do: {:error, :need_more_data}
 
   @spec serialize(t()) :: binary()
@@ -225,4 +180,13 @@ defmodule Membrane.RTMP.Header do
     <<@header_type_0::bitstring, chunk_stream_id::6, timestamp::24, body_size::24, type_id::8,
       stream_id::32>>
   end
+
+  defp extract_timestamp(<<timestamp::32, rest::binary>>, @extended_timestamp_marker),
+    do: {timestamp, true, rest}
+
+  defp extract_timestamp(_rest, @extended_timestamp_marker),
+    do: {:error, :need_more_data}
+
+  defp extract_timestamp(rest, timestamp),
+    do: {timestamp, false, rest}
 end
