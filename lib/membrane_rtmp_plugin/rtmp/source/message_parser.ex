@@ -86,39 +86,39 @@ defmodule Membrane.RTMP.MessageParser do
 
     step_size = Handshake.expects_bytes(handshake)
 
-    if byte_size(payload) >= step_size do
-      <<step_data::binary-size(step_size), rest::binary>> = payload
+    case payload do
+      <<step_data::binary-size(step_size), rest::binary>> ->
+        case Handshake.handle_step(step_data, handshake) do
+          {:continue_handshake, step, handshake} ->
+            # continue with the handshake
+            {step, %__MODULE__{state | buffer: rest, handshake: handshake}}
 
-      case Handshake.handle_step(step_data, handshake) do
-        {:continue_handshake, step, handshake} ->
-          # continue with the handshake
-          {step, %__MODULE__{state | buffer: rest, handshake: handshake}}
+          # the handshake is done but with last step to return
+          {:handshake_finished, step, _handshake} ->
+            {step,
+             %__MODULE__{
+               state
+               | buffer: rest,
+                 handshake: nil,
+                 state_machine: fsm_transition(:handshake)
+             }}
 
-        # the handshake is done but with last step to return
-        {:handshake_finished, step, _handshake} ->
-          {step,
-           %__MODULE__{
-             state
-             | buffer: rest,
-               handshake: nil,
-               state_machine: fsm_transition(:handshake)
-           }}
+          # the handshake is done without further steps
+          {:handshake_finished, _handshake} ->
+            {:handshake_done,
+             %__MODULE__{
+               state
+               | buffer: rest,
+                 handshake: nil,
+                 state_machine: fsm_transition(:handshake)
+             }}
 
-        # the handshake is done without further steps
-        {:handshake_finished, _handshake} ->
-          {:handshake_done,
-           %__MODULE__{
-             state
-             | buffer: rest,
-               handshake: nil,
-               state_machine: fsm_transition(:handshake)
-           }}
+          {:error, {:invalid_handshake_step, step_type}} ->
+            raise "Invalid handshake step: #{step_type}"
+        end
 
-        {:error, {:invalid_handshake_step, step_type}} ->
-          raise "Invalid handshake step: #{step_type}"
-      end
-    else
-      {:need_more_data, %__MODULE__{state | buffer: payload}}
+      _payload ->
+        {:need_more_data, %__MODULE__{state | buffer: payload}}
     end
   end
 
@@ -154,16 +154,16 @@ defmodule Membrane.RTMP.MessageParser do
             body_size
           end
 
-        if chunked_body_size <= byte_size(rest) do
-          <<body::binary-size(chunked_body_size), rest::binary>> = rest
+        case rest do
+          <<body::binary-size(chunked_body_size), rest::binary>> ->
+            combined_body = combine_body_chunks(body, chunk_size)
 
-          combined_body = combine_body_chunks(body, chunk_size)
+            message = Message.deserialize_message(header.type_id, combined_body)
 
-          message = Message.deserialize_message(header.type_id, combined_body)
+            {header, message, rest}
 
-          {header, message, rest}
-        else
-          {:error, :need_more_data}
+          _rest ->
+            {:error, :need_more_data}
         end
 
       {:error, :need_more_data} = error ->
@@ -179,19 +179,19 @@ defmodule Membrane.RTMP.MessageParser do
     if byte_size(body) <= chunk_size do
       body
     else
-      do_combine_body_chunks(body, chunk_size, <<>>)
+      do_combine_body_chunks(body, chunk_size, [])
     end
   end
 
-  defp do_combine_body_chunks(body, chunk_size, acc) when byte_size(body) <= chunk_size do
-    acc <> body
-  end
-
   defp do_combine_body_chunks(body, chunk_size, acc) do
-    # cut out the header byte (staring with 0b11)
-    <<body::binary-size(chunk_size), 0b11::2, _chunk_stream_id::6, rest::binary>> = body
+    case body do
+      # cut out the header byte (staring with 0b11)
+      <<body::binary-size(chunk_size), 0b11::2, _chunk_stream_id::6, rest::binary>> ->
+        do_combine_body_chunks(rest, chunk_size, [acc, body])
 
-    do_combine_body_chunks(rest, chunk_size, acc <> body)
+      body ->
+        IO.iodata_to_binary([acc, body])
+    end
   end
 
   # in case of client interception the Publish message indicates successful connection
