@@ -7,9 +7,7 @@ defmodule Membrane.RTMP.Messages.SetDataFrame do
 
   alias Membrane.RTMP.AMF.Encoder
 
-  @enforce_keys [:duration, :file_size, :encoder]
-  defstruct @enforce_keys ++
-              ~w(width height video_codec_id video_data_rate framerate audio_codec_id
+  defstruct ~w(duration file_size encoder width height video_codec_id video_data_rate framerate audio_codec_id
                 audio_data_rate audio_sample_rate audio_sample_size stereo)a
 
   @attributes_to_keys %{
