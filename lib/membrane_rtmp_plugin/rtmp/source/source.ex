@@ -41,7 +41,7 @@ defmodule Membrane.RTMP.Source do
               validator: [
                 spec: Membrane.RTMP.MessageValidator,
                 description: """
-                A Module implementing `Membrane.RTMP.MessageValidator` behaviour, used for validating the stream.
+                A Module implementing `Membrane.RTMP.MessageValidator` protocol, used for validating the stream.
                 """
               ]
 
