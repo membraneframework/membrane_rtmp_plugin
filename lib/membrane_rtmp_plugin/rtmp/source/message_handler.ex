@@ -15,8 +15,8 @@ defmodule Membrane.RTMP.MessageHandler do
     Message,
     MessageParser,
     Messages,
-    Responses,
-    MessageValidator
+    MessageValidator,
+    Responses
   }
 
   alias Membrane.RTMP.Messages.Serializer
