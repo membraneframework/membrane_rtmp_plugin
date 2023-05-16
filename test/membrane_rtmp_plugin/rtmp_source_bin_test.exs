@@ -10,6 +10,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
 
   @input_file "test/fixtures/testsrc.flv"
   @local_ip "127.0.0.1"
+  # Shared secret wth Support.TestValidator
   @stream_key "ala2137"
 
   @stream_length_ms 3000
@@ -91,7 +92,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     # offset half a second in the past
     offset = @extended_timestamp_tag / 1_000 - 0.5
 
-    {:ok, port} = start_tcp_server(Membrane.RTMP.Source.TestVerifier)
+    {:ok, port} = start_tcp_server(%Support.TestValidator{})
 
     ffmpeg_task =
       Task.async(fn ->
@@ -117,7 +118,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   end
 
   test "Correct Stream ID is correctly verified" do
-    {:ok, port} = start_tcp_server(Membrane.RTMP.Source.TestVerifier)
+    {:ok, port} = start_tcp_server(%Support.TestValidator{})
 
     ffmpeg_task =
       Task.async(fn ->
@@ -142,7 +143,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   end
 
   test "Wrong Stream ID is denied" do
-    {:ok, port} = start_tcp_server(Membrane.RTMP.Source.TestVerifier)
+    {:ok, port} = start_tcp_server(%Support.TestValidator{})
 
     ffmpeg_task =
       Task.async(fn ->
@@ -163,7 +164,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     assert :error = Task.await(ffmpeg_task)
   end
 
-  defp start_tcp_server(verifier \\ Membrane.RTMP.DefaultMessageValidator) do
+  defp start_tcp_server(verifier \\ %{}) do
     test_process = self()
 
     options = %TcpServer{
