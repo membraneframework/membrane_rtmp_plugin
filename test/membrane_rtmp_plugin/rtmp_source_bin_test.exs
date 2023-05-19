@@ -143,7 +143,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   end
 
   test "Wrong Stream ID is denied" do
-    {:ok, port} = start_tcp_server(%Support.TestValidator{})
+    {:ok, port} = start_tcp_server(%Support.TestValidator{stream_key: "@stream_key <> "123"})
 
     ffmpeg_task =
       Task.async(fn ->
