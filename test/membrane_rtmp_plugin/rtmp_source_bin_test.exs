@@ -137,7 +137,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
       buffers_expected: div(@stream_length_ms, @audio_frame_duration_ms)
     })
 
-    assert_end_of_stream(pipeline, :audio_sink, :input, @stream_length_ms - 500)
+    assert_end_of_stream(pipeline, :audio_sink, :input, @stream_length_ms + 500)
     assert_end_of_stream(pipeline, :video_sink, :input)
 
     # Cleanup

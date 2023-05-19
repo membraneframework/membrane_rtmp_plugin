@@ -149,14 +149,19 @@ defmodule Membrane.RTMP.MessageParser do
             # needs to be stripped and is not counted into the body_size
             headers_to_strip = div(body_size - 1, chunk_size)
 
-            body_size + headers_to_strip
+            timestamps_to_strip = if header.extended_timestamp?, do: headers_to_strip * 4, else: 0
+            body_size + headers_to_strip + timestamps_to_strip
           else
             body_size
           end
 
         case rest do
           <<body::binary-size(chunked_body_size), rest::binary>> ->
-            combined_body = combine_body_chunks(body, chunk_size)
+            combined_body = combine_body_chunks(body, chunk_size, header)
+
+            if byte_size(combined_body) != body_size do
+              raise "combined body size: #{byte_size(combined_body)}, expected body size #{body_size}"
+            end
 
             message = Message.deserialize_message(header.type_id, combined_body)
 
@@ -175,19 +180,23 @@ defmodule Membrane.RTMP.MessageParser do
   # in this case the message gets divided into
   # a sequence of smaller packets separated by the a header type 3 byte
   # (the first 2 bits has to be 0b11)
-  defp combine_body_chunks(body, chunk_size) do
+  defp combine_body_chunks(body, chunk_size, header) do
     if byte_size(body) <= chunk_size do
       body
     else
-      do_combine_body_chunks(body, chunk_size, [])
+      do_combine_body_chunks(body, chunk_size, [], header)
     end
   end
 
-  defp do_combine_body_chunks(body, chunk_size, acc) do
+  defp do_combine_body_chunks(body, chunk_size, acc, header) do
     case body do
+      <<body::binary-size(chunk_size), 0b11::2, _chunk_stream_id::6, timestamp::32, rest::binary>>
+      when header.extended_timestamp? and timestamp == header.timestamp ->
+        do_combine_body_chunks(rest, chunk_size, [acc, body], header)
+
       # cut out the header byte (staring with 0b11)
       <<body::binary-size(chunk_size), 0b11::2, _chunk_stream_id::6, rest::binary>> ->
-        do_combine_body_chunks(rest, chunk_size, [acc, body])
+        do_combine_body_chunks(rest, chunk_size, [acc, body], header)
 
       body ->
         IO.iodata_to_binary([acc, body])
