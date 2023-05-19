@@ -1,14 +1,19 @@
 defmodule Support.TestValidator do
   @moduledoc """
-  A MessageValidator implementation that shares a secret with source's test streams.
+  A MessageValidator implementation. If no stream_key is assigned, all streams
+  will be allowed.
   """
-  defstruct stream_key: "ala2137"
+
+  defstruct stream_key: nil
 end
 
 defimpl Membrane.RTMP.MessageValidator, for: Support.TestValidator do
   alias Membrane.RTMP.Messages
 
   @impl true
+  def validate_publish(%Support.TestValidator{stream_key: nil}, _message),
+    do: {:ok, "stream allowed"}
+
   def validate_publish(%Support.TestValidator{stream_key: accepted_key}, %Messages.Publish{
         stream_key: stream_key
       }) do

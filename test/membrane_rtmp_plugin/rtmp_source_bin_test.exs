@@ -118,7 +118,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   end
 
   test "Correct Stream ID is correctly verified" do
-    {:ok, port} = start_tcp_server(%Support.TestValidator{})
+    {:ok, port} = start_tcp_server(%Support.TestValidator{stream_key: @stream_key})
 
     ffmpeg_task =
       Task.async(fn ->
@@ -164,7 +164,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     assert :error = Task.await(ffmpeg_task)
   end
 
-  defp start_tcp_server(verifier \\ %{}) do
+  defp start_tcp_server(validator \\ %Support.TestValidator{}) do
     test_process = self()
 
     options = %TcpServer{
@@ -181,7 +181,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
           custom_args: %{
             socket: socket,
             test_process: test_process,
-            verifier: verifier,
+            validator: validator,
             use_ssl?: false
           },
           test_process: test_process
