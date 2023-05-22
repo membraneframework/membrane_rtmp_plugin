@@ -117,8 +117,8 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   end
 
   test "SourceBin gracefully handles start when starting after timestamp overflow" do
-    # offset half a second in the future
-    offset = @extended_timestamp_tag / 1_000 + 0.5
+    # offset five seconds in the future
+    offset = @extended_timestamp_tag / 1_000 + 5
 
     {:ok, port} = start_tcp_server(Membrane.RTMP.Source.TestVerifier)
 
@@ -137,7 +137,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
       buffers_expected: div(@stream_length_ms, @audio_frame_duration_ms)
     })
 
-    assert_end_of_stream(pipeline, :audio_sink, :input, @stream_length_ms + 500)
+    assert_end_of_stream(pipeline, :audio_sink, :input, @stream_length_ms)
     assert_end_of_stream(pipeline, :video_sink, :input)
 
     # Cleanup
