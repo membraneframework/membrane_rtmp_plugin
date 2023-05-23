@@ -223,7 +223,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
           custom_args: %{
             socket: socket,
             test_process: test_process,
-            verifier: validator,
+            validator: validator,
             use_ssl?: true
           },
           test_process: test_process
