@@ -15,7 +15,7 @@ defmodule Membrane.RTMP.SourceBin do
   and the `Source` will start reading packets from the socket.
 
   The bin allows for providing custom validator module, that verifies some of the RTMP messages.
-  The module has to implement the `Membrane.RTMP.MessageValidator` behaviour.
+  The module has to implement the `Membrane.RTMP.MessageValidator` protocol.
   If the validation fails, a `t:Membrane.RTMP.Source.stream_validation_failed_t/0` notification is sent.
   """
   use Membrane.Bin

@@ -120,7 +120,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     # offset five seconds in the future
     offset = @extended_timestamp_tag / 1_000 + 5
 
-    {:ok, port} = start_tcp_server(Membrane.RTMP.Source.TestVerifier)
+    {:ok, port} = start_tcp_server()
 
     ffmpeg_task =
       Task.async(fn ->
