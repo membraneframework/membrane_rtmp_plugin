@@ -10,7 +10,6 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
 
   @input_file "test/fixtures/testsrc.flv"
   @local_ip "127.0.0.1"
-  # Shared secret wth Support.TestValidator
   @stream_key "ala2137"
 
   @stream_length_ms 3000
