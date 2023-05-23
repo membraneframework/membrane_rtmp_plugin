@@ -43,7 +43,7 @@ defmodule Membrane.RTMP.Header do
   @header_type_2 <<0x2::2>>
   @header_type_3 <<0x3::2>>
 
-  @extended_timestamp_marker <<0xFFFFFF::24>>
+  @extended_timestamp_marker 0xFFFFFF
 
   @spec new(Keyword.t()) :: t()
   def new(opts) do

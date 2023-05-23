@@ -116,6 +116,35 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     assert :ok = Task.await(ffmpeg_task)
   end
 
+  test "SourceBin gracefully handles start when starting after timestamp overflow" do
+    # offset five seconds in the future
+    offset = @extended_timestamp_tag / 1_000 + 5
+
+    {:ok, port} = start_tcp_server(Membrane.RTMP.Source.TestVerifier)
+
+    ffmpeg_task =
+      Task.async(fn ->
+        get_stream_url(port, @stream_key) |> start_ffmpeg(ts_offset: offset)
+      end)
+
+    pipeline = await_pipeline_started()
+    assert_pipeline_play(pipeline)
+
+    assert_buffers(%{
+      pipeline: pipeline,
+      sink: :audio_sink,
+      stream_length: trunc(@stream_length_ms + offset * 1_000),
+      buffers_expected: div(@stream_length_ms, @audio_frame_duration_ms)
+    })
+
+    assert_end_of_stream(pipeline, :audio_sink, :input, @stream_length_ms)
+    assert_end_of_stream(pipeline, :video_sink, :input)
+
+    # Cleanup
+    Testing.Pipeline.terminate(pipeline, blocking?: true)
+    assert :ok = Task.await(ffmpeg_task)
+  end
+
   test "Correct Stream ID is correctly verified" do
     {:ok, port} = start_tcp_server(Membrane.RTMP.Source.TestVerifier)
 
