@@ -149,7 +149,10 @@ defmodule Membrane.RTMP.MessageParser do
             # needs to be stripped and is not counted into the body_size
             headers_to_strip = div(body_size - 1, chunk_size)
 
+            # if the initial header contains a extended timestamp then
+            # every following chunk will contain the timestamp
             timestamps_to_strip = if header.extended_timestamp?, do: headers_to_strip * 4, else: 0
+
             body_size + headers_to_strip + timestamps_to_strip
           else
             body_size
@@ -158,10 +161,6 @@ defmodule Membrane.RTMP.MessageParser do
         case rest do
           <<body::binary-size(chunked_body_size), rest::binary>> ->
             combined_body = combine_body_chunks(body, chunk_size, header)
-
-            if byte_size(combined_body) != body_size do
-              raise "combined body size: #{byte_size(combined_body)}, expected body size #{body_size}"
-            end
 
             message = Message.deserialize_message(header.type_id, combined_body)
 
@@ -184,19 +183,19 @@ defmodule Membrane.RTMP.MessageParser do
     if byte_size(body) <= chunk_size do
       body
     else
-      do_combine_body_chunks(body, chunk_size, [], header)
+      do_combine_body_chunks(body, chunk_size, header, [])
     end
   end
 
-  defp do_combine_body_chunks(body, chunk_size, acc, header) do
+  defp do_combine_body_chunks(body, chunk_size, header, acc) do
     case body do
       <<body::binary-size(chunk_size), 0b11::2, _chunk_stream_id::6, timestamp::32, rest::binary>>
       when header.extended_timestamp? and timestamp == header.timestamp ->
-        do_combine_body_chunks(rest, chunk_size, [acc, body], header)
+        do_combine_body_chunks(rest, chunk_size, header, [acc, body])
 
       # cut out the header byte (staring with 0b11)
       <<body::binary-size(chunk_size), 0b11::2, _chunk_stream_id::6, rest::binary>> ->
-        do_combine_body_chunks(rest, chunk_size, [acc, body], header)
+        do_combine_body_chunks(rest, chunk_size, header, [acc, body])
 
       body ->
         IO.iodata_to_binary([acc, body])
