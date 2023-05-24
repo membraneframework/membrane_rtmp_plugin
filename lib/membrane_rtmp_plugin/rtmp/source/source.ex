@@ -39,10 +39,12 @@ defmodule Membrane.RTMP.Source do
                 """
               ],
               validator: [
-                spec: Membrane.RTMP.MessageValidator,
+                spec: Membrane.RTMP.MessageValidator.t(),
                 description: """
-                A Module implementing `Membrane.RTMP.MessageValidator` behaviour, used for validating the stream.
-                """
+                A `Membrane.RTMP.MessageValidator` implementation, used for validating the stream. By default allows
+                every incoming stream.
+                """,
+                default: %Membrane.RTMP.MessageValidator.Default{}
               ]
 
   @typedoc """

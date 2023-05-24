@@ -15,6 +15,7 @@ defmodule Membrane.RTMP.MessageHandler do
     Message,
     MessageParser,
     Messages,
+    MessageValidator,
     Responses
   }
 
@@ -108,7 +109,7 @@ defmodule Membrane.RTMP.MessageHandler do
          _header,
          state
        ) do
-    case state.validator.validate_release_stream(msg) do
+    case MessageValidator.validate_release_stream(state.validator, msg) do
       {:ok, _msg} = result ->
         tx_id
         |> Responses.default_result()
@@ -127,7 +128,7 @@ defmodule Membrane.RTMP.MessageHandler do
          _header,
          state
        ) do
-    case state.validator.validate_publish(msg) do
+    case MessageValidator.validate_publish(state.validator, msg) do
       {:ok, _msg} = result ->
         %Messages.UserControl{event_type: 0, data: <<0, 0, 0, 1>>}
         |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
@@ -145,7 +146,7 @@ defmodule Membrane.RTMP.MessageHandler do
   # A message containing stream metadata
   @validation_stage :set_data_frame
   defp do_handle_client_message(%Messages.SetDataFrame{} = msg, _header, state) do
-    case state.validator.validate_set_data_frame(msg) do
+    case MessageValidator.validate_set_data_frame(state.validator, msg) do
       {:ok, _msg} = result ->
         {:cont, validation_action(state, @validation_stage, result)}
 
