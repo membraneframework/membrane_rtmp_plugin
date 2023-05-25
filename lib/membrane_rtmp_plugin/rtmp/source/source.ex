@@ -223,8 +223,7 @@ defmodule Membrane.RTMP.Source do
   @impl true
   def handle_info({:socket_closed, _socket}, ctx, state) do
     if ctx.pads.output.start_of_stream? do
-      # EOS is handled by the message handler.
-      {[], state}
+      {[end_of_stream: :output], state}
     else
       {[notify_parent: :unexpected_socket_closed], state}
     end
