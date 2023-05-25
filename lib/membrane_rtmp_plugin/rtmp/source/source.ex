@@ -222,10 +222,10 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_info({:socket_closed, _socket}, ctx, state) do
-    if ctx.pads.output.start_of_stream? do
-      {[end_of_stream: :output], state}
-    else
-      {[notify_parent: :unexpected_socket_closed], state}
+    cond do
+      ctx.pads.output.end_of_stream? -> {[], state}
+      ctx.pads.output.start_of_stream? -> {[end_of_stream: :output], state}
+      true -> {[notify_parent: :unexpected_socket_closed], state}
     end
   end
 
