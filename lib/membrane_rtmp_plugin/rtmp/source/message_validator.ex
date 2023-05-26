@@ -6,7 +6,7 @@ defprotocol Membrane.RTMP.MessageValidator do
   of the RTMP messages.
   """
 
-  @type validation_result_t :: {:ok, binary()} | {:error, reason :: any()}
+  @type validation_result_t :: {:ok, term()} | {:error, reason :: any()}
 
   @doc """
   Validates the `t:Membrane.RTMP.Messages.ReleaseStream.t/0` message.
