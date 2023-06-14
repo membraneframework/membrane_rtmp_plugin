@@ -56,6 +56,12 @@ Streaming implementation example is provided with the following [`examples/sink.
 elixir examples/sink.exs
 ```
 
+If you are interested in streaming only a single track. e.g. video, use [`examples/sink_video.exs`](examples/sink_video.exs) instead:
+
+```bash
+elixir examples/sink_video.exs
+```
+
 It will connect to RTMP server provided via URL and stream H264 video and AAC audio.
 RTMP server that will receive this stream can be launched with ffmpeg by running the following commands:
 

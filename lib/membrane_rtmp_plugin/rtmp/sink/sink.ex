@@ -72,6 +72,7 @@ defmodule Membrane.RTMP.Sink do
     end
 
     single_track? = length(options.tracks) == 1
+    frame_buffer = Enum.map(options.tracks, &{Pad.ref(&1, 0), nil}) |> Enum.into(%{})
 
     state =
       options
@@ -80,7 +81,7 @@ defmodule Membrane.RTMP.Sink do
         attempts: 0,
         native: nil,
         # Keys here are the pad names.
-        frame_buffer: %{audio: nil, video: nil},
+        frame_buffer: frame_buffer,
         last_dts: %{},
         ready?: false,
         # Activated when one of the source inputs gets closed. Interleaving is
@@ -108,7 +109,7 @@ defmodule Membrane.RTMP.Sink do
 
   @impl true
   def handle_playing(_ctx, state) do
-    {build_demand(state) |> IO.inspect(label: :playing), state}
+    {build_demand(state), state}
   end
 
   @impl true
@@ -136,7 +137,6 @@ defmodule Membrane.RTMP.Sink do
          ) do
       {:ok, ready?, native} ->
         Membrane.Logger.debug("Correctly initialized video stream.")
-        IO.inspect(ready?, label: :video_ready)
         {[], %{state | native: native, ready?: ready?}}
 
       {:error, :stream_format_resent} ->
@@ -166,7 +166,6 @@ defmodule Membrane.RTMP.Sink do
          ) do
       {:ok, ready?, native} ->
         Membrane.Logger.debug("Correctly initialized audio stream.")
-        IO.inspect(ready?, label: :audio_ready)
         {[], %{state | native: native, ready?: ready?}}
 
       {:error, :stream_format_resent} ->
@@ -180,18 +179,14 @@ defmodule Membrane.RTMP.Sink do
 
   @impl true
   def handle_write(pad, buffer, _ctx, %{ready?: false} = state) do
-    IO.inspect(pad, label: "write not ready")
     {[], fill_frame_buffer(state, pad, buffer)}
   end
 
   def handle_write(pad, buffer, _ctx, %{forward_mode?: true} = state) do
-    IO.inspect(pad, label: "write forward")
     {[demand: pad], write_frame(state, pad, buffer)}
   end
 
   def handle_write(pad, buffer, _ctx, state) do
-    IO.inspect(pad, label: "write")
-
     state
     |> fill_frame_buffer(pad, buffer)
     |> write_frame_interleaved()
@@ -210,9 +205,10 @@ defmodule Membrane.RTMP.Sink do
           :audio -> :video
           :video -> :audio
         end
+        |> then(&Pad.ref(&1, 0))
 
       state = flush_frame_buffer(state)
-      {[demand: Pad.ref(other_pad, 0)], %{state | forward_mode?: true}}
+      {[demand: other_pad], %{state | forward_mode?: true}}
     end
   end
 
@@ -247,12 +243,12 @@ defmodule Membrane.RTMP.Sink do
   defp build_demand(%{frame_buffer: frame_buffer}) do
     frame_buffer
     |> Enum.filter(fn {_pad, buffer} -> buffer == nil end)
-    |> Enum.map(fn {type, _buffer} -> {:demand, Pad.ref(type, 0)} end)
+    |> Enum.map(fn {pad, _buffer} -> {:demand, pad} end)
   end
 
-  defp fill_frame_buffer(state, Pad.ref(type, 0) = pad, buffer) do
-    if get_in(state, [:frame_buffer, type]) == nil do
-      put_in(state, [:frame_buffer, type], buffer)
+  defp fill_frame_buffer(state, pad, buffer) do
+    if get_in(state, [:frame_buffer, pad]) == nil do
+      put_in(state, [:frame_buffer, pad], buffer)
     else
       raise "attempted to overwrite frame buffer on pad #{inspect(pad)}"
     end
@@ -265,21 +261,17 @@ defmodule Membrane.RTMP.Sink do
   end
 
   defp write_frame_interleaved(%{frame_buffer: frame_buffer} = state) do
-    {type, buffer} =
+    {pad, buffer} =
       Enum.min_by(frame_buffer, fn {_pad, buffer} ->
         buffer
         |> Buffer.get_dts_or_pts()
         |> Ratio.ceil()
       end)
 
-    pad = Pad.ref(type, 0)
-
     state =
       state
       |> write_frame(pad, buffer)
-      |> put_in([:frame_buffer, type], nil)
-
-    IO.inspect("write_interleaved")
+      |> put_in([:frame_buffer, pad], nil)
 
     {build_demand(state), state}
   end
@@ -294,7 +286,7 @@ defmodule Membrane.RTMP.Sink do
 
     Enum.reduce(pads_with_buffer, state, fn {pad, buffer}, state ->
       state
-      |> write_frame(Pad.ref(pad, 0), buffer)
+      |> write_frame(pad, buffer)
       |> put_in([:frame_buffer, pad], nil)
     end)
   end

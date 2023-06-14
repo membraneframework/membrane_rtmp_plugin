@@ -12,8 +12,7 @@ Mix.install([
 defmodule Example do
   use Membrane.Pipeline
 
-  @samples_url "https://raw.githubusercontent.com/membraneframework/static/gh-pages/samples/big-buck-bunny/"
-  @video_url @samples_url <> "bun33s_480x270.h264"
+  @samples_url "https://raw.githubusercontent.com/membraneframework/static/gh-pages/samples/big-buck-bunny/bun33s_480x270.h264"
 
   @impl true
   def handle_init(_ctx, destination: destination) do

@@ -12,9 +12,7 @@ Mix.install([
 defmodule Example do
   use Membrane.Pipeline
 
-  @samples_url "https://raw.githubusercontent.com/membraneframework/static/gh-pages/samples/big-buck-bunny/"
-  @video_url @samples_url <> "bun33s_480x270.h264"
-  @audio_url @samples_url <> "bun33s.aac"
+  @video_url "https://raw.githubusercontent.com/membraneframework/static/gh-pages/samples/big-buck-bunny/bun33s_480x270.h264"
 
   @impl true
   def handle_init(_ctx, destination: destination) do
@@ -33,17 +31,6 @@ defmodule Example do
       |> child(:video_realtimer, Membrane.Realtimer)
       |> child(:video_payloader, Membrane.MP4.Payloader.H264)
       |> via_in(:video)
-      |> get_child(:rtmp_sink),
-      child(:audio_source, %Membrane.Hackney.Source{
-        location: @audio_url,
-        hackney_opts: [follow_redirect: true]
-      })
-      |> child(:audio_parser, %Membrane.AAC.Parser{
-        in_encapsulation: :ADTS,
-        out_encapsulation: :none
-      })
-      |> child(:audio_realtimer, Membrane.Realtimer)
-      |> via_in(:audio)
       |> get_child(:rtmp_sink)
     ]
 
@@ -52,13 +39,8 @@ defmodule Example do
 
   # The rest of the example module is only used for self-termination of the pipeline after processing finishes
   @impl true
-  def handle_element_end_of_stream(:rtmp_sink, _pad, _ctx, %{streams_to_end: 1} = state) do
-    {[terminate: :shutdown], %{state | streams_to_end: 0}}
-  end
-
-  @impl true
   def handle_element_end_of_stream(:rtmp_sink, _pad, _ctx, state) do
-    {[], %{state | streams_to_end: 1}}
+    {[terminate: :shutdown], state}
   end
 
   @impl true
