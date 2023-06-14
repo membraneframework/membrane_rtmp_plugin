@@ -1,7 +1,7 @@
 defmodule Membrane.RTMP.Sink do
   @moduledoc """
   Membrane element being client-side of RTMP streams.
-  To work successfuly it requires to receive both audio and video streams in AAC and H264 format respectively.
+  It needs to receive video stream in H264 format, audio in AAC format or both.
   Currently it supports only:
     - RTMP proper - "plain" RTMP protocol
     - RTMPS - RTMP over TLS/SSL
@@ -17,6 +17,7 @@ defmodule Membrane.RTMP.Sink do
 
   @supported_protocols ["rtmp://", "rtmps://"]
   @connection_attempt_interval 500
+  @type track_type :: :audio | :video
 
   def_input_pad :audio,
     availability: :on_request,
@@ -46,7 +47,7 @@ defmodule Membrane.RTMP.Sink do
                 """
               ],
               tracks: [
-                spec: [:audio | :video],
+                spec: [track_type()],
                 default: [:audio, :video],
                 description: """
                 A list of tracks, which will be sent. Can be `:audio`, `:video` or both.
@@ -82,7 +83,6 @@ defmodule Membrane.RTMP.Sink do
         native: nil,
         # Keys here are the pad names.
         frame_buffer: frame_buffer,
-        last_dts: %{},
         ready?: false,
         # Activated when one of the source inputs gets closed. Interleaving is
         # disabled, frame buffer is flushed and from that point buffers on the
@@ -117,8 +117,7 @@ defmodule Membrane.RTMP.Sink do
     do: raise(ArgumentError, message: "Stream id must always be 0")
 
   @impl true
-  def handle_pad_added(Pad.ref(type, 0), _ctx, state) do
-    state = put_in(state, [:last_dts, type], 0)
+  def handle_pad_added(_pad, _ctx, state) do
     {[], state}
   end
 

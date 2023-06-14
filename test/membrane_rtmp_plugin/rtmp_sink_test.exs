@@ -50,72 +50,50 @@ defmodule Membrane.RTMP.SinkTest do
   test "Check if audio and video streams are correctly received by RTMP server instance", %{
     flv_output_file: flv_output_file
   } do
-    rtmp_server = Task.async(fn -> start_rtmp_server(flv_output_file) end)
-
-    sink_pipeline_pid = start_sink_pipeline(@rtmp_server_url)
-
-    # There's an RC - there's no way to ensure RTMP server starts to listen before pipeline is started
-    # so it may retry a few times before succeeding
-    assert_pipeline_play(sink_pipeline_pid, 5000)
-
-    assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:video, 0), 5_000)
-    assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:audio, 0))
-
-    assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:video, 0), 5_000)
-    assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:audio, 0))
-
-    :ok = Pipeline.terminate(sink_pipeline_pid, blocking?: true)
-    # RTMP server should terminate when the connection is closed
-    assert :ok = Task.await(rtmp_server)
-
-    assert File.exists?(flv_output_file)
-    assert File.stat!(flv_output_file).size == File.stat!(@reference_flv_path).size
-  end
-
-  @tag :tmp_dir
-  test "Check if a single video track is correctly received by RTMP server instance", %{
-    flv_output_file: flv_output_file
-  } do
-    rtmp_server = Task.async(fn -> start_rtmp_server(flv_output_file) end)
-
-    sink_pipeline_pid = start_sink_pipeline(@rtmp_server_url, [:video])
-
-    # There's an RC - there's no way to ensure RTMP server starts to listen before pipeline is started
-    # so it may retry a few times before succeeding
-    assert_pipeline_play(sink_pipeline_pid, 5000)
-
-    assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:video, 0), 5_000)
-    assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:video, 0), 5_000)
-
-    :ok = Pipeline.terminate(sink_pipeline_pid, blocking?: true)
-    # RTMP server should terminate when the connection is closed
-    assert :ok = Task.await(rtmp_server)
-
-    assert File.exists?(flv_output_file)
-    assert File.stat!(flv_output_file).size == File.stat!(@reference_flv_video_path).size
+    test_stream_correctly_received(flv_output_file, @reference_flv_path, [:audio, :video])
   end
 
   @tag :tmp_dir
   test "Check if a single audio track is correctly received by RTMP server instance", %{
     flv_output_file: flv_output_file
   } do
-    rtmp_server = Task.async(fn -> start_rtmp_server(flv_output_file) end)
+    test_stream_correctly_received(flv_output_file, @reference_flv_audio_path, [:audio])
+  end
 
-    sink_pipeline_pid = start_sink_pipeline(@rtmp_server_url, [:audio])
+  @tag :tmp_dir
+  test "Check if a single video track is correctly received by RTMP server instance", %{
+    flv_output_file: flv_output_file
+  } do
+    test_stream_correctly_received(flv_output_file, @reference_flv_video_path, [:video])
+  end
+
+  defp test_stream_correctly_received(flv_output, fixture, tracks) do
+    rtmp_server = Task.async(fn -> start_rtmp_server(flv_output) end)
+
+    sink_pipeline_pid = start_sink_pipeline(@rtmp_server_url, tracks)
 
     # There's an RC - there's no way to ensure RTMP server starts to listen before pipeline is started
     # so it may retry a few times before succeeding
     assert_pipeline_play(sink_pipeline_pid, 5000)
 
-    assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:audio, 0), 5_000)
-    assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:audio, 0), 5_000)
+    if :audio in tracks,
+      do: assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:audio, 0), 5_000)
+
+    if :video in tracks,
+      do: assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:video, 0), 5_000)
+
+    if :audio in tracks,
+      do: assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:audio, 0), 5_000)
+
+    if :video in tracks,
+      do: assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:video, 0), 5_000)
 
     :ok = Pipeline.terminate(sink_pipeline_pid, blocking?: true)
     # RTMP server should terminate when the connection is closed
     assert :ok = Task.await(rtmp_server)
 
-    assert File.exists?(flv_output_file)
-    assert File.stat!(flv_output_file).size == File.stat!(@reference_flv_audio_path).size
+    assert File.exists?(flv_output)
+    assert File.stat!(flv_output).size == File.stat!(fixture).size
   end
 
   defp start_interleaving_sink_pipeline(rtmp_url) do
@@ -148,7 +126,7 @@ defmodule Membrane.RTMP.SinkTest do
     Pipeline.start_link_supervised!(options)
   end
 
-  defp start_sink_pipeline(rtmp_url, tracks \\ [:audio, :video]) do
+  defp start_sink_pipeline(rtmp_url, tracks) do
     import Membrane.ChildrenSpec
 
     options = [
