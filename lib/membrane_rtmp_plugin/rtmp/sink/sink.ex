@@ -19,13 +19,13 @@ defmodule Membrane.RTMP.Sink do
   @connection_attempt_interval 500
 
   def_input_pad :audio,
-    availability: :always,
+    availability: :on_request,
     accepted_format: AAC,
     mode: :pull,
     demand_unit: :buffers
 
   def_input_pad :video,
-    availability: :always,
+    availability: :on_request,
     accepted_format: MP4.Payload,
     mode: :pull,
     demand_unit: :buffers
@@ -69,7 +69,7 @@ defmodule Membrane.RTMP.Sink do
         # Activated when one of the source inputs gets closed. Interleaving is
         # disabled, frame buffer is flushed and from that point buffers on the
         # remaining pad are simply forwarded to the output.
-        forward_mode?: false
+        forward_mode?: true
       })
 
     {[], state}
@@ -87,12 +87,23 @@ defmodule Membrane.RTMP.Sink do
 
   @impl true
   def handle_playing(_ctx, state) do
-    {build_demand(state), state}
+    # {build_demand(state), state}
+    {[demand: Pad.ref(:video, 0)], state}
+  end
+
+  @impl true
+  def handle_pad_added(Pad.ref(_type, stream_id), _ctx, _state) when stream_id != 0,
+    do: raise(ArgumentError, message: "Stream id must always be 0")
+
+  @impl true
+  def handle_pad_added(Pad.ref(type, 0), _ctx, state) do
+    # state = put_in(state, [:last_dts, pad], 0)
+    {[], state}
   end
 
   @impl true
   def handle_stream_format(
-        :video,
+        Pad.ref(:video, 0),
         %MP4.Payload{content: %MP4.Payload.AVC1{avcc: avc_config}} = stream_format,
         _ctx,
         state
@@ -117,7 +128,7 @@ defmodule Membrane.RTMP.Sink do
   end
 
   @impl true
-  def handle_stream_format(:audio, %Membrane.AAC{} = stream_format, _ctx, state) do
+  def handle_stream_format(Pad.ref(:audio, 0), %Membrane.AAC{} = stream_format, _ctx, state) do
     profile = AAC.profile_to_aot_id(stream_format.profile)
     sr_index = AAC.sample_rate_to_sampling_frequency_id(stream_format.sample_rate)
     channel_configuration = AAC.channels_to_channel_config_id(stream_format.channels)
@@ -144,6 +155,10 @@ defmodule Membrane.RTMP.Sink do
         {[], state}
     end
   end
+
+  # @impl true
+  # def handle_write(Pad.ref(:video, 0), buffer, _ctx, state) do
+  # end
 
   @impl true
   def handle_write(pad, buffer, _ctx, %{ready?: false} = state) do
@@ -258,7 +273,7 @@ defmodule Membrane.RTMP.Sink do
     end)
   end
 
-  defp write_frame(state, :audio, buffer) do
+  defp write_frame(state, Pad.ref(:audio, 0), buffer) do
     buffer_pts = buffer.pts |> Ratio.ceil()
 
     case Native.write_audio_frame(state.native, buffer.payload, buffer_pts) do
@@ -270,7 +285,7 @@ defmodule Membrane.RTMP.Sink do
     end
   end
 
-  defp write_frame(state, :video, buffer) do
+  defp write_frame(state, Pad.ref(:video, 0), buffer) do
     case Native.write_video_frame(
            state.native,
            buffer.payload,

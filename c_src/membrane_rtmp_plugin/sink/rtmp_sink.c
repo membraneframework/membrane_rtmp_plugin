@@ -74,8 +74,8 @@ UNIFEX_TERM init_video_stream(UnifexEnv *env, State *state, int width,
   }
   memcpy(video_stream->codecpar->extradata, avc_config->data, avc_config->size);
 
-  bool ready =
-      (state->video_stream_index != -1 && state->audio_stream_index != -1);
+  bool ready = state->video_stream_index != -1;
+  // (state->video_stream_index != -1 && state->audio_stream_index != -1);
   if (ready && !state->header_written) {
     if (avformat_write_header(state->output_ctx, NULL) < 0) {
       return unifex_raise(env, "Failed writing header");
