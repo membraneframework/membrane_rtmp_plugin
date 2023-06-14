@@ -17,7 +17,6 @@ defmodule Example do
   @impl true
   def handle_init(_ctx, destination: destination) do
     structure = [
-      child(:rtmp_sink, %Membrane.RTMP.Sink{rtmp_url: destination, tracks: [:video]}),
       child(:video_source, %Membrane.Hackney.Source{
         location: @video_url,
         hackney_opts: [follow_redirect: true]
@@ -31,10 +30,10 @@ defmodule Example do
       |> child(:video_realtimer, Membrane.Realtimer)
       |> child(:video_payloader, Membrane.MP4.Payloader.H264)
       |> via_in(Pad.ref(:video, 0))
-      |> get_child(:rtmp_sink)
+      |> child(:rtmp_sink, %Membrane.RTMP.Sink{rtmp_url: destination, tracks: [:video]})
     ]
 
-    {[spec: structure, playback: :playing], %{streams_to_end: 2}}
+    {[spec: structure, playback: :playing], %{}}
   end
 
   # The rest of the example module is only used for self-termination of the pipeline after processing finishes

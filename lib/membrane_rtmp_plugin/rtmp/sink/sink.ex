@@ -1,7 +1,7 @@
 defmodule Membrane.RTMP.Sink do
   @moduledoc """
   Membrane element being client-side of RTMP streams.
-  It needs to receive video stream in H264 format, audio in AAC format or both.
+  It needs to receive at least one of: video stream in H264 format or audio in AAC format.
   Currently it supports only:
     - RTMP proper - "plain" RTMP protocol
     - RTMPS - RTMP over TLS/SSL

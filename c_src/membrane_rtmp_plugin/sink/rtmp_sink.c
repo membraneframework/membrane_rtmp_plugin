@@ -3,11 +3,11 @@
 
 const AVRational MEMBRANE_TIME_BASE = (AVRational){1, 1000000000};
 
-void handle_init_state(State *state);
+static void handle_init_state(State *state);
 
 void handle_destroy_state(UnifexEnv *env, State *state);
 
-int is_ready(State *state);
+static int is_ready(State *state);
 
 UNIFEX_TERM create(UnifexEnv *env, char *rtmp_url, int audio_present, int video_present) {
   State *state = unifex_alloc_state(env);
