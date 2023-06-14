@@ -3,11 +3,11 @@
 
 const AVRational MEMBRANE_TIME_BASE = (AVRational){1, 1000000000};
 
-static void handle_init_state(State *state);
+void handle_init_state(State *state);
 
 void handle_destroy_state(UnifexEnv *env, State *state);
 
-static int is_ready(State *state);
+static bool is_ready(State *state);
 
 UNIFEX_TERM create(UnifexEnv *env, char *rtmp_url, int audio_present, int video_present) {
   State *state = unifex_alloc_state(env);
@@ -79,7 +79,7 @@ UNIFEX_TERM init_video_stream(UnifexEnv *env, State *state, int width,
   }
   memcpy(video_stream->codecpar->extradata, avc_config->data, avc_config->size);
 
-  int ready = is_ready(state);
+  bool ready = is_ready(state);
   if (ready && !state->header_written) {
     if (avformat_write_header(state->output_ctx, NULL) < 0) {
       return unifex_raise(env, "Failed writing header");
@@ -115,7 +115,7 @@ UNIFEX_TERM init_audio_stream(UnifexEnv *env, State *state, int channels,
   }
   memcpy(audio_stream->codecpar->extradata, aac_config->data, aac_config->size);
 
-  int ready = is_ready(state);
+  bool ready = is_ready(state);
   if (ready && !state->header_written) {
     if (avformat_write_header(state->output_ctx, NULL) < 0) {
       return unifex_raise(env, "Failed writing header");
@@ -252,6 +252,6 @@ void handle_destroy_state(UnifexEnv *env, State *state) {
   }
 }
 
-int is_ready(State *state) {
+bool is_ready(State *state) {
   return (!state->audio_present || state->audio_stream_index != -1) && (!state->video_present || state->video_stream_index != -1);
 }
