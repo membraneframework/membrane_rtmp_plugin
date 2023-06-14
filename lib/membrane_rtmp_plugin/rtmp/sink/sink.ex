@@ -44,6 +44,13 @@ defmodule Membrane.RTMP.Sink do
                 Maximum number of connection attempts before failing with an error.
                 The attempts will happen every #{@connection_attempt_interval} ms
                 """
+              ],
+              tracks: [
+                spec: [:audio | :video],
+                default: [:audio, :video],
+                description: """
+                A list of tracks, which will be sent. Can be `:audio`, `:video` or both.
+                """
               ]
 
   @impl true
@@ -57,6 +64,15 @@ defmodule Membrane.RTMP.Sink do
       raise ArgumentError, "Invalid max_attempts option value: #{options.max_attempts}"
     end
 
+    options = %{options | tracks: Enum.uniq(options.tracks)}
+
+    unless length(options.tracks) > 0 and
+             Enum.all?(options.tracks, &Kernel.in(&1, [:audio, :video])) do
+      raise ArgumentError, "All track have to be either :audio or :video"
+    end
+
+    single_track? = length(options.tracks) == 1
+
     state =
       options
       |> Map.from_struct()
@@ -65,11 +81,13 @@ defmodule Membrane.RTMP.Sink do
         native: nil,
         # Keys here are the pad names.
         frame_buffer: %{audio: nil, video: nil},
+        last_dts: %{},
         ready?: false,
         # Activated when one of the source inputs gets closed. Interleaving is
         # disabled, frame buffer is flushed and from that point buffers on the
         # remaining pad are simply forwarded to the output.
-        forward_mode?: true
+        # Always on if a single track is connected
+        forward_mode?: single_track?
       })
 
     {[], state}
@@ -77,7 +95,10 @@ defmodule Membrane.RTMP.Sink do
 
   @impl true
   def handle_setup(_ctx, state) do
-    {:ok, native} = Native.create(state.rtmp_url)
+    audio? = :audio in state.tracks
+    video? = :video in state.tracks
+
+    {:ok, native} = Native.create(state.rtmp_url, audio?, video?)
 
     state
     |> Map.put(:native, native)
@@ -87,8 +108,7 @@ defmodule Membrane.RTMP.Sink do
 
   @impl true
   def handle_playing(_ctx, state) do
-    # {build_demand(state), state}
-    {[demand: Pad.ref(:video, 0)], state}
+    {build_demand(state) |> IO.inspect(label: :playing), state}
   end
 
   @impl true
@@ -97,7 +117,7 @@ defmodule Membrane.RTMP.Sink do
 
   @impl true
   def handle_pad_added(Pad.ref(type, 0), _ctx, state) do
-    # state = put_in(state, [:last_dts, pad], 0)
+    state = put_in(state, [:last_dts, type], 0)
     {[], state}
   end
 
@@ -116,6 +136,7 @@ defmodule Membrane.RTMP.Sink do
          ) do
       {:ok, ready?, native} ->
         Membrane.Logger.debug("Correctly initialized video stream.")
+        IO.inspect(ready?, label: :video_ready)
         {[], %{state | native: native, ready?: ready?}}
 
       {:error, :stream_format_resent} ->
@@ -145,6 +166,7 @@ defmodule Membrane.RTMP.Sink do
          ) do
       {:ok, ready?, native} ->
         Membrane.Logger.debug("Correctly initialized audio stream.")
+        IO.inspect(ready?, label: :audio_ready)
         {[], %{state | native: native, ready?: ready?}}
 
       {:error, :stream_format_resent} ->
@@ -156,27 +178,27 @@ defmodule Membrane.RTMP.Sink do
     end
   end
 
-  # @impl true
-  # def handle_write(Pad.ref(:video, 0), buffer, _ctx, state) do
-  # end
-
   @impl true
   def handle_write(pad, buffer, _ctx, %{ready?: false} = state) do
+    IO.inspect(pad, label: "write not ready")
     {[], fill_frame_buffer(state, pad, buffer)}
   end
 
   def handle_write(pad, buffer, _ctx, %{forward_mode?: true} = state) do
+    IO.inspect(pad, label: "write forward")
     {[demand: pad], write_frame(state, pad, buffer)}
   end
 
   def handle_write(pad, buffer, _ctx, state) do
+    IO.inspect(pad, label: "write")
+
     state
     |> fill_frame_buffer(pad, buffer)
     |> write_frame_interleaved()
   end
 
   @impl true
-  def handle_end_of_stream(pad, _ctx, state) do
+  def handle_end_of_stream(Pad.ref(type, 0), _ctx, state) do
     if state.forward_mode? do
       Native.finalize_stream(state.native)
       {[], state}
@@ -184,13 +206,13 @@ defmodule Membrane.RTMP.Sink do
       # The interleave logic does not work if either one of the inputs does not
       # produce buffers. From this point on we act as a "forward" filter.
       other_pad =
-        case pad do
+        case type do
           :audio -> :video
           :video -> :audio
         end
 
       state = flush_frame_buffer(state)
-      {[demand: other_pad], %{state | forward_mode?: true}}
+      {[demand: Pad.ref(other_pad, 0)], %{state | forward_mode?: true}}
     end
   end
 
@@ -225,12 +247,12 @@ defmodule Membrane.RTMP.Sink do
   defp build_demand(%{frame_buffer: frame_buffer}) do
     frame_buffer
     |> Enum.filter(fn {_pad, buffer} -> buffer == nil end)
-    |> Enum.map(fn {pad, _buffer} -> {:demand, pad} end)
+    |> Enum.map(fn {type, _buffer} -> {:demand, Pad.ref(type, 0)} end)
   end
 
-  defp fill_frame_buffer(state, pad, buffer) do
-    if get_in(state, [:frame_buffer, pad]) == nil do
-      put_in(state, [:frame_buffer, pad], buffer)
+  defp fill_frame_buffer(state, Pad.ref(type, 0) = pad, buffer) do
+    if get_in(state, [:frame_buffer, type]) == nil do
+      put_in(state, [:frame_buffer, type], buffer)
     else
       raise "attempted to overwrite frame buffer on pad #{inspect(pad)}"
     end
@@ -243,17 +265,21 @@ defmodule Membrane.RTMP.Sink do
   end
 
   defp write_frame_interleaved(%{frame_buffer: frame_buffer} = state) do
-    {pad, buffer} =
+    {type, buffer} =
       Enum.min_by(frame_buffer, fn {_pad, buffer} ->
         buffer
         |> Buffer.get_dts_or_pts()
         |> Ratio.ceil()
       end)
 
+    pad = Pad.ref(type, 0)
+
     state =
       state
       |> write_frame(pad, buffer)
-      |> put_in([:frame_buffer, pad], nil)
+      |> put_in([:frame_buffer, type], nil)
+
+    IO.inspect("write_interleaved")
 
     {build_demand(state), state}
   end
@@ -268,7 +294,7 @@ defmodule Membrane.RTMP.Sink do
 
     Enum.reduce(pads_with_buffer, state, fn {pad, buffer}, state ->
       state
-      |> write_frame(pad, buffer)
+      |> write_frame(Pad.ref(pad, 0), buffer)
       |> put_in([:frame_buffer, pad], nil)
     end)
   end

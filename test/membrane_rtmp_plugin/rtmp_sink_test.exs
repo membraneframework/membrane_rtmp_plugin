@@ -4,6 +4,9 @@ defmodule Membrane.RTMP.SinkTest do
 
   require Logger
 
+  require Membrane.Pad
+
+  alias Membrane.Pad
   alias Membrane.Testing.Pipeline
 
   @input_video_url "https://raw.githubusercontent.com/membraneframework/static/gh-pages/samples/big-buck-bunny/bun33s_480x270.h264"
@@ -17,6 +20,7 @@ defmodule Membrane.RTMP.SinkTest do
     %{flv_output_file: flv_output_file}
   end
 
+  @tag :this
   @tag :tmp_dir
   test "Checks if audio and video are interleaved correctly", %{tmp_dir: tmp_dir} do
     output_file = Path.join(tmp_dir, "rtmp_sink_interleave_test.flv")
@@ -28,11 +32,11 @@ defmodule Membrane.RTMP.SinkTest do
     # so it may retry a few times before succeeding
     assert_pipeline_play(sink_pipeline_pid, 5000)
 
-    assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, :video, 5_000)
-    assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, :audio, 5_000)
+    assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:video, 0), 5_000)
+    assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:audio, 0), 5_000)
 
-    assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, :video, 5_000)
-    assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, :audio, 5_000)
+    assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:video, 0), 5_000)
+    assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:audio, 0), 5_000)
 
     :ok = Pipeline.terminate(sink_pipeline_pid, blocking?: true)
     # RTMP server should terminate when the connection is closed
@@ -82,13 +86,13 @@ defmodule Membrane.RTMP.SinkTest do
           skip_until_parameters?: true
         })
         |> child(:video_payloader, Membrane.MP4.Payloader.H264)
-        |> via_in(:video)
+        |> via_in(Pad.ref(:video, 0))
         |> get_child(:rtmp_sink),
         #
         child(:audio_source, %Membrane.File.Source{location: "test/fixtures/audio.msr"})
         |> child(:audio_deserializer, Membrane.Stream.Deserializer)
         |> child(:audio_parser, Membrane.AAC.Parser)
-        |> via_in(:audio)
+        |> via_in(Pad.ref(:audio, 0))
         |> get_child(:rtmp_sink)
       ],
       test_process: self()
@@ -115,7 +119,7 @@ defmodule Membrane.RTMP.SinkTest do
           skip_until_parameters?: false
         })
         |> child(:video_payloader, Membrane.MP4.Payloader.H264)
-        |> via_in(:video)
+        |> via_in(Pad.ref(:video, 0))
         |> get_child(:rtmp_sink),
         #
         child(:audio_source, %Membrane.Hackney.Source{
@@ -125,7 +129,7 @@ defmodule Membrane.RTMP.SinkTest do
         |> child(:audio_parser, %Membrane.AAC.Parser{
           out_encapsulation: :none
         })
-        |> via_in(:audio)
+        |> via_in(Pad.ref(:audio, 0))
         |> get_child(:rtmp_sink)
       ],
       test_process: self()

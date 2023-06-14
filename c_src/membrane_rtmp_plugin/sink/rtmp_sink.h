@@ -10,6 +10,9 @@ typedef struct State State;
 struct State {
   AVFormatContext *output_ctx;
 
+  bool audio_present;
+  bool video_present;
+
   int video_stream_index;
   int64_t current_video_dts;
 

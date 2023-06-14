@@ -18,13 +18,10 @@ defmodule Example do
   @impl true
   def handle_init(_ctx, destination: destination) do
     structure = [
-      child(:rtmp_sink, %Membrane.RTMP.Sink{rtmp_url: destination}),
-      # child(:video_source, %Membrane.Hackney.Source{
-      #   location: @video_url,
-      #   hackney_opts: [follow_redirect: true]
-      # })
-      child(:video_source, %Membrane.File.Source{
-        location: "output.264"
+      child(:rtmp_sink, %Membrane.RTMP.Sink{rtmp_url: destination, tracks: [:video]}),
+      child(:video_source, %Membrane.Hackney.Source{
+        location: @video_url,
+        hackney_opts: [follow_redirect: true]
       })
       |> child(:video_parser, %Membrane.H264.FFmpeg.Parser{
         framerate: {25, 1},
@@ -36,20 +33,6 @@ defmodule Example do
       |> child(:video_payloader, Membrane.MP4.Payloader.H264)
       |> via_in(Pad.ref(:video, 0))
       |> get_child(:rtmp_sink)
-      # child(:audio_source, %Membrane.Hackney.Source{
-      #   location: @audio_url,
-      #   hackney_opts: [follow_redirect: true]
-      # })
-      # child(:audio_source, %Membrane.File.Source{
-      #   location: "output_audio.aac"
-      # })
-      # |> child(:audio_parser, %Membrane.AAC.Parser{
-      #   in_encapsulation: :ADTS,
-      #   out_encapsulation: :none
-      # })
-      # |> child(:audio_realtimer, Membrane.Realtimer)
-      # |> via_in(:audio)
-      # |> get_child(:rtmp_sink)
     ]
 
     {[spec: structure, playback: :playing], %{streams_to_end: 2}}
@@ -57,13 +40,8 @@ defmodule Example do
 
   # The rest of the example module is only used for self-termination of the pipeline after processing finishes
   @impl true
-  def handle_element_end_of_stream(:rtmp_sink, _pad, _ctx, %{streams_to_end: 1} = state) do
-    {[terminate: :shutdown], %{state | streams_to_end: 0}}
-  end
-
-  @impl true
   def handle_element_end_of_stream(:rtmp_sink, _pad, _ctx, state) do
-    {[], %{state | streams_to_end: 1}}
+    {[terminate: :shutdown], state}
   end
 
   @impl true
