@@ -60,7 +60,6 @@ defmodule Membrane.RTMP.SinkTest do
     test_stream_correctly_received(flv_output_file, @reference_flv_audio_path, [:audio])
   end
 
-  @tag :this
   @tag :tmp_dir
   test "Check if a single video track is correctly received by RTMP server instance", %{
     flv_output_file: flv_output_file
