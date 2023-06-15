@@ -76,17 +76,12 @@ defmodule Membrane.RTMP.SinkTest do
     # so it may retry a few times before succeeding
     assert_pipeline_play(sink_pipeline_pid, 5000)
 
-    if :audio in tracks,
-      do: assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:audio, 0), 5_000)
+    Enum.each(
+      tracks,
+      &assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(&1, 0), 5_000)
+    )
 
-    if :video in tracks,
-      do: assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:video, 0), 5_000)
-
-    if :audio in tracks,
-      do: assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:audio, 0), 5_000)
-
-    if :video in tracks,
-      do: assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:video, 0), 5_000)
+    Enum.each(tracks, &assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(&1, 0), 5_000))
 
     :ok = Pipeline.terminate(sink_pipeline_pid, blocking?: true)
     # RTMP server should terminate when the connection is closed
@@ -138,44 +133,56 @@ defmodule Membrane.RTMP.SinkTest do
             max_attempts: 5
           })
         ] ++
-          if :audio in tracks do
-            [
-              child(:audio_source, %Membrane.Hackney.Source{
-                location: @input_audio_url,
-                hackney_opts: [follow_redirect: true]
-              })
-              |> child(:audio_parser, %Membrane.AAC.Parser{
-                out_encapsulation: :none
-              })
-              |> via_in(Pad.ref(:audio, 0))
-              |> get_child(:rtmp_sink)
-            ]
-          else
-            []
-          end ++
-          if :video in tracks do
-            [
-              child(:video_source, %Membrane.Hackney.Source{
-                location: @input_video_url,
-                hackney_opts: [follow_redirect: true]
-              })
-              |> child(:video_parser, %Membrane.H264.FFmpeg.Parser{
-                framerate: {30, 1},
-                alignment: :au,
-                attach_nalus?: true,
-                skip_until_parameters?: false
-              })
-              |> child(:video_payloader, Membrane.MP4.Payloader.H264)
-              |> via_in(Pad.ref(:video, 0))
-              |> get_child(:rtmp_sink)
-            ]
-          else
-            []
-          end,
+          get_audio_elements(tracks) ++
+          get_video_elements(tracks),
       test_process: self()
     ]
 
     Pipeline.start_link_supervised!(options)
+  end
+
+  defp get_audio_elements(tracks) do
+    import Membrane.ChildrenSpec
+
+    if :audio in tracks do
+      [
+        child(:audio_source, %Membrane.Hackney.Source{
+          location: @input_audio_url,
+          hackney_opts: [follow_redirect: true]
+        })
+        |> child(:audio_parser, %Membrane.AAC.Parser{
+          out_encapsulation: :none
+        })
+        |> via_in(Pad.ref(:audio, 0))
+        |> get_child(:rtmp_sink)
+      ]
+    else
+      []
+    end
+  end
+
+  defp get_video_elements(tracks) do
+    import Membrane.ChildrenSpec
+
+    if :video in tracks do
+      [
+        child(:video_source, %Membrane.Hackney.Source{
+          location: @input_video_url,
+          hackney_opts: [follow_redirect: true]
+        })
+        |> child(:video_parser, %Membrane.H264.FFmpeg.Parser{
+          framerate: {30, 1},
+          alignment: :au,
+          attach_nalus?: true,
+          skip_until_parameters?: false
+        })
+        |> child(:video_payloader, Membrane.MP4.Payloader.H264)
+        |> via_in(Pad.ref(:video, 0))
+        |> get_child(:rtmp_sink)
+      ]
+    else
+      []
+    end
   end
 
   @spec start_rtmp_server(Path.t()) :: :ok | :error
