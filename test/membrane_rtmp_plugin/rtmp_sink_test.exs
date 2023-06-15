@@ -60,6 +60,7 @@ defmodule Membrane.RTMP.SinkTest do
     test_stream_correctly_received(flv_output_file, @reference_flv_audio_path, [:audio])
   end
 
+  @tag :this
   @tag :tmp_dir
   test "Check if a single video track is correctly received by RTMP server instance", %{
     flv_output_file: flv_output_file
@@ -88,7 +89,7 @@ defmodule Membrane.RTMP.SinkTest do
     assert :ok = Task.await(rtmp_server)
 
     assert File.exists?(flv_output)
-    assert File.stat!(flv_output).size == File.stat!(fixture).size
+    assert File.read!(flv_output) == File.read!(fixture)
   end
 
   defp start_interleaving_sink_pipeline(rtmp_url) do
