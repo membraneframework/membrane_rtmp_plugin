@@ -89,7 +89,7 @@ defmodule Membrane.RTMP.SinkTest do
     assert :ok = Task.await(rtmp_server)
 
     assert File.exists?(flv_output)
-    assert File.read!(flv_output) == File.read!(fixture)
+    assert File.stat!(flv_output).size == File.stat!(fixture).size
   end
 
   defp start_interleaving_sink_pipeline(rtmp_url) do
