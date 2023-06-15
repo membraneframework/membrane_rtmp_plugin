@@ -1,7 +1,7 @@
 defmodule Membrane.RTMP.Sink do
   @moduledoc """
   Membrane element being client-side of RTMP streams.
-  To work successfuly it requires to receive both audio and video streams in AAC and H264 format respectively.
+  It needs to receive at least one of: video stream in H264 format or audio in AAC format.
   Currently it supports only:
     - RTMP proper - "plain" RTMP protocol
     - RTMPS - RTMP over TLS/SSL
@@ -17,15 +17,16 @@ defmodule Membrane.RTMP.Sink do
 
   @supported_protocols ["rtmp://", "rtmps://"]
   @connection_attempt_interval 500
+  @type track_type :: :audio | :video
 
   def_input_pad :audio,
-    availability: :always,
+    availability: :on_request,
     accepted_format: AAC,
     mode: :pull,
     demand_unit: :buffers
 
   def_input_pad :video,
-    availability: :always,
+    availability: :on_request,
     accepted_format: MP4.Payload,
     mode: :pull,
     demand_unit: :buffers
@@ -44,6 +45,13 @@ defmodule Membrane.RTMP.Sink do
                 Maximum number of connection attempts before failing with an error.
                 The attempts will happen every #{@connection_attempt_interval} ms
                 """
+              ],
+              tracks: [
+                spec: [track_type()],
+                default: [:audio, :video],
+                description: """
+                A list of tracks, which will be sent. Can be `:audio`, `:video` or both.
+                """
               ]
 
   @impl true
@@ -57,6 +65,16 @@ defmodule Membrane.RTMP.Sink do
       raise ArgumentError, "Invalid max_attempts option value: #{options.max_attempts}"
     end
 
+    options = %{options | tracks: Enum.uniq(options.tracks)}
+
+    unless length(options.tracks) > 0 and
+             Enum.all?(options.tracks, &Kernel.in(&1, [:audio, :video])) do
+      raise ArgumentError, "All track have to be either :audio or :video"
+    end
+
+    single_track? = length(options.tracks) == 1
+    frame_buffer = Enum.map(options.tracks, &{Pad.ref(&1, 0), nil}) |> Enum.into(%{})
+
     state =
       options
       |> Map.from_struct()
@@ -64,12 +82,13 @@ defmodule Membrane.RTMP.Sink do
         attempts: 0,
         native: nil,
         # Keys here are the pad names.
-        frame_buffer: %{audio: nil, video: nil},
+        frame_buffer: frame_buffer,
         ready?: false,
         # Activated when one of the source inputs gets closed. Interleaving is
         # disabled, frame buffer is flushed and from that point buffers on the
         # remaining pad are simply forwarded to the output.
-        forward_mode?: false
+        # Always on if a single track is connected
+        forward_mode?: single_track?
       })
 
     {[], state}
@@ -77,7 +96,10 @@ defmodule Membrane.RTMP.Sink do
 
   @impl true
   def handle_setup(_ctx, state) do
-    {:ok, native} = Native.create(state.rtmp_url)
+    audio? = :audio in state.tracks
+    video? = :video in state.tracks
+
+    {:ok, native} = Native.create(state.rtmp_url, audio?, video?)
 
     state
     |> Map.put(:native, native)
@@ -91,8 +113,17 @@ defmodule Membrane.RTMP.Sink do
   end
 
   @impl true
+  def handle_pad_added(Pad.ref(_type, stream_id), _ctx, _state) when stream_id != 0,
+    do: raise(ArgumentError, message: "Stream id must always be 0")
+
+  @impl true
+  def handle_pad_added(_pad, _ctx, state) do
+    {[], state}
+  end
+
+  @impl true
   def handle_stream_format(
-        :video,
+        Pad.ref(:video, 0),
         %MP4.Payload{content: %MP4.Payload.AVC1{avcc: avc_config}} = stream_format,
         _ctx,
         state
@@ -117,7 +148,7 @@ defmodule Membrane.RTMP.Sink do
   end
 
   @impl true
-  def handle_stream_format(:audio, %Membrane.AAC{} = stream_format, _ctx, state) do
+  def handle_stream_format(Pad.ref(:audio, 0), %Membrane.AAC{} = stream_format, _ctx, state) do
     profile = AAC.profile_to_aot_id(stream_format.profile)
     sr_index = AAC.sample_rate_to_sampling_frequency_id(stream_format.sample_rate)
     channel_configuration = AAC.channels_to_channel_config_id(stream_format.channels)
@@ -161,7 +192,7 @@ defmodule Membrane.RTMP.Sink do
   end
 
   @impl true
-  def handle_end_of_stream(pad, _ctx, state) do
+  def handle_end_of_stream(Pad.ref(type, 0), _ctx, state) do
     if state.forward_mode? do
       Native.finalize_stream(state.native)
       {[], state}
@@ -169,10 +200,11 @@ defmodule Membrane.RTMP.Sink do
       # The interleave logic does not work if either one of the inputs does not
       # produce buffers. From this point on we act as a "forward" filter.
       other_pad =
-        case pad do
+        case type do
           :audio -> :video
           :video -> :audio
         end
+        |> then(&Pad.ref(&1, 0))
 
       state = flush_frame_buffer(state)
       {[demand: other_pad], %{state | forward_mode?: true}}
@@ -258,7 +290,7 @@ defmodule Membrane.RTMP.Sink do
     end)
   end
 
-  defp write_frame(state, :audio, buffer) do
+  defp write_frame(state, Pad.ref(:audio, 0), buffer) do
     buffer_pts = buffer.pts |> Ratio.ceil()
 
     case Native.write_audio_frame(state.native, buffer.payload, buffer_pts) do
@@ -270,7 +302,7 @@ defmodule Membrane.RTMP.Sink do
     end
   end
 
-  defp write_frame(state, :video, buffer) do
+  defp write_frame(state, Pad.ref(:video, 0), buffer) do
     case Native.write_video_frame(
            state.native,
            buffer.payload,

@@ -14,7 +14,7 @@ The package can be installed by adding `membrane_rtmp_plugin` to your list of de
 ```elixir
 def deps do
   [
-    {:membrane_rtmp_plugin, "~> 0.12.1"}
+    {:membrane_rtmp_plugin, "~> 0.13.0"}
   ]
 end
 ```
@@ -54,6 +54,12 @@ Streaming implementation example is provided with the following [`examples/sink.
 
 ```bash
 elixir examples/sink.exs
+```
+
+If you are interested in streaming only a single track. e.g. video, use [`examples/sink_video.exs`](examples/sink_video.exs) instead:
+
+```bash
+elixir examples/sink_video.exs
 ```
 
 It will connect to RTMP server provided via URL and stream H264 video and AAC audio.

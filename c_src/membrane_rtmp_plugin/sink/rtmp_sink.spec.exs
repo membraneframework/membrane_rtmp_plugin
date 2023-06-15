@@ -3,7 +3,9 @@ module Membrane.RTMP.Sink.Native
 state_type "State"
 interface [NIF]
 
-spec create(rtmp_url :: string) :: {:ok :: label, state} | {:error :: label, reason :: string}
+spec create(rtmp_url :: string, audio_present :: bool, video_present :: bool) ::
+       {:ok :: label, state} | {:error :: label, reason :: string}
+
 # WARN: connect will conflict with POSIX function name
 spec try_connect(state) ::
        (:ok :: label)
