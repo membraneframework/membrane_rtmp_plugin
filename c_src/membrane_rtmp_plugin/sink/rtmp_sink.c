@@ -47,6 +47,7 @@ UNIFEX_TERM finalize_stream(UnifexEnv *env, State *state) {
     return unifex_raise(env, "Failed writing stream trailer");
   }
   avio_close(state->output_ctx->pb);
+  avformat_free_context(state->output_ctx);
   return finalize_stream_result_ok(env);
 }
 
@@ -241,13 +242,7 @@ void handle_init_state(State *state) {
 
 void handle_destroy_state(UnifexEnv *env, State *state) {
   UNIFEX_UNUSED(env);
-  if (state->output_ctx &&
-      !(state->output_ctx->oformat->flags & AVFMT_NOFILE)) {
-    avio_closep(&state->output_ctx->pb);
-  }
-  if (state->output_ctx) {
-    avformat_free_context(state->output_ctx);
-  }
+  UNIFEX_UNUSED(state);
 }
 
 bool is_ready(State *state) {
