@@ -139,7 +139,7 @@ defmodule Membrane.RTMP.Sink do
         {[], %{state | native: native, ready?: ready?}}
 
       {:error, :stream_format_resent} ->
-        Membrane.Logger.error(
+        Membrane.Logger.warn(
           "Input stream format redefined on pad :video. RTMP Sink does not support dynamic stream parameters"
         )
 
@@ -168,7 +168,7 @@ defmodule Membrane.RTMP.Sink do
         {[], %{state | native: native, ready?: ready?}}
 
       {:error, :stream_format_resent} ->
-        Membrane.Logger.error(
+        Membrane.Logger.warn(
           "Input stream format redefined on pad :audio. RTMP Sink does not support dynamic stream parameters"
         )
 
