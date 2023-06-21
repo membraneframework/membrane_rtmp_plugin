@@ -76,7 +76,7 @@ defmodule Membrane.RTMP.MessageHandler do
     {:cont, %{state | message_parser: parser}}
   end
 
-  defp do_handle_client_message(%Messages.Connect{}, _header, state) do
+  defp do_handle_client_message(%Messages.Connect{} = connect, _header, state) do
     chunk_size = state.message_parser.chunk_size
 
     [
@@ -98,7 +98,12 @@ defmodule Membrane.RTMP.MessageHandler do
     Responses.on_bw_done()
     |> send_rtmp_payload(state.socket, chunk_size, chunk_stream_id: 3)
 
-    {:cont, %{state | message_parser: message_parser}}
+    {:cont,
+     %{
+       state
+       | message_parser: message_parser,
+         actions: state.actions ++ [{:notify_parent, {:rtmp_connect_message, connect}}]
+     }}
   end
 
   # According to ffmpeg's documentation, this command should make the server release channel for a media stream
