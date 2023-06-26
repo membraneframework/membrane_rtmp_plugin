@@ -255,7 +255,7 @@ defmodule Membrane.RTMP.Sink do
 
   defp write_frame_interleaved(
          %{
-          frame_buffer: %{Pad.ref(:audio, 0) => audio, Pad.ref(:video, 0) => video}
+           frame_buffer: %{Pad.ref(:audio, 0) => audio, Pad.ref(:video, 0) => video}
          } = state
        )
        when audio == nil or video == nil do
