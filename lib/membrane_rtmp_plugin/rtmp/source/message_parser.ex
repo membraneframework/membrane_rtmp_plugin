@@ -141,22 +141,8 @@ defmodule Membrane.RTMP.MessageParser do
 
   defp read_frame(packet, previous_headers, chunk_size) do
     case Header.deserialize(packet, previous_headers) do
-      {%Header{body_size: body_size} = header, rest} ->
-        chunked_body_size =
-          if body_size > chunk_size do
-            # if a message's body is greater than the chunk size then
-            # after every chunk_size's bytes there is a 0x03 one byte header that
-            # needs to be stripped and is not counted into the body_size
-            headers_to_strip = div(body_size - 1, chunk_size)
-
-            # if the initial header contains a extended timestamp then
-            # every following chunk will contain the timestamp
-            timestamps_to_strip = if header.extended_timestamp?, do: headers_to_strip * 4, else: 0
-
-            body_size + headers_to_strip + timestamps_to_strip
-          else
-            body_size
-          end
+      {%Header{} = header, rest} ->
+        chunked_body_size = calculate_chunked_body_size(header, chunk_size)
 
         case rest do
           <<body::binary-size(chunked_body_size), rest::binary>> ->
@@ -172,6 +158,23 @@ defmodule Membrane.RTMP.MessageParser do
 
       {:error, :need_more_data} = error ->
         error
+    end
+  end
+
+  defp calculate_chunked_body_size(%Header{body_size: body_size} = header, chunk_size) do
+    if body_size > chunk_size do
+      # if a message's body is greater than the chunk size then
+      # after every chunk_size's bytes there is a 0x03 one byte header that
+      # needs to be stripped and is not counted into the body_size
+      headers_to_strip = div(body_size - 1, chunk_size)
+
+      # if the initial header contains a extended timestamp then
+      # every following chunk will contain the timestamp
+      timestamps_to_strip = if header.extended_timestamp?, do: headers_to_strip * 4, else: 0
+
+      body_size + headers_to_strip + timestamps_to_strip
+    else
+      body_size
     end
   end
 
