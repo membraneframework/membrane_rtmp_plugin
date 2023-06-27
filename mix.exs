@@ -48,7 +48,7 @@ defmodule Membrane.RTMP.Mixfile do
       # testing
       {:membrane_hackney_plugin, "~> 0.10.0", only: :test},
       {:ffmpex, "~> 0.10.0", only: :test},
-      {:membrane_stream_plugin, "~> 0.3.0", only: :test},
+      {:membrane_stream_plugin, "~> 0.3.1", only: :test},
       # development
       {:ex_doc, "~> 0.28", only: :dev, runtime: false},
       {:dialyxir, "~> 1.1", only: :dev, runtime: false},
