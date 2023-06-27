@@ -5,11 +5,14 @@ const AVRational MEMBRANE_TIME_BASE = (AVRational){1, 1000000000};
 
 void handle_init_state(State *state);
 
-void handle_destroy_state(UnifexEnv *env, State *state);
+static bool is_ready(State *state);
 
-UNIFEX_TERM create(UnifexEnv *env, char *rtmp_url) {
+UNIFEX_TERM create(UnifexEnv *env, char *rtmp_url, int audio_present, int video_present) {
   State *state = unifex_alloc_state(env);
   handle_init_state(state);
+
+  state->audio_present = audio_present;
+  state->video_present = video_present;
 
   UNIFEX_TERM create_result;
   avformat_alloc_output_context2(&state->output_ctx, NULL, "flv", rtmp_url);
@@ -74,8 +77,7 @@ UNIFEX_TERM init_video_stream(UnifexEnv *env, State *state, int width,
   }
   memcpy(video_stream->codecpar->extradata, avc_config->data, avc_config->size);
 
-  bool ready =
-      (state->video_stream_index != -1 && state->audio_stream_index != -1);
+  bool ready = is_ready(state);
   if (ready && !state->header_written) {
     if (avformat_write_header(state->output_ctx, NULL) < 0) {
       return unifex_raise(env, "Failed writing header");
@@ -111,8 +113,7 @@ UNIFEX_TERM init_audio_stream(UnifexEnv *env, State *state, int channels,
   }
   memcpy(audio_stream->codecpar->extradata, aac_config->data, aac_config->size);
 
-  bool ready =
-      (state->video_stream_index != -1 && state->audio_stream_index != -1);
+  bool ready = is_ready(state);
   if (ready && !state->header_written) {
     if (avformat_write_header(state->output_ctx, NULL) < 0) {
       return unifex_raise(env, "Failed writing header");
@@ -247,4 +248,8 @@ void handle_destroy_state(UnifexEnv *env, State *state) {
   if (state->output_ctx) {
     avformat_free_context(state->output_ctx);
   }
+}
+
+bool is_ready(State *state) {
+  return (!state->audio_present || state->audio_stream_index != -1) && (!state->video_present || state->video_stream_index != -1);
 }
