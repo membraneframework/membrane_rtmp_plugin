@@ -42,13 +42,19 @@ UNIFEX_TERM try_connect(UnifexEnv *env, State *state) {
   return try_connect_result_ok(env);
 }
 
-UNIFEX_TERM finalize_stream(UnifexEnv *env, State *state) {
+UNIFEX_TERM flush_and_close_stream(UnifexEnv *env, State *state) {
   if (av_write_trailer(state->output_ctx)) {
     return unifex_raise(env, "Failed writing stream trailer");
   }
   avio_close(state->output_ctx->pb);
   avformat_free_context(state->output_ctx);
+  state->closed = true;
   return finalize_stream_result_ok(env);
+}
+
+UNIFEX_TERM finalize_stream(UnifexEnv *env, State *state) {
+  // Retained for backward compatibility.
+  return flush_and_close_stream(env, state);
 }
 
 UNIFEX_TERM init_video_stream(UnifexEnv *env, State *state, int width,
@@ -236,13 +242,15 @@ void handle_init_state(State *state) {
   state->current_audio_pts = 0;
 
   state->header_written = false;
+  state->closed = false;
 
   state->output_ctx = NULL;
 }
 
 void handle_destroy_state(UnifexEnv *env, State *state) {
   UNIFEX_UNUSED(env);
-  UNIFEX_UNUSED(state);
+  if (!state->closed)
+    flush_and_close_stream(env, state);
 }
 
 bool is_ready(State *state) {
