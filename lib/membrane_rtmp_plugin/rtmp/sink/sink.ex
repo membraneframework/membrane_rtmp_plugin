@@ -139,7 +139,7 @@ defmodule Membrane.RTMP.Sink do
         {[], %{state | native: native, ready?: ready?}}
 
       {:error, :stream_format_resent} ->
-        Membrane.Logger.error(
+        Membrane.Logger.warn(
           "Input stream format redefined on pad :video. RTMP Sink does not support dynamic stream parameters"
         )
 
@@ -168,7 +168,7 @@ defmodule Membrane.RTMP.Sink do
         {[], %{state | native: native, ready?: ready?}}
 
       {:error, :stream_format_resent} ->
-        Membrane.Logger.error(
+        Membrane.Logger.warn(
           "Input stream format redefined on pad :audio. RTMP Sink does not support dynamic stream parameters"
         )
 
@@ -253,7 +253,11 @@ defmodule Membrane.RTMP.Sink do
     end
   end
 
-  defp write_frame_interleaved(%{frame_buffer: %{audio: audio, video: video}} = state)
+  defp write_frame_interleaved(
+         %{
+           frame_buffer: %{Pad.ref(:audio, 0) => audio, Pad.ref(:video, 0) => video}
+         } = state
+       )
        when audio == nil or video == nil do
     # We still have to wait for the other frame.
     {[], state}
