@@ -10,7 +10,7 @@ defmodule Membrane.RTMP.Mixfile do
       version: @version,
       elixir: "~> 1.12",
       elixirc_paths: elixirc_paths(Mix.env()),
-      compilers: [:unifex, :bundlex, :rambo] ++ Mix.compilers() ++ maybe_add_rambo(),
+      compilers: [:unifex, :bundlex] ++ Mix.compilers() ++ maybe_add_rambo(),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       dialyzer: dialyzer(),
