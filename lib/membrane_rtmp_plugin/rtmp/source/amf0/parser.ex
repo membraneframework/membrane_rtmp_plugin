@@ -1,5 +1,7 @@
-defmodule Membrane.RTMP.AMF.Parser do
+defmodule Membrane.RTMP.AMF0.Parser do
   @moduledoc false
+
+  alias Membrane.RTMP.AMF3
 
   @doc """
   Parses message from [AMF0](https://en.wikipedia.org/wiki/Action_Message_Format#AMF0) format to Erlang terms.
@@ -48,8 +50,23 @@ defmodule Membrane.RTMP.AMF.Parser do
     parse_object_pairs(rest, [])
   end
 
-  defp parse_value(_data) do
-    raise "Unknown data type"
+  defp parse_value(<<0x0A, size::32, rest::binary>>) do
+    {acc, rest} =
+      Enum.reduce(1..size, {[], rest}, fn _i, {acc, rest} ->
+        {value, rest} = parse_value(rest)
+
+        {[value | acc], rest}
+      end)
+
+    {Enum.reverse(acc), rest}
+  end
+
+  defp parse_value(<<0x11, rest::binary>>) do
+    AMF3.Parser.parse(rest)
+  end
+
+  defp parse_value(data) do
+    raise "Unknown data type #{inspect(data)}"
   end
 
   # we reached object end

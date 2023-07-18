@@ -3,7 +3,7 @@ defmodule Membrane.RTMP.Messages.CreateStream do
 
   @behaviour Membrane.RTMP.Message
 
-  alias Membrane.RTMP.AMF.Encoder
+  alias Membrane.RTMP.AMF0.Encoder
 
   defstruct tx_id: 0
 

@@ -34,7 +34,8 @@ defmodule Membrane.RTMP.Message do
 
   @amf_data_to_module %{
     "@setDataFrame" => Messages.SetDataFrame,
-    "onMetaData" => Messages.OnMetaData
+    "onMetaData" => Messages.OnMetaData,
+    "additionalMedia" => Messages.AdditionalMedia
   }
 
   @spec deserialize_message(type_id :: integer(), binary()) :: struct()
@@ -88,7 +89,7 @@ defmodule Membrane.RTMP.Message do
 
   defp message_from_modules(payload, mapping, required? \\ false) do
     payload
-    |> Membrane.RTMP.AMF.Parser.parse()
+    |> Membrane.RTMP.AMF0.Parser.parse()
     |> then(fn [command | _rest] = arguments ->
       if required? do
         Map.fetch!(mapping, command)

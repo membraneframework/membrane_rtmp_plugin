@@ -1,4 +1,4 @@
-defmodule Membrane.RTMP.AMF.Encoder do
+defmodule Membrane.RTMP.AMF0.Encoder do
   @moduledoc false
 
   @type basic_object_t :: float() | boolean() | String.t() | map() | :null
