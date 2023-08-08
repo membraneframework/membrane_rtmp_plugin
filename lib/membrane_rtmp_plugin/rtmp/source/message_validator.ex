@@ -9,6 +9,12 @@ defprotocol Membrane.RTMP.MessageValidator do
   @type validation_result_t :: {:ok, term()} | {:error, reason :: any()}
 
   @doc """
+  Validates the `t:Membrane.RTMP.Messages.Connect.t/0` message.
+  """
+  @spec validate_connect(t(), Messages.Connect.t()) :: validation_result_t()
+  def validate_connect(impl, message)
+
+  @doc """
   Validates the `t:Membrane.RTMP.Messages.ReleaseStream.t/0` message.
   """
   @spec validate_release_stream(t(), Messages.ReleaseStream.t()) :: validation_result_t()
