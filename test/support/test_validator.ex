@@ -11,6 +11,9 @@ defimpl Membrane.RTMP.MessageValidator, for: Support.TestValidator do
   alias Membrane.RTMP.Messages
 
   @impl true
+  def validate_connect(_impl, _message), do: {:ok, "connect success"}
+
+  @impl true
   def validate_publish(%Support.TestValidator{stream_key: nil}, _message),
     do: {:ok, "stream allowed"}
 

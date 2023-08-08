@@ -76,29 +76,37 @@ defmodule Membrane.RTMP.MessageHandler do
     {:cont, %{state | message_parser: parser}}
   end
 
-  defp do_handle_client_message(%Messages.Connect{}, _header, state) do
-    chunk_size = state.message_parser.chunk_size
+  @validation_stage :connect
+  defp do_handle_client_message(%Messages.Connect{} = msg, _header, state) do
+    case MessageValidator.validate_connect(state.validator, msg) do
+      {:ok, _msg} = result ->
+        chunk_size = state.message_parser.chunk_size
 
-    [
-      %Messages.WindowAcknowledgement{size: @windows_acknowledgment_size},
-      %Messages.SetPeerBandwidth{size: @peer_bandwidth_size},
-      # stream begin type
-      %Messages.UserControl{event_type: 0x00, data: <<0, 0, 0, 0>>},
-      # by default the ffmpeg server uses 128 chunk size
-      %Messages.SetChunkSize{chunk_size: chunk_size}
-    ]
-    |> Enum.each(&send_rtmp_payload(&1, state.socket, chunk_size))
+        [
+          %Messages.WindowAcknowledgement{size: @windows_acknowledgment_size},
+          %Messages.SetPeerBandwidth{size: @peer_bandwidth_size},
+          # stream begin type
+          %Messages.UserControl{event_type: 0x00, data: <<0, 0, 0, 0>>},
+          # by default the ffmpeg server uses 128 chunk size
+          %Messages.SetChunkSize{chunk_size: chunk_size}
+        ]
+        |> Enum.each(&send_rtmp_payload(&1, state.socket, chunk_size))
 
-    {[tx_id], message_parser} = MessageParser.generate_tx_ids(state.message_parser, 1)
+        {[tx_id], message_parser} = MessageParser.generate_tx_ids(state.message_parser, 1)
 
-    tx_id
-    |> Responses.connection_success()
-    |> send_rtmp_payload(state.socket, chunk_size, chunk_stream_id: 3)
+        tx_id
+        |> Responses.connection_success()
+        |> send_rtmp_payload(state.socket, chunk_size, chunk_stream_id: 3)
 
-    Responses.on_bw_done()
-    |> send_rtmp_payload(state.socket, chunk_size, chunk_stream_id: 3)
+        Responses.on_bw_done()
+        |> send_rtmp_payload(state.socket, chunk_size, chunk_stream_id: 3)
 
-    {:cont, %{state | message_parser: message_parser}}
+        {:cont,
+         validation_action(%{state | message_parser: message_parser}, @validation_stage, result)}
+
+      {:error, _reason} = error ->
+        {:halt, {:error, :stream_validation, validation_action(state, @validation_stage, error)}}
+    end
   end
 
   # According to ffmpeg's documentation, this command should make the server release channel for a media stream

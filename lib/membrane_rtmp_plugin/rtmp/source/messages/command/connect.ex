@@ -1,5 +1,7 @@
 defmodule Membrane.RTMP.Messages.Connect do
-  @moduledoc false
+  @moduledoc """
+  Defines the RTMP `connect` command.
+  """
 
   @behaviour Membrane.RTMP.Message
 

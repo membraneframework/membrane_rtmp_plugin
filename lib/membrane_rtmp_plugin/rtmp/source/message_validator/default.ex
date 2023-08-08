@@ -8,6 +8,9 @@ end
 
 defimpl Membrane.RTMP.MessageValidator, for: Membrane.RTMP.MessageValidator.Default do
   @impl true
+  def validate_connect(_impl, _message), do: {:ok, "connect success"}
+
+  @impl true
   def validate_release_stream(_impl, _message), do: {:ok, "release stream success"}
 
   @impl true
