@@ -40,7 +40,8 @@ defmodule Membrane.RTMP.Mixfile do
     [
       {:membrane_core, "~> 0.12.3"},
       {:unifex, "~> 1.1.0"},
-      {:membrane_h264_ffmpeg_plugin, "~> 0.27.0"},
+      # {:membrane_h264_ffmpeg_plugin, "~> 0.27.0"},
+      {:membrane_h264_plugin, path: "../membrane_h264_plugin", override: true},
       {:membrane_aac_plugin, "~> 0.15.0"},
       {:membrane_mp4_plugin, "~> 0.24.1"},
       {:membrane_flv_plugin, "~> 0.7.0"},

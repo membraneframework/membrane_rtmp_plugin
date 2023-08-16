@@ -73,11 +73,7 @@ defmodule Membrane.RTMP.SourceBin do
         in_encapsulation: :none,
         out_encapsulation: :none
       }),
-      child(:video_parser, %Membrane.H264.FFmpeg.Parser{
-        alignment: :au,
-        attach_nalus?: true,
-        skip_until_keyframe?: true
-      }),
+      child(:video_parser, Membrane.H264.Parser),
       #
       get_child(:demuxer)
       |> via_out(Pad.ref(:audio, 0))
