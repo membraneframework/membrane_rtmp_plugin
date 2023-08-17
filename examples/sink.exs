@@ -3,6 +3,8 @@
 # If you want to test it locally, you can run the FFmpeg server with:
 # ffmpeg -y -listen 1 -f flv -i rtmp://localhost:1935 -c copy dest.flv
 
+Logger.configure(level: :info)
+
 Mix.install([
   :membrane_realtimer_plugin,
   :membrane_hackney_plugin,
@@ -29,7 +31,7 @@ defmodule Example do
       })
       |> child(:video_realtimer, Membrane.Realtimer)
       |> child(:video_payloader, Membrane.MP4.Payloader.H264)
-      |> via_in(:video)
+      |> via_in(Pad.ref(:video, 0))
       |> get_child(:rtmp_sink),
       child(:audio_source, %Membrane.Hackney.Source{
         location: @audio_url,
@@ -40,7 +42,7 @@ defmodule Example do
         out_encapsulation: :none
       })
       |> child(:audio_realtimer, Membrane.Realtimer)
-      |> via_in(:audio)
+      |> via_in(Pad.ref(:audio, 0))
       |> get_child(:rtmp_sink)
     ]
 

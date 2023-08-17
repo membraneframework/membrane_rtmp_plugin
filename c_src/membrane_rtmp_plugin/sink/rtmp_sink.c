@@ -7,7 +7,8 @@ void handle_init_state(State *state);
 
 static bool is_ready(State *state);
 
-UNIFEX_TERM create(UnifexEnv *env, char *rtmp_url, int audio_present, int video_present) {
+UNIFEX_TERM create(UnifexEnv *env, char *rtmp_url, int audio_present,
+                   int video_present) {
   State *state = unifex_alloc_state(env);
   handle_init_state(state);
 
@@ -43,6 +44,9 @@ UNIFEX_TERM try_connect(UnifexEnv *env, State *state) {
 }
 
 UNIFEX_TERM flush_and_close_stream(UnifexEnv *env, State *state) {
+  if (!state->output_ctx || state->closed || !is_ready(state)) {
+    return finalize_stream_result_ok(env);
+  }
   if (av_write_trailer(state->output_ctx)) {
     return unifex_raise(env, "Failed writing stream trailer");
   }
@@ -254,5 +258,6 @@ void handle_destroy_state(UnifexEnv *env, State *state) {
 }
 
 bool is_ready(State *state) {
-  return (!state->audio_present || state->audio_stream_index != -1) && (!state->video_present || state->video_stream_index != -1);
+  return (!state->audio_present || state->audio_stream_index != -1) &&
+         (!state->video_present || state->video_stream_index != -1);
 }

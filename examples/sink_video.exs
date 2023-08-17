@@ -3,6 +3,8 @@
 # If you want to test it locally, you can run the FFmpeg server with:
 # ffmpeg -y -listen 1 -f flv -i rtmp://localhost:1935 -c copy dest.flv
 
+Logger.configure(level: :info)
+
 Mix.install([
   :membrane_realtimer_plugin,
   :membrane_hackney_plugin,
@@ -36,7 +38,7 @@ defmodule Example do
   # The rest of the example module is only used for self-termination of the pipeline after processing finishes
   @impl true
   def handle_element_end_of_stream(:rtmp_sink, _pad, _ctx, state) do
-    {[terminate: :shutdown], state}
+    {[terminate: :normal], state}
   end
 
   @impl true

@@ -187,7 +187,7 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_info(:start_receiving, _ctx, %{socket_retries: 0} = state) do
-    Membrane.Logger.warn("Failed to take control of the socket")
+    Membrane.Logger.warning("Failed to take control of the socket")
     {[], state}
   end
 
