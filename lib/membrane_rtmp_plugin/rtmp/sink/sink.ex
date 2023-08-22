@@ -88,7 +88,8 @@ defmodule Membrane.RTMP.Sink do
         # disabled, frame buffer is flushed and from that point buffers on the
         # remaining pad are simply forwarded to the output.
         # Always on if a single track is connected
-        forward_mode?: single_track?
+        forward_mode?: single_track?,
+        video_base_dts: nil
       })
 
     {[], state}
@@ -139,7 +140,7 @@ defmodule Membrane.RTMP.Sink do
         {[], %{state | native: native, ready?: ready?}}
 
       {:error, :stream_format_resent} ->
-        Membrane.Logger.warn(
+        Membrane.Logger.warning(
           "Input stream format redefined on pad :video. RTMP Sink does not support dynamic stream parameters"
         )
 
@@ -168,7 +169,7 @@ defmodule Membrane.RTMP.Sink do
         {[], %{state | native: native, ready?: ready?}}
 
       {:error, :stream_format_resent} ->
-        Membrane.Logger.warn(
+        Membrane.Logger.warning(
           "Input stream format redefined on pad :audio. RTMP Sink does not support dynamic stream parameters"
         )
 
@@ -226,7 +227,7 @@ defmodule Membrane.RTMP.Sink do
         state
 
       {:error, error} when error in [:econnrefused, :etimedout] ->
-        Membrane.Logger.warn(
+        Membrane.Logger.warning(
           "Connection to #{state.rtmp_url} refused, retrying in #{@connection_attempt_interval}ms"
         )
 
@@ -295,7 +296,7 @@ defmodule Membrane.RTMP.Sink do
   end
 
   defp write_frame(state, Pad.ref(:audio, 0), buffer) do
-    buffer_pts = buffer.pts |> Ratio.ceil()
+    buffer_pts = Ratio.ceil(buffer.pts)
 
     case Native.write_audio_frame(state.native, buffer.payload, buffer_pts) do
       {:ok, native} ->
@@ -307,11 +308,15 @@ defmodule Membrane.RTMP.Sink do
   end
 
   defp write_frame(state, Pad.ref(:video, 0), buffer) do
+    dts = buffer.dts || buffer.pts
+    pts = buffer.pts || buffer.dts
+    {base_dts, state} = Bunch.Map.get_updated!(state, :video_base_dts, &(&1 || dts))
+
     case Native.write_video_frame(
            state.native,
            buffer.payload,
-           buffer.dts,
-           buffer.pts || buffer.dts,
+           dts - base_dts,
+           pts - base_dts,
            buffer.metadata.h264.key_frame?
          ) do
       {:ok, native} ->
