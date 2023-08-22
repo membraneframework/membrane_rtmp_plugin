@@ -8,6 +8,7 @@ Logger.configure(level: :info)
 Mix.install([
   :membrane_realtimer_plugin,
   :membrane_hackney_plugin,
+  :membrane_mp4_plugin,
   {:membrane_rtmp_plugin, path: __DIR__ |> Path.join("..") |> Path.expand()}
 ])
 

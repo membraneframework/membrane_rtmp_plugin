@@ -4,6 +4,7 @@
 
 Mix.install([
   :membrane_aac_plugin,
+  :membrane_mp4_plugin,
   :membrane_flv_plugin,
   :membrane_file_plugin,
   {:membrane_rtmp_plugin, path: __DIR__ |> Path.join("..") |> Path.expand()}
