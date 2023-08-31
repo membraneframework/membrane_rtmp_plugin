@@ -101,7 +101,7 @@ defmodule Membrane.RTMP.SinkTest do
         child(:video_source, %Membrane.File.Source{location: "test/fixtures/video.msr"})
         |> child(:video_deserializer, Membrane.Stream.Deserializer)
         |> child(:video_payloader, %Membrane.H264.Parser{
-          output_stream_structure: :avc3
+          output_stream_structure: :avc1
         })
         |> via_in(Pad.ref(:video, 0))
         |> get_child(:rtmp_sink),
@@ -168,7 +168,7 @@ defmodule Membrane.RTMP.SinkTest do
           hackney_opts: [follow_redirect: true]
         })
         |> child(:video_parser, %Membrane.H264.Parser{
-          output_stream_structure: :avc3,
+          output_stream_structure: :avc1,
           generate_best_effort_timestamps: %{framerate: {30, 1}}
         })
         |> via_in(Pad.ref(:video, 0))
