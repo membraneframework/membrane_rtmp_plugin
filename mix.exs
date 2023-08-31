@@ -40,12 +40,14 @@ defmodule Membrane.RTMP.Mixfile do
     [
       {:membrane_core, "~> 0.12.3"},
       {:unifex, "~> 1.1.0"},
-      {:membrane_h264_plugin, "~> 0.6.0"},
-      {:membrane_aac_plugin, "~> 0.15.0"},
-      {:membrane_flv_plugin, "~> 0.8.0"},
+      # {:membrane_h264_plugin, path: "/Users/jakubpryc/Membrane/membrane_h264_plugin", override: true},
+      {:membrane_h264_plugin, "~> 0.7.0"},
+      {:membrane_aac_plugin, "~> 0.16.0"},
+      {:membrane_flv_plugin,
+       github: "membraneframework/membrane_flv_plugin", branch: "update-to-new-formats"},
       {:membrane_file_plugin, "~> 0.15.0"},
       # testing
-      {:membrane_mp4_plugin, "~> 0.28.0", only: :test},
+      {:membrane_mp4_plugin, "~> 0.29.0", only: :test},
       {:membrane_hackney_plugin, "~> 0.10.0", only: :test},
       {:ffmpex, "~> 0.10.0", only: :test},
       {:membrane_stream_plugin, "~> 0.3.1", only: :test},

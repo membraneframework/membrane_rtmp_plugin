@@ -70,7 +70,6 @@ defmodule Membrane.RTMP.SourceBin do
       |> child(:demuxer, Membrane.FLV.Demuxer),
       #
       child(:audio_parser, %Membrane.AAC.Parser{
-        in_encapsulation: :none,
         out_encapsulation: :none
       }),
       child(:video_parser, Membrane.H264.Parser),
