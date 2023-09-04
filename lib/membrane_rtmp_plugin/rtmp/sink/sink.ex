@@ -10,7 +10,7 @@ defmodule Membrane.RTMP.Sink do
   """
   use Membrane.Sink
 
-  require Membrane.Logger
+  require Membrane.{H264, Logger}
 
   alias __MODULE__.Native
   alias Membrane.{AAC, Buffer, H264}
@@ -27,7 +27,7 @@ defmodule Membrane.RTMP.Sink do
 
   def_input_pad :video,
     availability: :on_request,
-    accepted_format: %H264{stream_structure: {avc, _dcr}} when avc in [:avc1, :avc3],
+    accepted_format: %H264{stream_structure: structure} when H264.is_avc(structure),
     mode: :pull,
     demand_unit: :buffers
 

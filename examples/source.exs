@@ -4,7 +4,7 @@
 
 Mix.install([
   :membrane_aac_plugin,
-  :membrane_mp4_plugin,
+  :membrane_h264_plugin,
   :membrane_flv_plugin,
   :membrane_file_plugin,
   {:membrane_rtmp_plugin, path: __DIR__ |> Path.join("..") |> Path.expand()}
@@ -21,7 +21,9 @@ defmodule Pipeline do
       child(:source, %Membrane.RTMP.SourceBin{
         socket: socket
       }),
-      child(:video_payloader, Membrane.MP4.Payloader.H264),
+      child(:video_payloader, %Membrane.H264.Parser{
+        output_stream_structure: :avc3
+      }),
       child(:muxer, Membrane.FLV.Muxer),
       child(:sink, %Membrane.File.Sink{location: @output_file}),
       get_child(:source) |> via_out(:audio) |> via_in(Pad.ref(:audio, 0)) |> get_child(:muxer),
@@ -33,7 +35,7 @@ defmodule Pipeline do
       get_child(:muxer) |> get_child(:sink)
     ]
 
-    {[spec: structure, playback: :playing], %{}}
+    {[spec: structure], %{}}
   end
 
   # Once the source initializes, we grant it the control over the tcp socket
