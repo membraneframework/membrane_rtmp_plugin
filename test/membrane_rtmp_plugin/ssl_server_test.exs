@@ -46,7 +46,7 @@ defmodule Membrane.RTMP.Source.SslServerTest do
 
     {:ok, socket} =
       :ssl.connect(
-        'localhost',
+        ~c"localhost",
         @port,
         [
           cacertfile: certfile,

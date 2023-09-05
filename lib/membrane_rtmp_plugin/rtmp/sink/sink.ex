@@ -10,10 +10,10 @@ defmodule Membrane.RTMP.Sink do
   """
   use Membrane.Sink
 
-  require Membrane.Logger
+  require Membrane.{H264, Logger}
 
   alias __MODULE__.Native
-  alias Membrane.{AAC, Buffer, MP4}
+  alias Membrane.{AAC, Buffer, H264}
 
   @supported_protocols ["rtmp://", "rtmps://"]
   @connection_attempt_interval 500
@@ -27,7 +27,7 @@ defmodule Membrane.RTMP.Sink do
 
   def_input_pad :video,
     availability: :on_request,
-    accepted_format: MP4.Payload,
+    accepted_format: %H264{stream_structure: structure} when H264.is_avc(structure),
     mode: :pull,
     demand_unit: :buffers
 
@@ -125,16 +125,11 @@ defmodule Membrane.RTMP.Sink do
   @impl true
   def handle_stream_format(
         Pad.ref(:video, 0),
-        %MP4.Payload{content: %MP4.Payload.AVC1{avcc: avc_config}} = stream_format,
+        %H264{width: width, height: height, stream_structure: {_avc, dcr}},
         _ctx,
         state
       ) do
-    case Native.init_video_stream(
-           state.native,
-           stream_format.width,
-           stream_format.height,
-           avc_config
-         ) do
+    case Native.init_video_stream(state.native, width, height, dcr) do
       {:ok, ready?, native} ->
         Membrane.Logger.debug("Correctly initialized video stream.")
         {[], %{state | native: native, ready?: ready?}}

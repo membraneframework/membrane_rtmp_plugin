@@ -8,7 +8,8 @@ Logger.configure(level: :info)
 Mix.install([
   :membrane_realtimer_plugin,
   :membrane_hackney_plugin,
-  :membrane_mp4_plugin,
+  :membrane_h264_plugin,
+  :membrane_aac_plugin,
   {:membrane_rtmp_plugin, path: __DIR__ |> Path.join("..") |> Path.expand()}
 ])
 
@@ -28,10 +29,10 @@ defmodule Example do
         hackney_opts: [follow_redirect: true]
       })
       |> child(:video_parser, %Membrane.H264.Parser{
-        generate_best_effort_timestamps: %{framerate: {25, 1}}
+        generate_best_effort_timestamps: %{framerate: {25, 1}},
+        output_stream_structure: :avc1
       })
       |> child(:video_realtimer, Membrane.Realtimer)
-      |> child(:video_payloader, Membrane.MP4.Payloader.H264)
       |> via_in(Pad.ref(:video, 0))
       |> get_child(:rtmp_sink),
       child(:audio_source, %Membrane.Hackney.Source{
@@ -39,7 +40,6 @@ defmodule Example do
         hackney_opts: [follow_redirect: true]
       })
       |> child(:audio_parser, %Membrane.AAC.Parser{
-        in_encapsulation: :ADTS,
         out_encapsulation: :none
       })
       |> child(:audio_realtimer, Membrane.Realtimer)
@@ -47,7 +47,7 @@ defmodule Example do
       |> get_child(:rtmp_sink)
     ]
 
-    {[spec: structure, playback: :playing], %{streams_to_end: 2}}
+    {[spec: structure], %{streams_to_end: 2}}
   end
 
   # The rest of the example module is only used for self-termination of the pipeline after processing finishes
