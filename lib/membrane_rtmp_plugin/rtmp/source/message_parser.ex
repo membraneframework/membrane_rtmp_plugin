@@ -200,6 +200,13 @@ defmodule Membrane.RTMP.MessageParser do
       <<body::binary-size(chunk_size), 0b11::2, _chunk_stream_id::6, rest::binary>> ->
         do_combine_body_chunks(rest, chunk_size, header, [acc, body])
 
+      <<_body::binary-size(chunk_size), header_type::2, _chunk_stream_id::6, _rest::binary>> ->
+        Membrane.Logger.warning(
+          "Unexpected header type when combining body chunks: #{header_type}"
+        )
+
+        IO.iodata_to_binary([acc, body])
+
       body ->
         IO.iodata_to_binary([acc, body])
     end
