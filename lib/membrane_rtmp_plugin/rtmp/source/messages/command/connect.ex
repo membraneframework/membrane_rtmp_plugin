@@ -26,7 +26,6 @@ defmodule Membrane.RTMP.Messages.Connect do
     %{
       "app" => app,
       "type" => type,
-      "flashVer" => flash_version,
       "tcUrl" => tc_url
     } = properties
 
@@ -34,7 +33,8 @@ defmodule Membrane.RTMP.Messages.Connect do
       app: app,
       type: type,
       supports_go_away: Map.get(properties, "supportsGoAway", false),
-      flash_version: flash_version,
+      # some RTMP clients may not include flashVer in the message (eg. PRISM)
+      flash_version: Map.get(properties, "flashVer", "FMLE/3.0 (compatible; FMSc/1.0)"),
       swf_url: Map.get(properties, "swfUrl", tc_url),
       tc_url: tc_url,
       tx_id: tx_id
