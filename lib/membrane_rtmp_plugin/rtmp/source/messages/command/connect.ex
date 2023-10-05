@@ -25,13 +25,12 @@ defmodule Membrane.RTMP.Messages.Connect do
   def from_data([@name, tx_id, properties]) do
     %{
       "app" => app,
-      "type" => type,
       "tcUrl" => tc_url
     } = properties
 
     %__MODULE__{
       app: app,
-      type: type,
+      type: Map.get(properties, "type", ""),
       supports_go_away: Map.get(properties, "supportsGoAway", false),
       # some RTMP clients may not include flashVer in the message (eg. PRISM)
       flash_version: Map.get(properties, "flashVer", "FMLE/3.0 (compatible; FMSc/1.0)"),
