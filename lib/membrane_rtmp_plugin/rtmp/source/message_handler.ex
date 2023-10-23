@@ -182,6 +182,14 @@ defmodule Membrane.RTMP.MessageHandler do
     {:cont, state}
   end
 
+  defp do_handle_client_message(%Messages.WindowAcknowledgement{}, _header, state) do
+    Logger.warning(
+      "Received WindowAcknowledgement from a client. Acknowledgments are currently not supported"
+    )
+
+    {:cont, state}
+  end
+
   # Check bandwidth message
   defp do_handle_client_message(
          %Messages.Anonymous{name: "_checkbw", tx_id: tx_id},
