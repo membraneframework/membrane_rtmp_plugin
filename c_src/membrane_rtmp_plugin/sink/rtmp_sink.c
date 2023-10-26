@@ -111,10 +111,16 @@ UNIFEX_TERM init_audio_stream(UnifexEnv *env, State *state, int channels,
   }
   state->audio_stream_index = audio_stream->index;
 
+  AVChannelLayout *channel_layout = malloc(sizeof *channel_layout);
+  if (!channel_layout) {
+    return unifex_raise(env, "Failed allocating channel layout");
+  }
+  av_channel_layout_default(channel_layout, channels);
+
   audio_stream->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
   audio_stream->codecpar->codec_id = AV_CODEC_ID_AAC;
   audio_stream->codecpar->sample_rate = sample_rate;
-  audio_stream->codecpar->channels = channels;
+  audio_stream->codecpar->ch_layout = *channel_layout;
   audio_stream->codecpar->extradata_size = aac_config->size;
   audio_stream->codecpar->extradata =
       (uint8_t *)av_malloc(aac_config->size + AV_INPUT_BUFFER_PADDING_SIZE);
