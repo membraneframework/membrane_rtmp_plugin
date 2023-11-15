@@ -26,7 +26,7 @@ defmodule Membrane.RTMP.Source.TestPipeline do
 
     send(test_process, {:pipeline_started, self()})
 
-    {[spec: structure, playback: :playing], %{socket: socket}}
+    {[spec: structure], %{socket: socket}}
   end
 
   @impl true
