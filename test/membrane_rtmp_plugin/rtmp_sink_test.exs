@@ -31,7 +31,6 @@ defmodule Membrane.RTMP.SinkTest do
 
     # There's an RC - there's no way to ensure RTMP server starts to listen before pipeline is started
     # so it may retry a few times before succeeding
-    assert_pipeline_play(sink_pipeline_pid, 5000)
 
     assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:video, 0), 5_000)
     assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:audio, 0))
@@ -74,7 +73,6 @@ defmodule Membrane.RTMP.SinkTest do
 
     # There's an RC - there's no way to ensure RTMP server starts to listen before pipeline is started
     # so it may retry a few times before succeeding
-    assert_pipeline_play(sink_pipeline_pid, 5000)
 
     Enum.each(
       tracks,
@@ -95,7 +93,7 @@ defmodule Membrane.RTMP.SinkTest do
     import Membrane.ChildrenSpec
 
     options = [
-      structure: [
+      spec: [
         child(:rtmp_sink, %Membrane.RTMP.Sink{rtmp_url: rtmp_url, max_attempts: 5}),
         #
         child(:video_source, %Membrane.File.Source{location: "test/fixtures/video.msr"})
@@ -122,7 +120,7 @@ defmodule Membrane.RTMP.SinkTest do
     import Membrane.ChildrenSpec
 
     options = [
-      structure:
+      spec:
         [
           child(:rtmp_sink, %Membrane.RTMP.Sink{
             rtmp_url: rtmp_url,
