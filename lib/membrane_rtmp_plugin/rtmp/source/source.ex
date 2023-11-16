@@ -20,7 +20,7 @@ defmodule Membrane.RTMP.Source do
   def_output_pad :output,
     availability: :always,
     accepted_format: Membrane.RemoteStream,
-    mode: :pull
+    flow_control: :manual
 
   def_options socket: [
                 spec: :gen_tcp.socket() | :ssl.sslsocket(),

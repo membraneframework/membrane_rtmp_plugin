@@ -22,13 +22,13 @@ defmodule Membrane.RTMP.Sink do
   def_input_pad :audio,
     availability: :on_request,
     accepted_format: AAC,
-    mode: :pull,
+    flow_control: :manual,
     demand_unit: :buffers
 
   def_input_pad :video,
     availability: :on_request,
     accepted_format: %H264{stream_structure: structure} when H264.is_avc(structure),
-    mode: :pull,
+    flow_control: :manual,
     demand_unit: :buffers
 
   def_options rtmp_url: [
@@ -173,15 +173,15 @@ defmodule Membrane.RTMP.Sink do
   end
 
   @impl true
-  def handle_write(pad, buffer, _ctx, %{ready?: false} = state) do
+  def handle_buffer(pad, buffer, _ctx, %{ready?: false} = state) do
     {[], fill_frame_buffer(state, pad, buffer)}
   end
 
-  def handle_write(pad, buffer, _ctx, %{forward_mode?: true} = state) do
+  def handle_buffer(pad, buffer, _ctx, %{forward_mode?: true} = state) do
     {[demand: pad], write_frame(state, pad, buffer)}
   end
 
-  def handle_write(pad, buffer, _ctx, state) do
+  def handle_buffer(pad, buffer, _ctx, state) do
     state
     |> fill_frame_buffer(pad, buffer)
     |> write_frame_interleaved()

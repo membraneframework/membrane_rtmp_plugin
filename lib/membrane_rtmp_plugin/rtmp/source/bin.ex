@@ -24,15 +24,11 @@ defmodule Membrane.RTMP.SourceBin do
 
   def_output_pad :video,
     accepted_format: H264,
-    availability: :always,
-    mode: :pull,
-    demand_unit: :buffers
+    availability: :always
 
   def_output_pad :audio,
     accepted_format: AAC,
-    availability: :always,
-    mode: :pull,
-    demand_unit: :buffers
+    availability: :always
 
   def_options socket: [
                 spec: :gen_tcp.socket() | :ssl.sslsocket(),
