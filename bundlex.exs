@@ -7,14 +7,13 @@ defmodule Membrane.RTMP.BundlexProject do
 
     case Bundlex.get_target() do
       %{os: "linux"} ->
-        {:precompiled,
-         "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n6.0-latest-linux64-gpl-shared-6.0.tar.xz"}
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n6.0-latest-linux64-gpl-shared-6.0.tar.xz"
 
       %{architecture: "x86_64", os: "darwin" <> _rest_of_os_name} ->
-        {:precompiled, "#{membrane_precompiled_url_prefix}_macos_intel.tar.gz"}
+        "#{membrane_precompiled_url_prefix}_macos_intel.tar.gz"
 
       %{architecture: "aarch64", os: "darwin" <> _rest_of_os_name} ->
-        {:precompiled, "#{membrane_precompiled_url_prefix}_macos_arm.tar.gz"}
+        "#{membrane_precompiled_url_prefix}_macos_arm.tar.gz"
 
       _other ->
         nil
@@ -34,7 +33,12 @@ defmodule Membrane.RTMP.BundlexProject do
         deps: [unifex: :unifex],
         interface: [:nif],
         preprocessor: Unifex,
-        os_deps: [{[get_ffmpeg_url(), :pkg_config], ["libavformat", "libavutil"]}]
+        os_deps: [
+          ffmpeg: [
+            {:precompiled, get_ffmpeg_url(), ["libavformat", "libavutil"]},
+            {:pkg_config, ["libavformat", "libavutil"]}
+          ]
+        ]
       ]
     ]
   end
