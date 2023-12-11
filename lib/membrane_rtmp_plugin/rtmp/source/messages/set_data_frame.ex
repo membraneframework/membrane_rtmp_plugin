@@ -68,10 +68,7 @@ defmodule Membrane.RTMP.Messages.SetDataFrame do
   @doc false
   @spec to_map(t()) :: map()
   def to_map(%__MODULE__{} = message) do
-    message
-    |> Map.from_struct()
-    |> Enum.map(fn {key, value} -> {Map.fetch!(@keys_to_attributes, key), value} end)
-    |> Map.new()
+    Map.new(message, fn {key, value} -> {Map.fetch!(@keys_to_attributes, key), value} end)
   end
 
   defimpl Membrane.RTMP.Messages.Serializer do
