@@ -99,7 +99,7 @@ defmodule Membrane.RTMP.Handshake.Step do
   @doc """
   Verifies if the following handshake step matches the previous one.
 
-  C1 should have the same value as S2 and C2 be the same as  S1.
+  C1 should have the same value as S2 and C2 be the same as S1 (except the read timestamp).
   """
   @spec verify_next_step(t() | nil, t()) ::
           :ok | {:error, {:invalid_handshake_step, handshake_type_t()}}
@@ -113,7 +113,10 @@ defmodule Membrane.RTMP.Handshake.Step do
       }) do
     <<_s1::binary-size(@handshake_size), s2::binary-size(@handshake_size)>> = s1_s2
 
-    if s2 == c1 do
+    c1 = decompose(c1)
+    s2 = decompose(s2)
+
+    if s2.time_sent == c1.time_sent and s2.data == c1.data do
       :ok
     else
       invalid_step_error(:s0_s1_s2)
@@ -123,7 +126,10 @@ defmodule Membrane.RTMP.Handshake.Step do
   def verify_next_step(%__MODULE__{type: :s0_s1_s2, data: s1_s2}, %__MODULE__{type: :c2, data: c2}) do
     <<s1::binary-size(@handshake_size), _s2::binary>> = s1_s2
 
-    if c2 == s1 do
+    s1 = decompose(s1)
+    c2 = decompose(c2)
+
+    if c2.time_sent == s1.time_sent and c2.data == s1.data do
       :ok
     else
       invalid_step_error(:c2)
@@ -135,4 +141,8 @@ defmodule Membrane.RTMP.Handshake.Step do
   """
   @spec epoch(t()) :: non_neg_integer()
   def epoch(%__MODULE__{data: <<epoch::32, _rest::binary>>}), do: epoch
+
+  defp decompose(<<time_sent::32, time_read::32, data::binary-size(@handshake_size - 8)>>) do
+    %{time_sent: time_sent, time_read: time_read, data: data}
+  end
 end

@@ -14,6 +14,7 @@ defmodule Membrane.RTMP.Handshake do
           }
   end
 
+  @c0_s0_size 1
   @handshake_size 1536
 
   @doc """
@@ -80,11 +81,11 @@ defmodule Membrane.RTMP.Handshake do
     case step do
       # expect c0 + c1
       nil ->
-        @handshake_size + 1
+        @handshake_size + @c0_s0_size
 
       # expect s0 + s1 + s2
       %Step{type: :c0_c1} ->
-        2 * @handshake_size + 1
+        2 * @handshake_size + @c0_s0_size
 
       # expect c2
       %Step{type: :s0_s1_s2} ->
@@ -94,7 +95,7 @@ defmodule Membrane.RTMP.Handshake do
 
   # generates a unique segment of the handshake's step
   # accordingly to the spec first 4 bytes are a connection epoch time,
-  # followed by 4 zero bytes and 1526 random bytes
+  # followed by 4 zero bytes and 1528 random bytes
   defp generate_c1_s1(epoch) do
     <<epoch::32, 0::32, :crypto.strong_rand_bytes(@handshake_size - 8)::binary>>
   end
