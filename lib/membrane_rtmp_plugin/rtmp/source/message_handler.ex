@@ -220,13 +220,20 @@ defmodule Membrane.RTMP.MessageHandler do
     :inet.setopts(socket, active: :once)
   end
 
-  defp get_media_actions(rtmp_header, data, state) do
-    payload =
-      get_flv_tag(rtmp_header, data)
-      |> (&if(state.header_sent?, do: &1, else: get_flv_header() <> &1)).()
+  defp get_media_actions(rtmp_header, data, %{header_sent?: true} = state) do
+    payload = get_flv_tag(rtmp_header, data)
 
-    actions = [{:buffer, {:output, %Buffer{payload: payload}}} | state.actions]
-    %{state | header_sent?: true, actions: actions}
+    Map.update!(state, :actions, &[{:buffer, {:output, %Buffer{payload: payload}}} | &1])
+  end
+
+  defp get_media_actions(rtmp_header, data, state) do
+    payload = get_flv_header() <> get_flv_tag(rtmp_header, data)
+
+    %{
+      state
+      | header_sent?: true,
+        actions: [{:buffer, {:output, %Buffer{payload: payload}}} | state.actions]
+    }
   end
 
   defp get_flv_header() do
