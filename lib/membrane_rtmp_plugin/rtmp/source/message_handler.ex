@@ -21,8 +21,9 @@ defmodule Membrane.RTMP.MessageHandler do
 
   alias Membrane.RTMP.Messages.Serializer
 
-  @windows_acknowledgment_size 2_500_000
+  @window_acknowledgement_size 2_500_000
   @peer_bandwidth_size 2_500_000
+  @server_chunk_size 512
 
   @spec handle_client_messages(list(), map()) :: map()
   def handle_client_messages([], state) do
@@ -80,26 +81,24 @@ defmodule Membrane.RTMP.MessageHandler do
   defp do_handle_client_message(%Messages.Connect{} = msg, _header, state) do
     case MessageValidator.validate_connect(state.validator, msg) do
       {:ok, _msg} = result ->
-        chunk_size = state.message_parser.chunk_size
-
         [
-          %Messages.WindowAcknowledgement{size: @windows_acknowledgment_size},
+          %Messages.WindowAcknowledgement{size: @window_acknowledgement_size},
           %Messages.SetPeerBandwidth{size: @peer_bandwidth_size},
           # stream begin type
           %Messages.UserControl{event_type: 0x00, data: <<0, 0, 0, 0>>},
-          # by default the ffmpeg server uses 128 chunk size
-          %Messages.SetChunkSize{chunk_size: chunk_size}
+          # the chunk size is independent for both sides
+          %Messages.SetChunkSize{chunk_size: @server_chunk_size}
         ]
-        |> Enum.each(&send_rtmp_payload(&1, state.socket, chunk_size))
+        |> Enum.each(&send_rtmp_payload(&1, state.socket))
 
         {[tx_id], message_parser} = MessageParser.generate_tx_ids(state.message_parser, 1)
 
         tx_id
         |> Responses.connection_success()
-        |> send_rtmp_payload(state.socket, chunk_size, chunk_stream_id: 3)
+        |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
 
         Responses.on_bw_done()
-        |> send_rtmp_payload(state.socket, chunk_size, chunk_stream_id: 3)
+        |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
 
         {:cont,
          validation_action(%{state | message_parser: message_parser}, @validation_stage, result)}
@@ -110,7 +109,7 @@ defmodule Membrane.RTMP.MessageHandler do
   end
 
   # According to ffmpeg's documentation, this command should make the server release channel for a media stream
-  # We are simply acknowleding the message
+  # We are simply acknowledging the message
   @validation_stage :release_stream
   defp do_handle_client_message(
          %Messages.ReleaseStream{tx_id: tx_id} = msg,
@@ -121,7 +120,7 @@ defmodule Membrane.RTMP.MessageHandler do
       {:ok, _msg} = result ->
         tx_id
         |> Responses.default_result()
-        |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
+        |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
 
         {:cont, validation_action(state, @validation_stage, result)}
 
@@ -133,16 +132,17 @@ defmodule Membrane.RTMP.MessageHandler do
   @validation_stage :publish
   defp do_handle_client_message(
          %Messages.Publish{stream_key: stream_key} = msg,
-         _header,
+         %Header{stream_id: stream_id},
          state
        ) do
     case MessageValidator.validate_publish(state.validator, msg) do
       {:ok, _msg} = result ->
+        # stream EOF type
         %Messages.UserControl{event_type: 0, data: <<0, 0, 0, 1>>}
-        |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
+        |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
 
         Responses.publish_success(stream_key)
-        |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
+        |> send_rtmp_payload(state.socket, chunk_stream_id: 3, stream_id: stream_id)
 
         {:cont, validation_action(state, @validation_stage, result)}
 
@@ -164,40 +164,46 @@ defmodule Membrane.RTMP.MessageHandler do
   end
 
   # According to ffmpeg's documentation, this command should prepare the server to receive media streams
-  # We are simply acknowleding the message
+  # We are simply acknowledging the message
   defp do_handle_client_message(%Messages.FCPublish{}, _header, state) do
     %Messages.Anonymous{name: "onFCPublish", properties: []}
-    |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
+    |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
 
     {:cont, state}
   end
 
   defp do_handle_client_message(%Messages.CreateStream{tx_id: tx_id}, _header, state) do
-    stream_id = [1.0]
+    stream_id = [:null, 1.0]
 
     tx_id
     |> Responses.default_result(stream_id)
-    |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
+    |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
 
     {:cont, state}
   end
 
-  defp do_handle_client_message(%Messages.WindowAcknowledgement{}, _header, state) do
-    Logger.warning(
-      "Received WindowAcknowledgement from a client. Acknowledgments are currently not supported"
-    )
+  # we ignore acknowledgement messages, but they're rarely used anyways
+  defp do_handle_client_message(%module{}, _header, state)
+       when module in [Messages.Acknowledgement, Messages.WindowAcknowledgement] do
+    {:cont, state}
+  end
+
+  # according to the spec this should be sent by server, but some clients send it anyway (restream.io)
+  defp do_handle_client_message(
+         %Messages.UserControl{event_type: 6} = ping_request,
+         _header,
+         state
+       ) do
+    %Messages.UserControl{event_type: 7, data: ping_request.data}
+    |> send_rtmp_payload(state.socket, chunk_stream_id: 2)
 
     {:cont, state}
   end
 
   # Check bandwidth message
-  defp do_handle_client_message(
-         %Messages.Anonymous{name: "_checkbw", tx_id: tx_id},
-         _header,
-         state
-       ) do
-    tx_id
-    |> send_rtmp_payload(state.socket, state.message_parser.chunk_size, chunk_stream_id: 3)
+  defp do_handle_client_message(%Messages.Anonymous{name: "_checkbw"}, _header, state) do
+    Responses.on_bw_done()
+    |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
 
     {:cont, state}
   end
@@ -250,8 +256,7 @@ defmodule Membrane.RTMP.MessageHandler do
          %Membrane.RTMP.Header{
            timestamp: timestamp,
            body_size: data_size,
-           type_id: type_id,
-           stream_id: stream_id
+           type_id: type_id
          },
          payload
        ) do
@@ -259,11 +264,14 @@ defmodule Membrane.RTMP.MessageHandler do
 
     <<upper_timestamp::8, lower_timestamp::24>> = <<timestamp::32>>
 
+    # according to the FLV spec, the stream ID should always be 0
+    stream_id = 0
+
     <<type_id::8, data_size::24, lower_timestamp::24, upper_timestamp::8, stream_id::24,
       payload::binary-size(data_size), tag_size::32>>
   end
 
-  defp send_rtmp_payload(message, socket, chunk_size, opts \\ []) do
+  defp send_rtmp_payload(message, socket, opts \\ []) do
     type = Serializer.type(message)
     body = Serializer.serialize(message)
 
@@ -275,7 +283,7 @@ defmodule Membrane.RTMP.MessageHandler do
       |> Header.new()
       |> Header.serialize()
 
-    payload = Message.chunk_payload(body, chunk_stream_id, chunk_size)
+    payload = Message.chunk_payload(body, chunk_stream_id, @server_chunk_size)
 
     socket_module(socket).send(socket, [header | payload])
   end

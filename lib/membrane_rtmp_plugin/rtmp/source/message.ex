@@ -32,12 +32,16 @@ defmodule Membrane.RTMP.Message do
   }
 
   @amf_data_to_module %{
-    "@setDataFrame" => Messages.SetDataFrame
+    "@setDataFrame" => Messages.SetDataFrame,
+    "onStatus" => Messages.Anonymous
   }
 
   @spec deserialize_message(type_id :: integer(), binary()) :: struct()
   def deserialize_message(Header.type(:set_chunk_size), payload),
     do: Messages.SetChunkSize.deserialize(payload)
+
+  def deserialize_message(Header.type(:acknowledgement), payload),
+    do: Messages.Acknowledgement.deserialize(payload)
 
   def deserialize_message(Header.type(:user_control_message), payload),
     do: Messages.UserControl.deserialize(payload)
@@ -60,32 +64,24 @@ defmodule Membrane.RTMP.Message do
   def deserialize_message(Header.type(:video_message), payload),
     do: Messages.Video.deserialize(payload)
 
-  @spec chunk_payload(binary(), non_neg_integer(), non_neg_integer()) :: iodata()
-  def chunk_payload(paylaod, chunk_stream_id, chunk_size)
+  @spec chunk_payload(binary(), non_neg_integer(), non_neg_integer(), iolist()) :: iolist()
+  def chunk_payload(payload, chunk_stream_id, chunk_size, acc \\ []) do
+    case {payload, acc} do
+      {<<chunk::binary-size(chunk_size), rest::binary>>, []} ->
+        chunk_payload(rest, chunk_stream_id, chunk_size, [chunk])
 
-  def chunk_payload(payload, _chunk_stream_id, chunk_size)
-      when byte_size(payload) <= chunk_size do
-    payload
-  end
+      {<<chunk::binary-size(chunk_size), rest::binary>>, acc} ->
+        chunk_payload(rest, chunk_stream_id, chunk_size, [
+          acc,
+          chunk_separator(chunk_stream_id),
+          chunk
+        ])
 
-  def chunk_payload(payload, chunk_stream_id, chunk_size),
-    do: do_chunk_payload(payload, chunk_stream_id, chunk_size, [])
+      {payload, []} ->
+        [payload]
 
-  defp do_chunk_payload(
-         payload,
-         chunk_stream_id,
-         chunk_size,
-         acc
-       ) do
-    case payload do
-      <<chunk::binary-size(chunk_size), rest::binary>> ->
-        acc = [<<0b11::2, chunk_stream_id::6>>, chunk | acc]
-
-        do_chunk_payload(rest, chunk_stream_id, chunk_size, acc)
-
-      payload ->
-        [payload | acc]
-        |> Enum.reverse()
+      {payload, acc} ->
+        [acc, chunk_separator(chunk_stream_id), payload]
     end
   end
 
@@ -101,4 +97,7 @@ defmodule Membrane.RTMP.Message do
       |> apply(:from_data, [arguments])
     end)
   end
+
+  @compile {:inline, chunk_separator: 1}
+  defp chunk_separator(chunk_stream_id), do: <<0b11::2, chunk_stream_id::6>>
 end
