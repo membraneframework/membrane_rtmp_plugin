@@ -54,7 +54,7 @@ defmodule Membrane.RTMP.Responses do
   @spec on_bw_done() :: struct()
   def on_bw_done() do
     %Messages.Anonymous{
-      name: "onStatus",
+      name: "onBWDone",
       tx_id: 0,
       properties: [
         :null,

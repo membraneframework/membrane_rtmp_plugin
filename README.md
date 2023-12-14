@@ -95,7 +95,6 @@ It will connect to RTMP server provided via URL and stream H264 video and AAC au
 RTMP server that will receive this stream can be launched with ffmpeg by running the following commands:
 
 ```bash
-export RTMP_URL=rtmp://localhost:1935
 ffmpeg -y -listen 1 -f flv -i rtmp://localhost:1935 -c copy dest.flv
 ```
 

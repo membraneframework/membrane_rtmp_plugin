@@ -1,5 +1,7 @@
 defmodule Membrane.RTMP.Messages.Anonymous do
-  @moduledoc false
+  @moduledoc """
+  A catch-all module for all the messages that don't have a dedicated module, eg. `onBWDone`, `onStatus`, `_result`.
+  """
 
   @behaviour Membrane.RTMP.Message
 

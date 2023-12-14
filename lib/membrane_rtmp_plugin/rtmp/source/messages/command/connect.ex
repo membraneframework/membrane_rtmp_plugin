@@ -34,7 +34,7 @@ defmodule Membrane.RTMP.Messages.Connect do
           page_url: String.t() | nil,
           object_encoding: float() | nil,
           extra: %{optional(String.t()) => any()},
-          tx_id: non_neg_integer()
+          tx_id: float() | non_neg_integer()
         }
 
   @keys_to_attributes %{

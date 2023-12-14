@@ -43,7 +43,10 @@ defmodule Membrane.RTMP.Mixfile do
       {:membrane_h264_plugin, "~> 0.9.0"},
       {:membrane_h264_format, "~> 0.6.1"},
       {:membrane_aac_plugin, "~> 0.18.0"},
-      {:membrane_flv_plugin, "~> 0.11.0"},
+      # {:membrane_flv_plugin, "~> 0.12.0"},
+      {:membrane_flv_plugin,
+       github: "membraneframework/membrane_flv_plugin",
+       branch: "jb/demuxer-handle-multiple-streams"},
       {:membrane_file_plugin, "~> 0.16.0"},
       # testing
       {:membrane_hackney_plugin, "~> 0.11.0", only: :test},

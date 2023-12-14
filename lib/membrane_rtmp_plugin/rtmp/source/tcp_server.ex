@@ -10,7 +10,7 @@ defmodule Membrane.RTMP.Source.TcpServer do
 
   use Task
 
-  @enforce_keys [:port, :listen_options, :socket_handler, :ssl?]
+  @enforce_keys [:port, :listen_options, :socket_handler]
 
   defstruct @enforce_keys ++ [:parent]
 
