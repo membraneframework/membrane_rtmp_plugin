@@ -17,7 +17,7 @@ defmodule Membrane.RTMP.MessageParser do
           state_machine: state_machine_t(),
           buffer: binary(),
           previous_headers: map(),
-          #  the chunk size of incoming messages (the other side of connection)
+          # the chunk size of incoming messages (the other side of connection)
           chunk_size: non_neg_integer(),
           current_tx_id: non_neg_integer(),
           handshake: Handshake.State.t()

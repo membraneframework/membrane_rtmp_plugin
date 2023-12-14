@@ -3,6 +3,8 @@ defmodule Membrane.RTMP.Handshake.Step do
 
   # Describes steps in the process of RTMP handshake
 
+  require Membrane.Logger
+
   @enforce_keys [:data, :type]
   defstruct @enforce_keys
 
@@ -61,12 +63,6 @@ defmodule Membrane.RTMP.Handshake.Step do
   @handshake_size 1536
   @s1_s2_size 2 * @handshake_size
 
-  defmacrop invalid_step_error(type) do
-    quote do
-      {:error, {:invalid_handshake_step, unquote(type)}}
-    end
-  end
-
   @doc """
   Serializes the step.
   """
@@ -81,7 +77,7 @@ defmodule Membrane.RTMP.Handshake.Step do
   Deserializes the handshake step given the type.
   """
   @spec deserialize(handshake_type_t(), binary()) ::
-          {:ok, t()} | {:error, :invalid_handshake_step}
+          {:ok, t()} | {:error, {:invalid_handshake_step, handshake_type_t()}}
   def deserialize(:c0_c1 = type, <<0x03, data::binary-size(@handshake_size)>>) do
     {:ok, %__MODULE__{type: type, data: data}}
   end
@@ -94,7 +90,7 @@ defmodule Membrane.RTMP.Handshake.Step do
     {:ok, %__MODULE__{type: type, data: data}}
   end
 
-  def deserialize(_type, _data), do: {:error, :invalid_handshake_step}
+  def deserialize(type, _data), do: {:error, {:invalid_handshake_step, type}}
 
   @doc """
   Verifies if the following handshake step matches the previous one.
@@ -108,7 +104,7 @@ defmodule Membrane.RTMP.Handshake.Step do
   def verify_next_step(nil, %__MODULE__{type: :c0_c1}), do: :ok
 
   def verify_next_step(%__MODULE__{type: :c0_c1, data: c1}, %__MODULE__{
-        type: :s0_s1_s2,
+        type: :s0_s1_s2 = type,
         data: s1_s2
       }) do
     <<_s1::binary-size(@handshake_size), s2::binary-size(@handshake_size)>> = s1_s2
@@ -116,24 +112,31 @@ defmodule Membrane.RTMP.Handshake.Step do
     c1 = decompose(c1)
     s2 = decompose(s2)
 
-    if s2.time_sent == c1.time_sent and s2.data == c1.data do
-      :ok
-    else
-      invalid_step_error(:s0_s1_s2)
+    unless s2.time_sent == c1.time_sent and s2.data == c1.data do
+      Membrane.Logger.warning(
+        "Invalid handshake step #{type}: the servers's response doesn't match the client payload"
+      )
     end
+
+    :ok
   end
 
-  def verify_next_step(%__MODULE__{type: :s0_s1_s2, data: s1_s2}, %__MODULE__{type: :c2, data: c2}) do
-    <<s1::binary-size(@handshake_size), _s2::binary>> = s1_s2
+  def verify_next_step(%__MODULE__{type: :s0_s1_s2, data: s1_s2}, %__MODULE__{
+        type: :c2 = type,
+        data: c2
+      }) do
+    <<s1::binary-size(@handshake_size), _s2::binary-size(@handshake_size)>> = s1_s2
 
     s1 = decompose(s1)
     c2 = decompose(c2)
 
-    if c2.time_sent == s1.time_sent and c2.data == s1.data do
-      :ok
-    else
-      invalid_step_error(:c2)
+    unless c2.time_sent == s1.time_sent and c2.data == s1.data do
+      Membrane.Logger.warning(
+        "Invalid handshake step #{type}: the client's response doesn't match the server payload"
+      )
     end
+
+    :ok
   end
 
   @doc """
