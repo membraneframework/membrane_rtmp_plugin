@@ -3,8 +3,9 @@ defmodule Membrane.RTMP.Source.TcpServer do
   A simple tcp server, which handles each new incoming connection.
 
   The `socket_handler` function passed inside the options should take the socket returned by `:gen_tcp.accept/1`
-  and return `{:ok, pid}`, where the `pid` describes a process, which will be interacting with the socket.
-  `Membrane.RTMP.Source.TcpServer` will grant that process control over the socket via `:gen_tcp.controlling_process/2`.
+  and return `{:ok, pid}`, where the `pid` describes a process, which will be interacting with the socket. The process
+  will be temporarily linked with a `#{inspect(__MODULE__)}` worker process until it successfully grants it the control
+  over the socket using `:gen_tcp.controlling_process/2`.
   """
 
   use Task
@@ -17,7 +18,7 @@ defmodule Membrane.RTMP.Source.TcpServer do
   Defines options for the TCP server.
   The `listen_options` are passed to the `:gen_tcp.listen/2` function.
   The `socket_handler` is a function that takes socket returned by `:gen_tcp.accept/1` and returns the pid of a process,
-  which will be interacting with the socket. TcpServer will grant that process control over the socket via `:gen_tcp.controlling_process/2`.
+  which will be interacting with the socket.
   """
   @type t :: %__MODULE__{
           port: :inet.port_number(),
@@ -31,7 +32,7 @@ defmodule Membrane.RTMP.Source.TcpServer do
     Task.start_link(__MODULE__, :run, [options])
   end
 
-  @spec run(t()) :: nil
+  @spec run(t()) :: no_return()
   def run(options) do
     {:ok, socket} = :gen_tcp.listen(options.port, options.listen_options)
     if options.parent, do: send(options.parent, {:tcp_server_started, socket})
@@ -43,8 +44,10 @@ defmodule Membrane.RTMP.Source.TcpServer do
     {:ok, client} = :gen_tcp.accept(socket)
     {:ok, handler_task} = Task.start(fn -> serve(client, socket_handler) end)
 
-    :ok = :gen_tcp.controlling_process(client, handler_task)
-    send(handler_task, :control_granted)
+    case :gen_tcp.controlling_process(client, handler_task) do
+      :ok -> send(handler_task, :control_granted)
+      {:error, _reason} -> send(handler_task, :control_denied)
+    end
 
     accept_loop(socket, socket_handler)
   end
@@ -52,9 +55,23 @@ defmodule Membrane.RTMP.Source.TcpServer do
   defp serve(socket, socket_handler) do
     {:ok, pid} = socket_handler.(socket)
 
+    Process.link(pid)
+
     receive do
       :control_granted ->
-        :ok = :gen_tcp.controlling_process(socket, pid)
+        :gen_tcp.controlling_process(socket, pid)
+
+      :control_denied ->
+        {:error, :control_denied}
+    after
+      5000 -> {:error, :timeout}
+    end
+    |> case do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        raise "Failed to grant control over the client socket due to #{inspect(reason)}"
     end
   end
 end

@@ -6,6 +6,9 @@ defmodule Membrane.RTMP.BundlexProject do
       "https://github.com/membraneframework-precompiled/precompiled_ffmpeg/releases/latest/download/ffmpeg"
 
     case Bundlex.get_target() do
+      %{architecture: "aarch64", os: "linux"} ->
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n6.0-latest-linuxarm64-gpl-shared-6.0.tar.xz"
+
       %{os: "linux"} ->
         "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n6.0-latest-linux64-gpl-shared-6.0.tar.xz"
 
@@ -22,16 +25,16 @@ defmodule Membrane.RTMP.BundlexProject do
 
   def project do
     [
-      natives: natives(Bundlex.platform())
+      natives: natives()
     ]
   end
 
-  defp natives(_platform) do
+  defp natives() do
     [
       rtmp_sink: [
         sources: ["sink/rtmp_sink.c"],
         deps: [unifex: :unifex],
-        interface: [:nif],
+        interface: :nif,
         preprocessor: Unifex,
         os_deps: [
           ffmpeg: [

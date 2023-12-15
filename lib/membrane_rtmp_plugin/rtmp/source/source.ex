@@ -7,7 +7,7 @@ defmodule Membrane.RTMP.Source do
 
   The Source allows for providing custom validator module, that verifies some of the RTMP messages.
   The module has to implement the `Membrane.RTMP.MessageValidator` behaviour.
-  If the validation fails, a `t:stream_validation_failed_t/0` notification is sent.
+  If the validation fails, the socket gets closed and the parent is notified with `t:stream_validation_failed_t/0`.
 
   This implementation is limited to only AAC and H264 streams.
   """

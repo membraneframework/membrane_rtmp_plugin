@@ -30,6 +30,7 @@ defmodule Membrane.RTMP.Header do
         }
 
   defmacro type(:set_chunk_size), do: 0x01
+  defmacro type(:acknowledgement), do: 0x03
   defmacro type(:user_control_message), do: 0x04
   defmacro type(:window_acknowledgement_size), do: 0x05
   defmacro type(:set_peer_bandwidth), do: 0x06
@@ -66,7 +67,7 @@ defmodule Membrane.RTMP.Header do
   # only the deserialization of the 0b00 type can have `nil` previous header
   def deserialize(
         <<@header_type_0::bitstring, chunk_stream_id::6, timestamp::24, body_size::24, type_id::8,
-          stream_id::32, rest::binary>>,
+          stream_id::little-integer-size(32), rest::binary>>,
         _previous_headers
       ) do
     with {timestamp, extended_timestamp?, rest} <- extract_timestamp(rest, timestamp) do
@@ -178,7 +179,7 @@ defmodule Membrane.RTMP.Header do
     } = header
 
     <<@header_type_0::bitstring, chunk_stream_id::6, timestamp::24, body_size::24, type_id::8,
-      stream_id::32>>
+      stream_id::little-integer-size(32)>>
   end
 
   defp extract_timestamp(<<timestamp::32, rest::binary>>, @extended_timestamp_marker),

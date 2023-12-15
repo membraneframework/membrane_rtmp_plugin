@@ -2,7 +2,7 @@ defmodule Membrane.RTMP.AMF.Parser do
   @moduledoc false
 
   @doc """
-  Parses message from AMF format to elixir data types.
+  Parses message from [AMF0](https://en.wikipedia.org/wiki/Action_Message_Format#AMF0) format to Erlang terms.
   """
   @spec parse(binary()) :: list()
   def parse(binary) do

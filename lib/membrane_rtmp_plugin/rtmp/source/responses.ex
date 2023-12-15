@@ -8,11 +8,12 @@ defmodule Membrane.RTMP.Responses do
   @doc """
   Returns a default success response on connect request.
   """
-  @spec connection_success(transaction_id_t) :: struct()
-  def connection_success(tx_id) do
+  @spec connection_success() :: struct()
+  def connection_success() do
     %Messages.Anonymous{
       name: "_result",
-      tx_id: tx_id,
+      # transaction ID is always 1 for connect request/responses
+      tx_id: 1,
       properties: [
         %{
           "fmsVer" => "FMS/3,0,1,123",
@@ -35,6 +36,7 @@ defmodule Membrane.RTMP.Responses do
   def publish_success(stream_key) do
     %Messages.Anonymous{
       name: "onStatus",
+      # transaction ID is always 0 for publish request/responses
       tx_id: 0,
       properties: [
         :null,
@@ -54,10 +56,11 @@ defmodule Membrane.RTMP.Responses do
   @spec on_bw_done() :: struct()
   def on_bw_done() do
     %Messages.Anonymous{
-      name: "onStatus",
+      name: "onBWDone",
       tx_id: 0,
       properties: [
         :null,
+        # from ffmpeg rtmp server implementation
         8192.0
       ]
     }
@@ -69,7 +72,7 @@ defmodule Membrane.RTMP.Responses do
   The body can be set by specifying the properties list.
   """
   @spec default_result(transaction_id_t(), [any()]) :: struct()
-  def default_result(tx_id, properties \\ []) do
+  def default_result(tx_id, properties) do
     %Messages.Anonymous{
       name: "_result",
       tx_id: tx_id,

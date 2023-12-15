@@ -1,15 +1,16 @@
 defmodule Membrane.RTMP.AMF.Encoder do
   @moduledoc false
 
-  # Encodes a message according to AMF0 (https://en.wikipedia.org/wiki/Action_Message_Format)
-
-  @type basic_object_t :: float() | String.t() | map() | :null
-  @type list_entry_t :: {key :: String.t(), basic_object_t()}
+  @type basic_object_t :: float() | boolean() | String.t() | map() | :null
+  @type list_entry_t :: {key :: String.t(), basic_object_t() | nil}
   @type object_t :: basic_object_t() | [list_entry_t()]
 
   @object_end_marker <<0x00, 0x00, 0x09>>
 
-  @spec encode(object_t() | [object_t]) :: binary()
+  @doc """
+  Encodes a message according to [AMF0](https://en.wikipedia.org/wiki/Action_Message_Format).
+  """
+  @spec encode(object_t() | [object_t()]) :: binary()
   def encode(objects) when is_list(objects) do
     objects
     |> Enum.map(&do_encode_object/1)
@@ -47,10 +48,12 @@ defmodule Membrane.RTMP.AMF.Encoder do
         0x08
       end
 
-    IO.iodata_to_binary([id, Enum.map(object, &encode_key_value_pair/1), @object_end_marker])
+    [id, Enum.map(object, &encode_key_value_pair/1), @object_end_marker]
   end
 
   defp do_encode_object(:null), do: <<0x05>>
+
+  defp encode_key_value_pair({_key, nil}), do: []
 
   defp encode_key_value_pair({<<key::binary>>, value}) when byte_size(key) < 65_535 do
     [<<byte_size(key)::16>>, key, do_encode_object(value)]
