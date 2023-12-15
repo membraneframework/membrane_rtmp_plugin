@@ -21,9 +21,12 @@ defmodule Membrane.RTMP.MessageHandler do
 
   alias Membrane.RTMP.Messages.Serializer
 
-  @window_acknowledgement_size 2_500_000
-  @peer_bandwidth_size 2_500_000
-  @server_chunk_size 512
+  # maxed out signed int32, we don't have acknowledgements implemented
+  @window_acknowledgement_size 2_147_483_647
+  @peer_bandwidth_size 2_147_483_647
+
+  # just to not waste time on chunking
+  @server_chunk_size 4096
 
   @spec handle_client_messages(list(), map()) :: map()
   def handle_client_messages([], state) do
@@ -49,15 +52,15 @@ defmodule Membrane.RTMP.MessageHandler do
   end
 
   # Expected flow of messages:
-  # 1. [in] c0_c1 handshake -> [out] s0_s1_s2 handshake
-  # 2. [in] c2 handshake -> [out] empty
-  # 3. [in] set chunk size -> [out] empty
-  # 4. [in] connect -> [out] window acknowledgement, set peer bandwidth, set chunk size, connect success, on bw done
-  # 5. [in] release stream -> [out] default _result
-  # 6. [in] FC publish, create stream, _checkbw -> [out] onFCPublish, default _result, default _result
-  # 7. [in] release stream -> [out] _result response
-  # 8. [in] publish -> [out] user control with stream id, publish success
-  # 9. CONNECTED
+  # 1.  [in] c0_c1 handshake -> [out] s0_s1_s2 handshake
+  # 2.  [in] c2 handshake -> [out] empty
+  # 3.  [in] set chunk size -> [out] empty
+  # 4.  [in] connect -> [out] set peer bandwidth, window acknowledgement, stream begin 0, set chunk size, connect _result, onBWDone
+  # 5.  [in] release stream -> [out] _result
+  # 6.  [in] FC publish, create stream -> [out] onFCPublish, _result
+  # 8.  [in] publish -> [out] stream begin 1, onStatus publish
+  # 9.  [in] setDataFrame, media data -> [out] empty
+  # 10. CONNECTED
 
   defp do_handle_client_message(%module{data: data}, header, state)
        when module in [Messages.Audio, Messages.Video] do
@@ -77,31 +80,28 @@ defmodule Membrane.RTMP.MessageHandler do
     {:cont, %{state | message_parser: parser}}
   end
 
+  @stream_begin_type 0
   @validation_stage :connect
-  defp do_handle_client_message(%Messages.Connect{} = msg, _header, state) do
-    case MessageValidator.validate_connect(state.validator, msg) do
+  defp do_handle_client_message(%Messages.Connect{} = connect, _header, state) do
+    case MessageValidator.validate_connect(state.validator, connect) do
       {:ok, _msg} = result ->
         [
           %Messages.WindowAcknowledgement{size: @window_acknowledgement_size},
           %Messages.SetPeerBandwidth{size: @peer_bandwidth_size},
           # stream begin type
-          %Messages.UserControl{event_type: 0x00, data: <<0, 0, 0, 0>>},
+          %Messages.UserControl{event_type: @stream_begin_type, data: <<0, 0, 0, 0>>},
           # the chunk size is independent for both sides
           %Messages.SetChunkSize{chunk_size: @server_chunk_size}
         ]
-        |> Enum.each(&send_rtmp_payload(&1, state.socket))
+        |> Enum.each(&send_rtmp_payload(&1, state.socket, chunk_stream_id: 2))
 
-        {[tx_id], message_parser} = MessageParser.generate_tx_ids(state.message_parser, 1)
-
-        tx_id
-        |> Responses.connection_success()
+        Responses.connection_success()
         |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
 
         Responses.on_bw_done()
         |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
 
-        {:cont,
-         validation_action(%{state | message_parser: message_parser}, @validation_stage, result)}
+        {:cont, validation_action(state, @validation_stage, result)}
 
       {:error, _reason} = error ->
         {:halt, {:error, :stream_validation, validation_action(state, @validation_stage, error)}}
@@ -111,15 +111,11 @@ defmodule Membrane.RTMP.MessageHandler do
   # According to ffmpeg's documentation, this command should make the server release channel for a media stream
   # We are simply acknowledging the message
   @validation_stage :release_stream
-  defp do_handle_client_message(
-         %Messages.ReleaseStream{tx_id: tx_id} = msg,
-         _header,
-         state
-       ) do
-    case MessageValidator.validate_release_stream(state.validator, msg) do
+  defp do_handle_client_message(%Messages.ReleaseStream{} = release_stream, _header, state) do
+    case MessageValidator.validate_release_stream(state.validator, release_stream) do
       {:ok, _msg} = result ->
-        tx_id
-        |> Responses.default_result()
+        release_stream.tx_id
+        |> Responses.default_result([0.0, :null])
         |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
 
         {:cont, validation_action(state, @validation_stage, result)}
@@ -130,19 +126,14 @@ defmodule Membrane.RTMP.MessageHandler do
   end
 
   @validation_stage :publish
-  defp do_handle_client_message(
-         %Messages.Publish{stream_key: stream_key} = msg,
-         %Header{stream_id: stream_id},
-         state
-       ) do
-    case MessageValidator.validate_publish(state.validator, msg) do
+  defp do_handle_client_message(%Messages.Publish{} = publish, %Header{} = header, state) do
+    case MessageValidator.validate_publish(state.validator, publish) do
       {:ok, _msg} = result ->
-        # stream EOF type
-        %Messages.UserControl{event_type: 0, data: <<0, 0, 0, 1>>}
-        |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
+        %Messages.UserControl{event_type: @stream_begin_type, data: <<0, 0, 0, 1>>}
+        |> send_rtmp_payload(state.socket, chunk_stream_id: 2)
 
-        Responses.publish_success(stream_key)
-        |> send_rtmp_payload(state.socket, chunk_stream_id: 3, stream_id: stream_id)
+        Responses.publish_success(publish.stream_key)
+        |> send_rtmp_payload(state.socket, chunk_stream_id: 3, stream_id: header.stream_id)
 
         {:cont, validation_action(state, @validation_stage, result)}
 
@@ -153,8 +144,8 @@ defmodule Membrane.RTMP.MessageHandler do
 
   # A message containing stream metadata
   @validation_stage :set_data_frame
-  defp do_handle_client_message(%Messages.SetDataFrame{} = msg, _header, state) do
-    case MessageValidator.validate_set_data_frame(state.validator, msg) do
+  defp do_handle_client_message(%Messages.SetDataFrame{} = data_frame, _header, state) do
+    case MessageValidator.validate_set_data_frame(state.validator, data_frame) do
       {:ok, _msg} = result ->
         {:cont, validation_action(state, @validation_stage, result)}
 
@@ -172,11 +163,12 @@ defmodule Membrane.RTMP.MessageHandler do
     {:cont, state}
   end
 
-  defp do_handle_client_message(%Messages.CreateStream{tx_id: tx_id}, _header, state) do
-    stream_id = [:null, 1.0]
+  defp do_handle_client_message(%Messages.CreateStream{} = create_stream, _header, state) do
+    # following ffmpeg rtmp server implementation
+    stream_id = 1.0
 
-    tx_id
-    |> Responses.default_result(stream_id)
+    create_stream.tx_id
+    |> Responses.default_result([:null, stream_id])
     |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
 
     {:cont, state}
@@ -185,31 +177,38 @@ defmodule Membrane.RTMP.MessageHandler do
   # we ignore acknowledgement messages, but they're rarely used anyways
   defp do_handle_client_message(%module{}, _header, state)
        when module in [Messages.Acknowledgement, Messages.WindowAcknowledgement] do
+    Logger.debug("#{inspect(module)} received, ignoring as acknowledgements are not implemented")
+
     {:cont, state}
   end
 
+  @ping_request_type 6
+  @ping_response_type 7
   # according to the spec this should be sent by server, but some clients send it anyway (restream.io)
   defp do_handle_client_message(
-         %Messages.UserControl{event_type: 6} = ping_request,
+         %Messages.UserControl{event_type: @ping_request_type} = ping_request,
          _header,
          state
        ) do
-    %Messages.UserControl{event_type: 7, data: ping_request.data}
+    %Messages.UserControl{event_type: @ping_response_type, data: ping_request.data}
     |> send_rtmp_payload(state.socket, chunk_stream_id: 2)
 
     {:cont, state}
   end
 
+  defp do_handle_client_message(%Messages.DeleteStream{}, _header, state) do
+    {:halt, %{state | actions: [{:end_of_stream, :output} | state.actions]}}
+  end
+
   # Check bandwidth message
-  defp do_handle_client_message(%Messages.Anonymous{name: "_checkbw"}, _header, state) do
-    Responses.on_bw_done()
+  defp do_handle_client_message(%Messages.Anonymous{name: "_checkbw"} = msg, _header, state) do
+    # the message doesn't belong to spec, let's just follow this implementation
+    # https://github.com/use-go/wsa/blob/b4d0808fe5b6daff1c381d5127bbd450168230a1/rtmp/RTMP.go#L1014
+    msg.tx_id
+    |> Responses.default_result([:null, 0.0])
     |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
 
     {:cont, state}
-  end
-
-  defp do_handle_client_message(%Messages.Anonymous{name: "deleteStream"}, _header, state) do
-    {:cont, %{state | actions: [{:end_of_stream, :output} | state.actions]}}
   end
 
   defp do_handle_client_message(%Messages.Anonymous{} = message, _header, state) do
@@ -271,7 +270,7 @@ defmodule Membrane.RTMP.MessageHandler do
       payload::binary-size(data_size), tag_size::32>>
   end
 
-  defp send_rtmp_payload(message, socket, opts \\ []) do
+  defp send_rtmp_payload(message, socket, opts) do
     type = Serializer.type(message)
     body = Serializer.serialize(message)
 
