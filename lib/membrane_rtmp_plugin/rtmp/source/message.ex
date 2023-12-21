@@ -32,8 +32,7 @@ defmodule Membrane.RTMP.Message do
   }
 
   @amf_data_to_module %{
-    "@setDataFrame" => Messages.SetDataFrame,
-    "onStatus" => Messages.Anonymous
+    "@setDataFrame" => Messages.SetDataFrame
   }
 
   @spec deserialize_message(type_id :: integer(), binary()) :: struct()
@@ -53,7 +52,7 @@ defmodule Membrane.RTMP.Message do
     do: Messages.SetPeerBandwidth.deserialize(payload)
 
   def deserialize_message(Header.type(:amf_data), payload),
-    do: message_from_modules(payload, @amf_data_to_module, true)
+    do: message_from_modules(payload, @amf_data_to_module)
 
   def deserialize_message(Header.type(:amf_command), payload),
     do: message_from_modules(payload, @amf_command_to_module)

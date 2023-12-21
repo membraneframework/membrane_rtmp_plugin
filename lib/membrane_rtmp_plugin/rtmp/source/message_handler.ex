@@ -196,6 +196,12 @@ defmodule Membrane.RTMP.MessageHandler do
     {:cont, state}
   end
 
+  defp do_handle_client_message(%Messages.UserControl{} = msg, _header, state) do
+    Logger.warning("Received unsupported user control message of type #{inspect(msg.event_type)}")
+
+    {:cont, state}
+  end
+
   defp do_handle_client_message(%Messages.DeleteStream{}, _header, state) do
     {:halt, %{state | actions: [{:end_of_stream, :output} | state.actions]}}
   end
