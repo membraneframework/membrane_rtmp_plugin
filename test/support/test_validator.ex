@@ -32,4 +32,7 @@ defimpl Membrane.RTMP.MessageValidator, for: Support.TestValidator do
 
   @impl true
   def validate_set_data_frame(_impl, _message), do: {:ok, "set data frame success"}
+
+  @impl true
+  def validate_on_meta_data(_impl, _message), do: {:ok, "on meta data success"}
 end

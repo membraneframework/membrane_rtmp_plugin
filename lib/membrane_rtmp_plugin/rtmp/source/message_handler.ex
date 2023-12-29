@@ -154,6 +154,17 @@ defmodule Membrane.RTMP.MessageHandler do
     end
   end
 
+  @validation_stage :on_meta_data
+  defp do_handle_client_message(%Messages.OnMetaData{} = on_meta_data, _header, state) do
+    case MessageValidator.validate_on_meta_data(state.validator, on_meta_data) do
+      {:ok, _msg} = result ->
+        {:cont, validation_action(state, @validation_stage, result)}
+
+      {:error, _reason} = error ->
+        {:halt, {:error, :stream_validation, validation_action(state, @validation_stage, error)}}
+    end
+  end
+
   # According to ffmpeg's documentation, this command should prepare the server to receive media streams
   # We are simply acknowledging the message
   defp do_handle_client_message(%Messages.FCPublish{}, _header, state) do
