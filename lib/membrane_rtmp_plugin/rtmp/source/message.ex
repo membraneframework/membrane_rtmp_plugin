@@ -28,11 +28,13 @@ defmodule Membrane.RTMP.Message do
     "FCPublish" => Messages.FCPublish,
     "createStream" => Messages.CreateStream,
     "publish" => Messages.Publish,
-    "@setDataFrame" => Messages.SetDataFrame
+    "@setDataFrame" => Messages.SetDataFrame,
+    "onMetaData" => Messages.OnMetaData
   }
 
   @amf_data_to_module %{
-    "@setDataFrame" => Messages.SetDataFrame
+    "@setDataFrame" => Messages.SetDataFrame,
+    "onMetaData" => Messages.OnMetaData
   }
 
   @spec deserialize_message(type_id :: integer(), binary()) :: struct()
