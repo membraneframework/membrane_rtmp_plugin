@@ -4,18 +4,18 @@ defmodule Membrane.RTMP.AMF3.Parser do
   import Bitwise
 
   @doc """
-  Parses message from AMF3 format to elixir data types.
+  Parses message from [AMF3](https://en.wikipedia.org/wiki/Action_Message_Format#AMF3) format to Erlang terms.
   """
-  @spec parse_list(binary()) :: list()
-  def parse_list(binary) do
+  @spec parse(binary()) :: list()
+  def parse(binary) do
     do_parse(binary, [])
   end
 
   @doc """
-  Parses message from AMF3 format to elixir data type.
+  Parses a single message from [AMF3](https://en.wikipedia.org/wiki/Action_Message_Format#AMF3) format to Erlang terms.
   """
-  @spec parse(binary()) :: {value :: term(), rest :: binary()}
-  def parse(binary) do
+  @spec parse_one(binary()) :: {value :: term(), rest :: binary()}
+  def parse_one(binary) do
     parse_value(binary)
   end
 
@@ -64,108 +64,98 @@ defmodule Membrane.RTMP.AMF3.Parser do
 
   # xml document
   defp parse_value(<<0x07, rest::binary>>) do
-    {size, rest} = parse_integer(rest)
+    case check_value_type(rest) do
+      {:value, size, rest} ->
+        <<string::binary-size(size), rest::binary>> = rest
 
-    # if the bit is set then we are dealing with string literal
-    if (size &&& 0x01) == 1 do
-      size = size >>> 1
+        {{:xml, string}, rest}
 
-      <<string::binary-size(size), rest::binary>> = rest
-
-      {{:xml_doc, string}, rest}
-    else
-      raise "Unsupported xml doc reference"
+      {:ref, ref, rest} ->
+        {{:ref, {:xml, ref}}, rest}
     end
   end
 
   # date
   defp parse_value(<<0x08, rest::binary>>) do
-    {number, rest} = parse_integer(rest)
+    case check_value_type(rest) do
+      {:value, _value, rest} ->
+        <<date::float-size(64), rest::binary>> = rest
 
-    if (number &&& 0x01) == 1 do
-      {{:date, :previous}, rest}
-    else
-      <<date::float-size(64), rest::binary>> = rest
+        {DateTime.from_unix!(trunc(date), :millisecond), rest}
 
-      {{:date, date}, rest}
+      {:ref, ref, rest} ->
+        {{:ref, {:date, ref}}, rest}
     end
   end
 
   # array
   defp parse_value(<<0x09, rest::binary>>) do
-    {size, rest} = parse_integer(rest)
+    case check_value_type(rest) do
+      {:value, dense_array_size, rest} ->
+        {assoc_array, rest} = parse_assoc_array(rest, [])
+        {dense_array, rest} = parse_dense_array(rest, dense_array_size, [])
 
-    if (size &&& 0x01) == 1 do
-      dense_array_size = size >>> 1
+        {assoc_array ++ dense_array, rest}
 
-      {assoc_array, rest} = parse_assoc_array(rest, [])
-      {dense_array, rest} = parse_dense_array(rest, dense_array_size, [])
-
-      {assoc_array ++ dense_array, rest}
-    else
-      raise "Unsupported array reference"
+      {:ref, ref, rest} ->
+        {{:array_ref, ref}, rest}
     end
   end
 
   # object
   defp parse_value(<<0x0A, _rest::binary>>) do
-    raise "Unsupported object type"
+    raise "Unsupported AMF3 type: object"
   end
 
   # xml
   defp parse_value(<<0x0B, rest::binary>>) do
-    {size, rest} = parse_integer(rest)
+    case check_value_type(rest) do
+      {:value, size, rest} ->
+        <<string::binary-size(size), rest::binary>> = rest
 
-    # if the bit is set then we are dealing with string literal
-    if (size &&& 0x01) == 1 do
-      size = size >>> 1
+        {{:xml_script, string}, rest}
 
-      <<string::binary-size(size), rest::binary>> = rest
-
-      {{:xml, string}, rest}
-    else
-      raise "Unsupported xml reference"
+      {:ref, ref, rest} ->
+        {{:ref, {:xml_script, ref}}, rest}
     end
   end
 
   # byte array
   defp parse_value(<<0x0C, rest::binary>>) do
-    {size, rest} = parse_integer(rest)
+    case check_value_type(rest) do
+      {:value, size, rest} ->
+        <<bytes::binary-size(size), rest::binary>> = rest
 
-    if (size &&& 0x01) == 1 do
-      size = size >>> 1
+        {bytes, rest}
 
-      <<bytes::binary-size(size), rest::binary>> = rest
-
-      {bytes, rest}
-    else
-      raise "Unsupported byte array reference"
+      {:ref, ref, rest} ->
+        {{:ref, {:byte_array, ref}}, rest}
     end
   end
 
   # vector int
   defp parse_value(<<0x0D, _rest::binary>>) do
-    raise "Unsupported vector int type"
+    raise "Unsupported AMF3 type: vector int"
   end
 
   # vector uint
   defp parse_value(<<0x0E, _rest::binary>>) do
-    raise "Unsupported vector uint type"
+    raise "Unsupported AMF3 type: vector uint"
   end
 
   # vector double
   defp parse_value(<<0x0F, _rest::binary>>) do
-    raise "Unsupported vector double type"
+    raise "Unsupported AMF3 type: vector double"
   end
 
   # vector object
   defp parse_value(<<0x10, _rest::binary>>) do
-    raise "Unsupported vector object type"
+    raise "Unsupported AMF3 type: vector object"
   end
 
   # dictionary
   defp parse_value(<<0x11, _rest::binary>>) do
-    raise "Unsupported dictionary type"
+    raise "Unsupported AMF3 type: dictionary"
   end
 
   defp parse_integer(<<0::1, value::7, rest::binary>>), do: {value, rest}
@@ -183,17 +173,14 @@ defmodule Membrane.RTMP.AMF3.Parser do
   end
 
   defp parse_string(payload) do
-    {size, rest} = parse_integer(payload)
+    case check_value_type(payload) do
+      {:value, size, rest} ->
+        <<string::binary-size(size), rest::binary>> = rest
 
-    # if the bit is set then we are dealing with string literal
-    if (size &&& 0x01) == 1 do
-      size = size >>> 1
+        {string, rest}
 
-      <<string::binary-size(size), rest::binary>> = rest
-
-      {string, rest}
-    else
-      raise "Unsupported string reference"
+      {:ref, ref, rest} ->
+        {{:ref, {:string, ref}}, rest}
     end
   end
 
@@ -212,5 +199,17 @@ defmodule Membrane.RTMP.AMF3.Parser do
     {value, rest} = parse_value(rest)
 
     parse_dense_array(rest, size - 1, [value | acc])
+  end
+
+  defp check_value_type(rest) do
+    {number, rest} = parse_integer(rest)
+
+    value = number >>> 1
+
+    if (number &&& 0x01) == 1 do
+      {:value, value, rest}
+    else
+      {:ref, value, rest}
+    end
   end
 end

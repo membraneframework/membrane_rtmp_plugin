@@ -61,8 +61,9 @@ defmodule Membrane.RTMP.AMF0.Parser do
     {Enum.reverse(acc), rest}
   end
 
+  # switch to AMF3
   defp parse_value(<<0x11, rest::binary>>) do
-    AMF3.Parser.parse(rest)
+    AMF3.Parser.parse_one(rest)
   end
 
   defp parse_value(data) do

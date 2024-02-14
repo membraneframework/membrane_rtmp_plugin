@@ -278,24 +278,32 @@ defmodule Membrane.RTMP.MessageHandler do
     }
   end
 
-  defp get_additional_media_actions(rtmp_header, media, %{header_sent?: true} = state) do
+  defp get_additional_media_actions(rtmp_header, additional_media, %{header_sent?: true} = state) do
     # NOTE: we are replacing the type_id from 18 to 8 (script data to audio data) as it carries the
     # additional audio track
-    header = %Membrane.RTMP.Header{rtmp_header | type_id: 8, body_size: byte_size(media.media)}
+    data = additional_media.media
+
+    header = %Membrane.RTMP.Header{
+      rtmp_header
+      | type_id: 8,
+        body_size: byte_size(data)
+    }
 
     # NOTE: for additional media we are also setting the stream_id to 1.
     # It is against the spec but it simplifies things for us since we don't have to
     # handle dynamic pads in the RTMP source + our FLV demuxer handles that well.
-    payload = get_flv_tag(header, 1, media.media)
+    payload = get_flv_tag(header, 1, data)
 
     action = {:buffer, {:output, %Buffer{payload: payload}}}
 
     Map.update!(state, :actions, &[action | &1])
   end
 
-  defp get_additional_media_actions(rtmp_header, media, state) do
-    header = %Membrane.RTMP.Header{rtmp_header | type_id: 8, body_size: byte_size(media.media)}
-    payload = get_flv_header() <> get_flv_tag(header, 1, media.media)
+  defp get_additional_media_actions(rtmp_header, additional_media, state) do
+    data = additional_media.media
+
+    header = %Membrane.RTMP.Header{rtmp_header | type_id: 8, body_size: byte_size(data)}
+    payload = get_flv_header() <> get_flv_tag(header, 1, data)
 
     action = {:buffer, {:output, %Buffer{payload: payload}}}
 
