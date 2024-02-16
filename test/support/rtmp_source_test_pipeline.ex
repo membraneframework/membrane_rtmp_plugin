@@ -9,14 +9,12 @@ defmodule Membrane.RTMP.Source.TestPipeline do
   def handle_init(_ctx, %{
         socket: socket,
         test_process: test_process,
-        validator: validator,
         use_ssl?: use_ssl?
       }) do
     structure = [
       child(:src, %SourceBin{
         use_ssl?: use_ssl?,
-        socket: socket,
-        validator: validator
+        socket: socket
       }),
       child(:audio_sink, Testing.Sink),
       child(:video_sink, Testing.Sink),

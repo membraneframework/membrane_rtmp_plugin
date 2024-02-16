@@ -5,10 +5,6 @@ defmodule Membrane.RTMP.Source do
   When initializing, the source sends `t:socket_control_needed_t/0` notification,
   upon which it should be granted the control over the `socket` via `:gen_tcp.controlling_process/2`.
 
-  The Source allows for providing custom validator module, that verifies some of the RTMP messages.
-  The module has to implement the `Membrane.RTMP.MessageValidator` behaviour.
-  If the validation fails, the socket gets closed and the parent is notified with `t:stream_validation_failed_t/0`.
-
   This implementation is limited to only AAC and H264 streams.
   """
   use Membrane.Source
@@ -37,14 +33,6 @@ defmodule Membrane.RTMP.Source do
                 description: """
                 Tells whether the passed socket is a regular TCP socket or SSL one.
                 """
-              ],
-              validator: [
-                spec: Membrane.RTMP.MessageValidator.t(),
-                description: """
-                A `Membrane.RTMP.MessageValidator` implementation, used for validating the stream. By default allows
-                every incoming stream.
-                """,
-                default: %Membrane.RTMP.MessageValidator.Default{}
               ]
 
   @typedoc """
@@ -56,20 +44,6 @@ defmodule Membrane.RTMP.Source do
   Same as `t:socket_control_needed_t/0` but for secured socket meant for RTMPS.
   """
   @type ssl_socket_control_needed_t() :: {:ssl_socket_control_needed, :ssl.sslsocket(), pid()}
-
-  @type validation_stage_t :: :publish | :release_stream | :set_data_frame
-
-  @typedoc """
-  Notification sent when the validator approves given validation stage.
-  """
-  @type stream_validation_success_t() ::
-          {:stream_validation_success, validation_stage_t(), result :: any()}
-
-  @typedoc """
-  Notification sent when the validator denies incoming RTMP stream.
-  """
-  @type stream_validation_failed_t() ::
-          {:stream_validation_failed, validation_stage_t(), reason :: any()}
 
   @typedoc """
   Notification sent when the socket has been closed but no media data has flown through it.

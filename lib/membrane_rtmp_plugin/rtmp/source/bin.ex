@@ -13,10 +13,6 @@ defmodule Membrane.RTMP.SourceBin do
   When the `Membrane.RTMP.Source` is initialized the bin sends `t:Membrane.RTMP.Source.socket_control_needed_t/0` notification.
   Then, the control of the socket should be immediately granted to the `Source` with the `pass_control/2`,
   and the `Source` will start reading packets from the socket.
-
-  The bin allows for providing custom validator module, that verifies some of the RTMP messages.
-  The module has to implement the `Membrane.RTMP.MessageValidator` protocol.
-  If the validation fails, a `t:Membrane.RTMP.Source.stream_validation_failed_t/0` notification is sent.
   """
   use Membrane.Bin
 
@@ -45,14 +41,6 @@ defmodule Membrane.RTMP.SourceBin do
                 description: """
                 Tells whether the passed socket is a regular TCP socket or SSL one.
                 """
-              ],
-              validator: [
-                spec: Membrane.RTMP.MessageValidator.t(),
-                description: """
-                A `Membrane.RTMP.MessageValidator` implementation, used for validating the stream. By default allows
-                every incoming stream.
-                """,
-                default: %Membrane.RTMP.MessageValidator.Default{}
               ]
 
   @impl true
@@ -60,7 +48,6 @@ defmodule Membrane.RTMP.SourceBin do
     structure = [
       child(:src, %RTMP.Source{
         socket: opts.socket,
-        validator: opts.validator,
         use_ssl?: opts.use_ssl?
       })
       |> child(:demuxer, Membrane.FLV.Demuxer),

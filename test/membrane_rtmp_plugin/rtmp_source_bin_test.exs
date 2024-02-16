@@ -184,7 +184,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     assert :error = Task.await(ffmpeg_task)
   end
 
-  defp start_tcp_server(validator \\ %Membrane.RTMP.MessageValidator.Default{}) do
+  defp start_tcp_server() do
     test_process = self()
 
     options = %TcpServer{
@@ -201,7 +201,6 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
           custom_args: %{
             socket: socket,
             test_process: test_process,
-            validator: validator,
             use_ssl?: false
           },
           test_process: test_process
@@ -222,7 +221,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   end
 
   @port 9797
-  defp start_ssl_server(validator \\ %Membrane.RTMP.MessageValidator.Default{}) do
+  defp start_ssl_server() do
     test_process = self()
 
     certfile = System.get_env("CERT_PATH")
@@ -244,7 +243,6 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
           custom_args: %{
             socket: socket,
             test_process: test_process,
-            validator: validator,
             use_ssl?: true
           },
           test_process: test_process

@@ -8,17 +8,16 @@ defmodule Membrane.RTMP.Server do
   require Logger
 
   alias Membrane.RTMP.Server.ClientHandler
-  @enforce_keys [:port]
+  @enforce_keys [:port, :behaviour]
 
   defstruct @enforce_keys
 
   @typedoc """
-  Defines options for the TCP server.
-  The `socket_handler` is a function that takes socket returned by `:gen_tcp.accept/1` and returns the pid of a process,
-  which will be interacting with the socket.
+  Defines options for the RTMP server.
   """
   @type t :: %__MODULE__{
-          port: :inet.port_number()
+          port: :inet.port_number(),
+          behaviour: Membrane.RTMP.Server.Behaviour.t()
         }
 
   @spec start_link(t()) :: {:ok, pid}
@@ -38,7 +37,7 @@ defmodule Membrane.RTMP.Server do
     {:ok, client} = :gen_tcp.accept(socket)
 
     {:ok, client_handler} =
-      GenServer.start_link(ClientHandler, socket: client, use_ssl?: options.use_ssl?)
+      GenServer.start_link(ClientHandler, socket: client, use_ssl?: options.use_ssl?, behaviour: options.behaviour)
 
     case :gen_tcp.controlling_process(client, client_handler) do
       :ok ->

@@ -3,6 +3,7 @@ defmodule Membrane.RTMP.Server.ClientHandler do
 
   require Logger
   alias Membrane.RTMP.{Handshake, MessageHandler, MessageParser}
+  alias Membrane.RTMP.Server.Behaviour
 
   def init(opts) do
     opts = Map.new(opts)
@@ -12,7 +13,9 @@ defmodule Membrane.RTMP.Server.ClientHandler do
        socket: opts.socket,
        use_ssl?: opts.use_ssl?,
        message_parser_state: Handshake.init_server() |> MessageParser.init(),
-       message_handler_state: MessageHandler.init(opts)
+       message_handler_state: MessageHandler.init(opts),
+       behaviour: opts.behaviour,
+       behaviour_state: opts.behaviour.handle_init()
      }}
   end
 
@@ -44,10 +47,10 @@ defmodule Membrane.RTMP.Server.ClientHandler do
     {messages, message_parser_state} =
       MessageParser.parse_packet_messages(data, state.message_parser_state)
 
-    {message_handler_state, actions} =
+    {message_handler_state, events} =
       MessageHandler.handle_client_messages(messages, state.message_handler_state)
 
-    state = handle_actions(actions, state)
+    state = handle_events(events, state)
 
     {:noreply,
      %{
@@ -57,35 +60,34 @@ defmodule Membrane.RTMP.Server.ClientHandler do
      }}
   end
 
-  defp handle_actions([], state) do
+  defp handle_events([], state) do
     state
   end
 
-  defp handle_actions([action | rest], state) do
+  defp handle_events([event | rest], state) do
     # call callbacks
-    case action do
+    case event do
       :end_of_stream ->
-        nil
+        new_behaviour_state = state.behaviour.handle_end_of_stream(state.behaviour_state)
+        %{state | behaviour_state: new_behaviour_state}
 
-      {:set_chunk_size, _size} ->
-        nil
+      {:set_chunk_size_required, chunk_size} ->
+        new_message_parser_state = %{state.message_parser_state | chunk_size: chunk_size}
+        %{state | message_parser_state: new_message_parser_state}
 
-      {:output, payload} ->
-        nil
+      {:data_available, payload} ->
+        new_behaviour_state = state.behaviour.handle_data_available(payload, state.behaviour_state)
+        %{state | behaviour_state: new_behaviour_state}
 
-      {:connected, app} ->
-        nil
+      {:connected, connected_msg} ->
+        new_behaviour_state = state.behaviour.handle_connected(connected_msg, state.behaviour_state)
+        %{state | behaviour_state: new_behaviour_state}
 
-      {:published, stream_key} ->
-        nil
-
-      {:stream_validation_success, stage, msg} ->
-        nil
-
-      {:stream_validation_error, stage, reason} ->
-        nil
+      {:published, publish_msg} ->
+        new_behaviour_state = state.behaviour.handle_stream_published(publish_msg, state.behaviour_state)
+        %{state | behaviour_state: new_behaviour_state}
     end
 
-    handle_actions(rest, state)
+    handle_events(rest, state)
   end
 end
