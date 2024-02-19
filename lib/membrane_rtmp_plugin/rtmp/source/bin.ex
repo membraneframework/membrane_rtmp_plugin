@@ -46,11 +46,11 @@ defmodule Membrane.RTMP.SourceBin do
   @impl true
   def handle_init(_ctx, %__MODULE__{} = opts) do
     structure = [
-      child(:src, %RTMP.Source{
-        socket: opts.socket,
-        use_ssl?: opts.use_ssl?
-      })
-      |> child(:demuxer, Membrane.FLV.Demuxer),
+      # child(:src, %RTMP.Source{
+      #   socket: opts.socket,
+      #   use_ssl?: opts.use_ssl?
+      # })
+      # |> child(:demuxer, Membrane.FLV.Demuxer),
       #
       child(:audio_parser, %Membrane.AAC.Parser{
         out_encapsulation: :none

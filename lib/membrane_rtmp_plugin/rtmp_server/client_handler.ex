@@ -15,18 +15,31 @@ defmodule Membrane.RTMP.Server.ClientHandler do
        message_parser_state: Handshake.init_server() |> MessageParser.init(),
        message_handler_state: MessageHandler.init(opts),
        behaviour: opts.behaviour,
-       behaviour_state: opts.behaviour.handle_init()
+       behaviour_state: opts.init_state
      }}
   end
 
-  def handle_info({:tcp, socket, data}, %{use_ssl?: false} = state)
-      when state.socket == socket do
+  def handle_info({:tcp, socket, data}, %{use_ssl?: false} = state) when state.socket == socket do
     handle_data(data, state)
   end
 
-  def handle_info({:ssl, socket, data}, %{use_ssl?: true} = state)
-      when state.socket == socket do
+  def handle_info({:tcp_closed, socket}, %{use_ssl?: false} = state) when state.socket == socket do
+    events = [:end_of_stream]
+    state = handle_events(events, state)
+
+    {:noreply, state}
+  end
+
+  def handle_info({:ssl, socket, data}, %{use_ssl?: true} = state) when state.socket == socket do
     handle_data(data, state)
+  end
+
+
+  def handle_info({:ssl_closed, socket}, %{use_ssl?: true} = state) when state.socket == socket do
+    events = [:end_of_stream]
+    state = handle_events(events, state)
+
+    {:noreply, state}
   end
 
   def handle_info(:control_granted, state) do
@@ -34,6 +47,12 @@ defmodule Membrane.RTMP.Server.ClientHandler do
       false -> :inet.setopts(state.socket, active: :once)
       true -> :ssl.setopts(state.socket, active: :once)
     end
+
+    {:noreply, state}
+  end
+
+  def handle_info(other_msg, state) do
+    state.behaviour.handle_info(other_msg)
 
     {:noreply, state}
   end

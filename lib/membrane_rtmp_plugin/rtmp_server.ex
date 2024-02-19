@@ -21,13 +21,12 @@ defmodule Membrane.RTMP.Server do
         }
 
   @spec start_link(t()) :: {:ok, pid}
-  def start_link(options) do
-    Task.start_link(__MODULE__, :run, options)
+  def start_link(port: port, behaviour: behaviour, initial_state: initial_state) do
+    Task.start_link(__MODULE__, :run, [port, behaviour, initial_state])
   end
 
-  @spec run(t()) :: no_return()
-  def run(options) do
-    options = Map.merge(%{use_ssl?: false}, Map.new(options))
+  def run(port, behaviour, initial_state) do
+    options = %{use_ssl?: false, port: port, behaviour: behaviour, initial_state: initial_state}
     {:ok, socket} = :gen_tcp.listen(options.port, [:binary, active: false])
 
     accept_loop(socket, options)
@@ -37,7 +36,7 @@ defmodule Membrane.RTMP.Server do
     {:ok, client} = :gen_tcp.accept(socket)
 
     {:ok, client_handler} =
-      GenServer.start_link(ClientHandler, socket: client, use_ssl?: options.use_ssl?, behaviour: options.behaviour)
+      GenServer.start_link(ClientHandler, socket: client, use_ssl?: options.use_ssl?, behaviour: options.behaviour, init_state: options.initial_state)
 
     case :gen_tcp.controlling_process(client, client_handler) do
       :ok ->

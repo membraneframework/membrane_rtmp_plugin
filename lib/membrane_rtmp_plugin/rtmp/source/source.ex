@@ -16,24 +16,9 @@ defmodule Membrane.RTMP.Source do
   def_output_pad :output,
     availability: :always,
     accepted_format: Membrane.RemoteStream,
-    flow_control: :manual
+    flow_control: :push
 
-  def_options socket: [
-                spec: :gen_tcp.socket() | :ssl.sslsocket(),
-                description: """
-                Socket on which the source will be receiving the RTMP or RTMPS stream.
-                The socket must be already connected to the RTMP client and be in non-active mode (`active` set to `false`).
-
-                In case of RTMPS the `use_ssl?` options must be set to true.
-                """
-              ],
-              use_ssl?: [
-                spec: boolean(),
-                default: false,
-                description: """
-                Tells whether the passed socket is a regular TCP socket or SSL one.
-                """
-              ]
+  def_options app: [], stream_key: [], client_resolver: []
 
   @typedoc """
   Notification sent when the RTMP Source element is initialized and it should be granted control over the socket using `:gen_tcp.controlling_process/2`.
@@ -53,158 +38,34 @@ defmodule Membrane.RTMP.Source do
   @type unexpected_socket_closed_t() :: :unexpected_socket_closed
 
   @impl true
-  def handle_init(_ctx, %__MODULE__{} = opts) do
-    state =
-      opts
-      |> Map.from_struct()
-      |> Map.merge(%{
-        actions: [],
-        header_sent?: false,
-        message_parser: MessageParser.init(Handshake.init_server()),
-        receiver_pid: nil,
-        socket_ready?: false,
-        # how many times the Source tries to get control of the socket
-        socket_retries: 3,
-        # epoch required for performing a handshake with the pipeline
-        epoch: 0,
-        socket_module: if(opts.use_ssl?, do: :ssl, else: :gen_tcp)
-      })
-
-    notification_type =
-      if opts.use_ssl?, do: :ssl_socket_control_needed, else: :socket_control_needed
-
-    {[notify_parent: {notification_type, state.socket, self()}], state}
+  def handle_init(_ctx, opts) do
+    state = %{app: opts.app, stream_key: opts.stream_key, client_resolver: opts.client_resolver}
+    {[], state}
   end
 
   @impl true
   def handle_playing(_ctx, state) do
-    target_pid = self()
-
-    use_ssl? = state.use_ssl?
-
-    {:ok, receiver_process} =
-      Task.start_link(fn ->
-        if use_ssl? do
-          receive_ssl_loop(state.socket, target_pid)
-        else
-          receive_loop(state.socket, target_pid)
-        end
-      end)
-
-    send(self(), :start_receiving)
-
     stream_format = [
       stream_format:
         {:output, %Membrane.RemoteStream{content_format: Membrane.FLV, type: :bytestream}}
     ]
 
-    {stream_format, %{state | receiver_pid: receiver_process}}
+    subscribe(state)
+
+    {stream_format, state}
   end
 
-  defp receive_ssl_loop(socket, target) do
-    receive do
-      {:ssl, _port, packet} ->
-        send(target, {:socket, socket, packet})
-
-      {:ssl_closed, _port} ->
-        send(target, {:socket_closed, socket})
-
-      :terminate ->
-        exit(:normal)
-
-      _message ->
-        :noop
-    end
-
-    receive_ssl_loop(socket, target)
-  end
-
-  defp receive_loop(socket, target) do
-    receive do
-      {:tcp, _port, packet} ->
-        send(target, {:socket, socket, packet})
-
-      {:tcp_closed, _port} ->
-        send(target, {:socket_closed, socket})
-
-      :terminate ->
-        exit(:normal)
-
-      _message ->
-        :noop
-    end
-
-    receive_loop(socket, target)
-  end
-
-  @impl true
-  def handle_demand(_pad, _size, _unit, _ctx, state) when state.socket_ready? do
-    if state.use_ssl? do
-      :ssl.setopts(state.socket, active: :once)
-    else
-      :inet.setopts(state.socket, active: :once)
-    end
-
-    {[], state}
-  end
-
-  @impl true
-  def handle_demand(_pad, _size, _unit, _ctx, state) do
-    {[], state}
+  defp subscribe(state) do
+    send(state.client_resolver, {:subscribe, state.app, state.stream_key, self()})
   end
 
   @impl true
   def handle_terminate_request(_ctx, state) do
-    send(state.receiver_pid, :terminate)
-    {[terminate: :normal], %{state | receiver_pid: nil}}
+    {[terminate: :normal], state}
   end
 
   @impl true
-  def handle_info(:start_receiving, _ctx, %{socket_retries: 0} = state) do
-    Membrane.Logger.warning("Failed to take control of the socket")
-    {[], state}
-  end
-
-  def handle_info(:start_receiving, _ctx, %{socket_retries: retries} = state) do
-    module = if state.use_ssl?, do: :ssl, else: :gen_tcp
-
-    case module.controlling_process(state.socket, state.receiver_pid) do
-      :ok ->
-        if state.use_ssl? do
-          :ok = :ssl.setopts(state.socket, active: :once)
-        else
-          :ok = :inet.setopts(state.socket, active: :once)
-        end
-
-        {[], %{state | socket_ready?: true}}
-
-      {:error, :not_owner} ->
-        Process.send_after(self(), :start_receiving, 200)
-        {[], %{state | socket_retries: retries - 1}}
-    end
-  end
-
-  @impl true
-  def handle_info({:socket, socket, packet}, _ctx, %{socket: socket} = state) do
-    {messages, message_parser} =
-      MessageHandler.parse_packet_messages(packet, state.message_parser)
-
-    state = MessageHandler.handle_client_messages(messages, state)
-
-    {state.actions, %{state | actions: [], message_parser: message_parser}}
-  end
-
-  @impl true
-  def handle_info({:socket_closed, _socket}, ctx, state) do
-    cond do
-      ctx.pads.output.end_of_stream? -> {[], state}
-      ctx.pads.output.start_of_stream? -> {[end_of_stream: :output], state}
-      true -> {[notify_parent: :unexpected_socket_closed, end_of_stream: :output], state}
-    end
-  end
-
-  @impl true
-  def handle_info(_message, _ctx, state) do
-    {[], state}
+  def handle_info({:data, data}, _ctx, state) do
+    {[buffer: {:output, %Membrane.Buffer{payload: data}}], state}
   end
 end
