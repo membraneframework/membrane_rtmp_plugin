@@ -27,4 +27,4 @@ spec init_audio_stream(state, channels :: int, sample_rate :: int, aac_config ::
 spec write_audio_frame(state, frame :: payload, pts :: int64) ::
        {:ok :: label, state} | {:error :: label, reason :: string}
 
-dirty :io, write_video_frame: 4, write_audio_frame: 3
+dirty :io, write_video_frame: 5, write_audio_frame: 3, try_connect: 1
