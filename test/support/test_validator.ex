@@ -37,5 +37,6 @@ defimpl Membrane.RTMP.MessageValidator, for: Support.TestValidator do
   def validate_on_meta_data(_impl, _message), do: {:ok, "on meta data success"}
 
   @impl true
-  def validate_on_expect_additional_media(_impl, _message), do: {:ok, "on expect additional media success"}
+  def validate_on_expect_additional_media(_impl, _message),
+    do: {:ok, "on expect additional media success"}
 end
