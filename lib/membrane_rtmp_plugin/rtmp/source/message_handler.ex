@@ -132,11 +132,11 @@ defmodule Membrane.RTMP.MessageHandler do
   end
 
   # A message containing stream metadata
-  defp do_handle_client_message(%Messages.SetDataFrame{} = data_frame, _header, state) do
+  defp do_handle_client_message(%Messages.SetDataFrame{} = _data_frame, _header, state) do
     {:cont, state}
   end
 
-  defp do_handle_client_message(%Messages.OnMetaData{} = on_meta_data, _header, state) do
+  defp do_handle_client_message(%Messages.OnMetaData{} = _on_meta_data, _header, state) do
     {:cont, state}
   end
 

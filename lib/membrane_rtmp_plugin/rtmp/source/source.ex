@@ -11,8 +11,6 @@ defmodule Membrane.RTMP.Source do
 
   require Membrane.Logger
 
-  alias Membrane.RTMP.{Handshake, MessageHandler, MessageParser}
-
   def_output_pad :output,
     availability: :always,
     accepted_format: Membrane.RemoteStream,

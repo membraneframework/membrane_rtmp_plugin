@@ -1,5 +1,6 @@
 defmodule Membrane.RTMP.Server.Listener do
   use Task
+  require Logger
   alias Membrane.RTMP.Server.ClientHandler
 
   def run(port, behaviour, server, use_ssl?, listen_options) do

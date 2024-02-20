@@ -7,7 +7,6 @@ defmodule Membrane.RTMP.Server do
 
   require Logger
 
-  alias Membrane.RTMP.Server.ClientHandler
   @enforce_keys [:port, :behaviour, :tcp_listener]
 
   defstruct @enforce_keys
@@ -21,12 +20,8 @@ defmodule Membrane.RTMP.Server do
           tcp_listener: pid()
         }
 
-  @spec init(
-          port: :inet.port_number(),
-          behaviour: Membrane.RTMP.Server.Behaviour.t(),
-          use_ssl?: boolean(),
-          listen_options: term()
-        ) :: {:ok, pid}
+
+  @impl true
   def init(port: port, behaviour: behaviour, use_ssl?: use_ssl?, listen_options: listen_options) do
     pid =
       Task.start_link(Membrane.RTMP.Server.Listener, :run, [

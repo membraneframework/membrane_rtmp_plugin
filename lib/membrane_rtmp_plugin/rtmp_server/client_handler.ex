@@ -3,7 +3,6 @@ defmodule Membrane.RTMP.Server.ClientHandler do
 
   require Logger
   alias Membrane.RTMP.{Handshake, MessageHandler, MessageParser}
-  alias Membrane.RTMP.Server.Behaviour
 
   def init(opts) do
     opts = Map.new(opts)
@@ -58,11 +57,6 @@ defmodule Membrane.RTMP.Server.ClientHandler do
     behaviour_state = state.behaviour.handle_info(other_msg, state.behaviour_state)
 
     {:noreply, %{state | behaviour_state: behaviour_state}}
-  end
-
-  def handle_info(msg, state) do
-    Logger.warning("Unknown message received: #{inspect(msg)}")
-    {:noreply, state}
   end
 
   defp handle_data(data, state) do
