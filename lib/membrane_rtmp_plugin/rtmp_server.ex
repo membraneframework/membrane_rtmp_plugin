@@ -3,12 +3,12 @@ defmodule Membrane.RTMP.Server do
   A simple RTMP server, which handles each new incoming connection.
   """
 
-  use Task
+  use GenServer
 
   require Logger
 
   alias Membrane.RTMP.Server.ClientHandler
-  @enforce_keys [:port, :behaviour]
+  @enforce_keys [:port, :behaviour, :tcp_listener]
 
   defstruct @enforce_keys
 
@@ -17,37 +17,48 @@ defmodule Membrane.RTMP.Server do
   """
   @type t :: %__MODULE__{
           port: :inet.port_number(),
-          behaviour: Membrane.RTMP.Server.Behaviour.t()
+          behaviour: Membrane.RTMP.Server.Behaviour.t(),
+          tcp_listener: pid()
         }
 
-  @spec start_link(t()) :: {:ok, pid}
-  def start_link(port: port, behaviour: behaviour, initial_state: initial_state) do
-    Task.start_link(__MODULE__, :run, [port, behaviour, initial_state])
+  @spec init([port: :inet.port_number(), behaviour: Membrane.RTMP.Server.Behaviour.t(), use_ssl?: boolean(), listen_options: term()]) :: {:ok, pid}
+  def init(port: port, behaviour: behaviour, use_ssl?: use_ssl?, listen_options: listen_options) do
+    pid = Task.start_link(Membrane.RTMP.Server.Listener, :run, [port, behaviour, self(), use_ssl?, listen_options])
+    {:ok, %{subscriptions: %{}, mapping: %{}, tcp_listener: pid, port: nil, to_reply: [], use_ssl?: use_ssl?}}
   end
 
-  def run(port, behaviour, initial_state) do
-    options = %{use_ssl?: false, port: port, behaviour: behaviour, initial_state: initial_state}
-    {:ok, socket} = :gen_tcp.listen(options.port, [:binary, active: false])
-
-    accept_loop(socket, options)
+  @impl true
+  def handle_info({:register_client, app, stream_key, client_handler_pid}, state) do
+    state = put_in(state, [:mapping, {app, stream_key}], client_handler_pid)
+    maybe_send_subscription(app, stream_key, state)
+    {:noreply, state}
   end
 
-  defp accept_loop(socket, options) do
-    {:ok, client} = :gen_tcp.accept(socket)
+  @impl true
+  def handle_info({:subscribe, app, stream_key, subscriber_pid}, state) do
+    state = put_in(state, [:subscriptions, {app, stream_key}], subscriber_pid)
+    maybe_send_subscription(app, stream_key, state)
+    {:noreply, state}
+  end
 
-    {:ok, client_handler} =
-      GenServer.start_link(ClientHandler, socket: client, use_ssl?: options.use_ssl?, behaviour: options.behaviour, init_state: options.initial_state)
+  @impl true
+  def handle_info({:port, port}, state) do
+    Enum.each(state.to_reply, &GenServer.reply(&1, port))
+    {:noreply, %{state | port: port, to_reply: []}}
+  end
 
-    case :gen_tcp.controlling_process(client, client_handler) do
-      :ok ->
-        send(client_handler, :control_granted)
-
-      {:error, reason} ->
-        Logger.error(
-          "Couldn't pass control to process: #{inspect(client_handler)} due to: #{inspect(reason)}"
-        )
+  @impl true
+  def handle_call(:get_port, from, state) do
+    if state.port do
+      {:reply, state.port, state}
+    else
+      {:noreply, %{state | to_reply: [from | state.to_reply]}}
     end
+  end
 
-    accept_loop(socket, options)
+  defp maybe_send_subscription(app, stream_key, state) do
+    if state.subscriptions[{app, stream_key}] != nil and state.mapping[{app, stream_key}] != nil do
+      send(state.subscriptions[{app, stream_key}], {:client_handler, state.mapping[{app, stream_key}]})
+    end
   end
 end

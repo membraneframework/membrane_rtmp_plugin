@@ -15,7 +15,10 @@ defmodule Membrane.RTMP.Server.ClientHandler do
        message_parser_state: Handshake.init_server() |> MessageParser.init(),
        message_handler_state: MessageHandler.init(opts),
        behaviour: opts.behaviour,
-       behaviour_state: opts.init_state
+       behaviour_state: opts.behaviour.handle_init(),
+       app: nil,
+       stream_key: nil,
+       server: opts.server
      }}
   end
 
@@ -52,9 +55,9 @@ defmodule Membrane.RTMP.Server.ClientHandler do
   end
 
   def handle_info(other_msg, state) do
-    state.behaviour.handle_info(other_msg)
+    behaviour_state = state.behaviour.handle_info(other_msg, state.behaviour_state)
 
-    {:noreply, state}
+    {:noreply, %{state | behaviour_state: behaviour_state}}
   end
 
   def handle_info(msg, state) do
@@ -85,7 +88,7 @@ defmodule Membrane.RTMP.Server.ClientHandler do
 
   defp handle_events([event | rest], state) do
     # call callbacks
-    case event do
+    state = case event do
       :end_of_stream ->
         new_behaviour_state = state.behaviour.handle_end_of_stream(state.behaviour_state)
         %{state | behaviour_state: new_behaviour_state}
@@ -100,11 +103,12 @@ defmodule Membrane.RTMP.Server.ClientHandler do
 
       {:connected, connected_msg} ->
         new_behaviour_state = state.behaviour.handle_connected(connected_msg, state.behaviour_state)
-        %{state | behaviour_state: new_behaviour_state}
+        %{state | behaviour_state: new_behaviour_state, app: connected_msg.app}
 
       {:published, publish_msg} ->
+        send(state.server, {:register_client, state.app, publish_msg.stream_key, self()})
         new_behaviour_state = state.behaviour.handle_stream_published(publish_msg, state.behaviour_state)
-        %{state | behaviour_state: new_behaviour_state}
+        %{state | behaviour_state: new_behaviour_state, stream_key: publish_msg.stream_key}
     end
 
     handle_events(rest, state)

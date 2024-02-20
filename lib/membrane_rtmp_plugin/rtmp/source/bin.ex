@@ -26,32 +26,18 @@ defmodule Membrane.RTMP.SourceBin do
     accepted_format: AAC,
     availability: :always
 
-  def_options socket: [
-                spec: :gen_tcp.socket() | :ssl.sslsocket(),
-                description: """
-                Socket, on which the bin will receive RTMP or RTMPS stream. The socket will be passed to the `RTMP.Source`.
-                The socket must be already connected to the RTMP client and be in non-active mode (`active` set to `false`).
-
-                In case of RTMPS the `use_ssl?` options must be set to true.
-                """
-              ],
-              use_ssl?: [
-                spec: boolean(),
-                default: false,
-                description: """
-                Tells whether the passed socket is a regular TCP socket or SSL one.
-                """
-              ]
+  def_options app: [], stream_key: [], server: []
 
   @impl true
   def handle_init(_ctx, %__MODULE__{} = opts) do
     structure = [
-      # child(:src, %RTMP.Source{
-      #   socket: opts.socket,
-      #   use_ssl?: opts.use_ssl?
-      # })
-      # |> child(:demuxer, Membrane.FLV.Demuxer),
-      #
+      child(:src, %RTMP.Source{
+        server: opts.server,
+        app: opts.app,
+        stream_key: opts.stream_key,
+      })
+      |> child(:demuxer, Membrane.FLV.Demuxer),
+
       child(:audio_parser, %Membrane.AAC.Parser{
         out_encapsulation: :none
       }),
