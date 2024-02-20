@@ -21,10 +21,31 @@ defmodule Membrane.RTMP.Server do
           tcp_listener: pid()
         }
 
-  @spec init([port: :inet.port_number(), behaviour: Membrane.RTMP.Server.Behaviour.t(), use_ssl?: boolean(), listen_options: term()]) :: {:ok, pid}
+  @spec init(
+          port: :inet.port_number(),
+          behaviour: Membrane.RTMP.Server.Behaviour.t(),
+          use_ssl?: boolean(),
+          listen_options: term()
+        ) :: {:ok, pid}
   def init(port: port, behaviour: behaviour, use_ssl?: use_ssl?, listen_options: listen_options) do
-    pid = Task.start_link(Membrane.RTMP.Server.Listener, :run, [port, behaviour, self(), use_ssl?, listen_options])
-    {:ok, %{subscriptions: %{}, mapping: %{}, tcp_listener: pid, port: nil, to_reply: [], use_ssl?: use_ssl?}}
+    pid =
+      Task.start_link(Membrane.RTMP.Server.Listener, :run, [
+        port,
+        behaviour,
+        self(),
+        use_ssl?,
+        listen_options
+      ])
+
+    {:ok,
+     %{
+       subscriptions: %{},
+       mapping: %{},
+       tcp_listener: pid,
+       port: nil,
+       to_reply: [],
+       use_ssl?: use_ssl?
+     }}
   end
 
   @impl true
@@ -58,7 +79,10 @@ defmodule Membrane.RTMP.Server do
 
   defp maybe_send_subscription(app, stream_key, state) do
     if state.subscriptions[{app, stream_key}] != nil and state.mapping[{app, stream_key}] != nil do
-      send(state.subscriptions[{app, stream_key}], {:client_handler, state.mapping[{app, stream_key}]})
+      send(
+        state.subscriptions[{app, stream_key}],
+        {:client_handler, state.mapping[{app, stream_key}]}
+      )
     end
   end
 end

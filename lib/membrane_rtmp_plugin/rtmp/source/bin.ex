@@ -34,10 +34,9 @@ defmodule Membrane.RTMP.SourceBin do
       child(:src, %RTMP.Source{
         server: opts.server,
         app: opts.app,
-        stream_key: opts.stream_key,
+        stream_key: opts.stream_key
       })
       |> child(:demuxer, Membrane.FLV.Demuxer),
-
       child(:audio_parser, %Membrane.AAC.Parser{
         out_encapsulation: :none
       }),

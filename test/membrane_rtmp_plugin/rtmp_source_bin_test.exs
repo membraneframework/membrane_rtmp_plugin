@@ -21,7 +21,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
 
     ffmpeg_task =
       Task.async(fn ->
-       "rtmp://localhost:#{port}/#{@app}/#{@stream_key}" |> start_ffmpeg()
+        "rtmp://localhost:#{port}/#{@app}/#{@stream_key}" |> start_ffmpeg()
       end)
 
     assert_buffers(%{
@@ -53,7 +53,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
 
     ffmpeg_task =
       Task.async(fn ->
-       "rtmp://localhost:#{port}/#{other_app}/#{other_stream_key}" |> start_ffmpeg()
+        "rtmp://localhost:#{port}/#{other_app}/#{other_stream_key}" |> start_ffmpeg()
       end)
 
     refute_sink_buffer(pipeline, :video_sink, _any)
@@ -102,6 +102,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     offset = @extended_timestamp_tag / 1_000 - 0.5
 
     {port, pipeline} = start_rtmp_server(@app, @stream_key, 0)
+
     ffmpeg_task =
       Task.async(fn ->
         "rtmp://localhost:#{port}/#{@app}/#{@stream_key}" |> start_ffmpeg(ts_offset: offset)
@@ -130,7 +131,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
 
     ffmpeg_task =
       Task.async(fn ->
-        "rtmp://localhost:#{port}/#{@app}/#{@stream_key}"  |> start_ffmpeg(ts_offset: offset)
+        "rtmp://localhost:#{port}/#{@app}/#{@stream_key}" |> start_ffmpeg(ts_offset: offset)
       end)
 
     assert_buffers(%{
@@ -149,33 +150,41 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   end
 
   defp start_rtmp_server(app, stream_key, port, use_ssl? \\ false) do
-
     certfile = System.get_env("CERT_PATH")
     keyfile = System.get_env("CERT_KEY_PATH")
 
-    listen_options = if use_ssl? do
-      [
-        :binary,
-        packet: :raw,
-        active: false,
-        ip: @local_ip |> String.to_charlist() |> :inet.parse_address() |> elem(1),
-        certfile: certfile,
-        keyfile: keyfile
-      ]
-    else
-      [
-        :binary,
-        packet: :raw,
-        active: false
-      ]
-    end
-    {:ok, server_pid} = GenServer.start_link(Membrane.RTMP.Server, port: port, behaviour: Membrane.RTMP.Source.SourceBehaviour, use_ssl?: use_ssl?, listen_options: listen_options)
+    listen_options =
+      if use_ssl? do
+        [
+          :binary,
+          packet: :raw,
+          active: false,
+          ip: @local_ip |> String.to_charlist() |> :inet.parse_address() |> elem(1),
+          certfile: certfile,
+          keyfile: keyfile
+        ]
+      else
+        [
+          :binary,
+          packet: :raw,
+          active: false
+        ]
+      end
+
+    {:ok, server_pid} =
+      GenServer.start_link(Membrane.RTMP.Server,
+        port: port,
+        behaviour: Membrane.RTMP.Source.SourceBehaviour,
+        use_ssl?: use_ssl?,
+        listen_options: listen_options
+      )
 
     options = [
       module: Membrane.RTMP.Source.TestPipeline,
       custom_args: %{app: app, stream_key: stream_key, server: server_pid},
       test_process: self()
     ]
+
     {:ok, port} = GenServer.call(server_pid, :get_port)
     pipeline_pid = Testing.Pipeline.start_link_supervised!(options)
     {port, pipeline_pid}

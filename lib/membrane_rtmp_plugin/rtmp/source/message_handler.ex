@@ -116,19 +116,19 @@ defmodule Membrane.RTMP.MessageHandler do
     release_stream_msg.tx_id
     |> Responses.default_result([0.0, :null])
     |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
+
     {:cont, state}
   end
 
   defp do_handle_client_message(%Messages.Publish{} = publish_msg, %Header{} = header, state) do
+    %Messages.UserControl{event_type: @stream_begin_type, data: <<0, 0, 0, 1>>}
+    |> send_rtmp_payload(state.socket, chunk_stream_id: 2)
 
-      %Messages.UserControl{event_type: @stream_begin_type, data: <<0, 0, 0, 1>>}
-      |> send_rtmp_payload(state.socket, chunk_stream_id: 2)
+    Responses.publish_success(publish_msg.stream_key)
+    |> send_rtmp_payload(state.socket, chunk_stream_id: 3, stream_id: header.stream_id)
 
-      Responses.publish_success(publish_msg.stream_key)
-      |> send_rtmp_payload(state.socket, chunk_stream_id: 3, stream_id: header.stream_id)
-
-      state = %{state | events: [{:published, publish_msg} | state.events]}
-      {:cont, state}
+    state = %{state | events: [{:published, publish_msg} | state.events]}
+    {:cont, state}
   end
 
   # A message containing stream metadata

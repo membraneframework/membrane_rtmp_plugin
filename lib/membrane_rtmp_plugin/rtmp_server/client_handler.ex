@@ -26,7 +26,8 @@ defmodule Membrane.RTMP.Server.ClientHandler do
     handle_data(data, state)
   end
 
-  def handle_info({:tcp_closed, socket}, %{use_ssl?: false} = state) when state.socket == socket do
+  def handle_info({:tcp_closed, socket}, %{use_ssl?: false} = state)
+      when state.socket == socket do
     events = [:end_of_stream]
     state = handle_events(events, state)
 
@@ -36,7 +37,6 @@ defmodule Membrane.RTMP.Server.ClientHandler do
   def handle_info({:ssl, socket, data}, %{use_ssl?: true} = state) when state.socket == socket do
     handle_data(data, state)
   end
-
 
   def handle_info({:ssl_closed, socket}, %{use_ssl?: true} = state) when state.socket == socket do
     events = [:end_of_stream]
@@ -88,28 +88,36 @@ defmodule Membrane.RTMP.Server.ClientHandler do
 
   defp handle_events([event | rest], state) do
     # call callbacks
-    state = case event do
-      :end_of_stream ->
-        new_behaviour_state = state.behaviour.handle_end_of_stream(state.behaviour_state)
-        %{state | behaviour_state: new_behaviour_state}
+    state =
+      case event do
+        :end_of_stream ->
+          new_behaviour_state = state.behaviour.handle_end_of_stream(state.behaviour_state)
+          %{state | behaviour_state: new_behaviour_state}
 
-      {:set_chunk_size_required, chunk_size} ->
-        new_message_parser_state = %{state.message_parser_state | chunk_size: chunk_size}
-        %{state | message_parser_state: new_message_parser_state}
+        {:set_chunk_size_required, chunk_size} ->
+          new_message_parser_state = %{state.message_parser_state | chunk_size: chunk_size}
+          %{state | message_parser_state: new_message_parser_state}
 
-      {:data_available, payload} ->
-        new_behaviour_state = state.behaviour.handle_data_available(payload, state.behaviour_state)
-        %{state | behaviour_state: new_behaviour_state}
+        {:data_available, payload} ->
+          new_behaviour_state =
+            state.behaviour.handle_data_available(payload, state.behaviour_state)
 
-      {:connected, connected_msg} ->
-        new_behaviour_state = state.behaviour.handle_connected(connected_msg, state.behaviour_state)
-        %{state | behaviour_state: new_behaviour_state, app: connected_msg.app}
+          %{state | behaviour_state: new_behaviour_state}
 
-      {:published, publish_msg} ->
-        send(state.server, {:register_client, state.app, publish_msg.stream_key, self()})
-        new_behaviour_state = state.behaviour.handle_stream_published(publish_msg, state.behaviour_state)
-        %{state | behaviour_state: new_behaviour_state, stream_key: publish_msg.stream_key}
-    end
+        {:connected, connected_msg} ->
+          new_behaviour_state =
+            state.behaviour.handle_connected(connected_msg, state.behaviour_state)
+
+          %{state | behaviour_state: new_behaviour_state, app: connected_msg.app}
+
+        {:published, publish_msg} ->
+          send(state.server, {:register_client, state.app, publish_msg.stream_key, self()})
+
+          new_behaviour_state =
+            state.behaviour.handle_stream_published(publish_msg, state.behaviour_state)
+
+          %{state | behaviour_state: new_behaviour_state, stream_key: publish_msg.stream_key}
+      end
 
     handle_events(rest, state)
   end

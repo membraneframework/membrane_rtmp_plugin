@@ -11,12 +11,11 @@ defmodule Membrane.RTMP.Source.TestPipeline do
         stream_key: stream_key,
         server: server
       }) do
-
     structure = [
       child(:src, %SourceBin{
         app: app,
         stream_key: stream_key,
-        server: server,
+        server: server
       }),
       child(:audio_sink, Testing.Sink),
       child(:video_sink, Testing.Sink),
