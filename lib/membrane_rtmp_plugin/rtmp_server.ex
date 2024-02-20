@@ -20,7 +20,6 @@ defmodule Membrane.RTMP.Server do
           tcp_listener: pid()
         }
 
-
   @impl true
   def init(port: port, behaviour: behaviour, use_ssl?: use_ssl?, listen_options: listen_options) do
     pid =
