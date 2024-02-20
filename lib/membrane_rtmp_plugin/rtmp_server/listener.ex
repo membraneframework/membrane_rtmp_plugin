@@ -3,16 +3,11 @@ defmodule Membrane.RTMP.Server.Listener do
   require Logger
   alias Membrane.RTMP.Server.ClientHandler
 
-  def run(port, behaviour, server, use_ssl?, listen_options) do
-    options = %{
-      use_ssl?: use_ssl?,
-      behaviour: behaviour,
-      server: server,
-      socket_module: if(use_ssl?, do: :ssl, else: :gen_tcp)
-    }
+  def run(options) do
+    options = Map.merge(options, %{socket_module: if(options.use_ssl?, do: :ssl, else: :gen_tcp)})
 
-    {:ok, socket} = options.socket_module.listen(port, listen_options)
-    send(server, {:port, :inet.port(socket)})
+    {:ok, socket} = options.socket_module.listen(options.port, options.listen_options)
+    send(options.server, {:port, :inet.port(socket)})
 
     accept_loop(socket, options)
   end

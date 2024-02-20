@@ -7,7 +7,7 @@ defmodule Membrane.RTMP.Server do
 
   require Logger
 
-  @enforce_keys [:port, :behaviour, :tcp_listener]
+  @enforce_keys [:port, :behaviour, :listener]
 
   defstruct @enforce_keys
 
@@ -17,28 +17,24 @@ defmodule Membrane.RTMP.Server do
   @type t :: %__MODULE__{
           port: :inet.port_number(),
           behaviour: Membrane.RTMP.Server.Behaviour.t(),
-          tcp_listener: pid()
+          listener: pid()
         }
 
   @impl true
-  def init(port: port, behaviour: behaviour, use_ssl?: use_ssl?, listen_options: listen_options) do
+  def init(options) do
     pid =
       Task.start_link(Membrane.RTMP.Server.Listener, :run, [
-        port,
-        behaviour,
-        self(),
-        use_ssl?,
-        listen_options
+        Map.merge(options, %{server: self()})
       ])
 
     {:ok,
      %{
        subscriptions: %{},
        mapping: %{},
-       tcp_listener: pid,
+       listener: pid,
        port: nil,
        to_reply: [],
-       use_ssl?: use_ssl?
+       use_ssl?: options.use_ssl?
      }}
   end
 

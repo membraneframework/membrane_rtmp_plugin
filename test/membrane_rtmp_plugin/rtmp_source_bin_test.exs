@@ -8,7 +8,6 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   alias Membrane.Testing
 
   @input_file "test/fixtures/testsrc.flv"
-  @local_ip "127.0.0.1"
   @app "liveapp"
   @stream_key "ala2137"
 
@@ -150,16 +149,15 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   end
 
   defp start_rtmp_server(app, stream_key, port, use_ssl? \\ false) do
-    certfile = System.get_env("CERT_PATH")
-    keyfile = System.get_env("CERT_KEY_PATH")
-
     listen_options =
       if use_ssl? do
+        certfile = System.get_env("CERT_PATH")
+        keyfile = System.get_env("CERT_KEY_PATH")
+
         [
           :binary,
           packet: :raw,
           active: false,
-          ip: @local_ip |> String.to_charlist() |> :inet.parse_address() |> elem(1),
           certfile: certfile,
           keyfile: keyfile
         ]
@@ -172,11 +170,14 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
       end
 
     {:ok, server_pid} =
-      GenServer.start_link(Membrane.RTMP.Server,
-        port: port,
-        behaviour: Membrane.RTMP.Source.SourceBehaviour,
-        use_ssl?: use_ssl?,
-        listen_options: listen_options
+      GenServer.start_link(
+        Membrane.RTMP.Server,
+        %{
+          behaviour: Membrane.RTMP.Source.SourceBehaviour,
+          port: port,
+          use_ssl?: use_ssl?,
+          listen_options: listen_options
+        }
       )
 
     options = [
