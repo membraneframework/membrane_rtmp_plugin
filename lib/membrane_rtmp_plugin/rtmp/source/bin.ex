@@ -4,15 +4,6 @@ defmodule Membrane.RTMP.SourceBin do
 
   Outputs single audio and video which are ready for further processing with Membrane Elements.
   At this moment only AAC and H264 codecs are supported.
-
-  ## Usage
-
-  The bin requires the RTMP client to be already connected to the socket.
-  The socket passed to the bin must be in non-active mode (`active` set to `false`).
-
-  When the `Membrane.RTMP.Source` is initialized the bin sends `t:Membrane.RTMP.Source.socket_control_needed_t/0` notification.
-  Then, the control of the socket should be immediately granted to the `Source` with the `pass_control/2`,
-  and the `Source` will start reading packets from the socket.
   """
   use Membrane.Bin
 
