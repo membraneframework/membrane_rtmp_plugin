@@ -1,9 +1,15 @@
 defmodule Membrane.RTMP.Server.ClientHandler do
+  @moduledoc false
+
+  # Module responsible for maintaining the lifecycle of the
+  # client connection.
+
   use GenServer
 
   require Logger
   alias Membrane.RTMP.{Handshake, MessageHandler, MessageParser}
 
+  @impl true
   def init(opts) do
     opts = Map.new(opts)
 
@@ -12,7 +18,8 @@ defmodule Membrane.RTMP.Server.ClientHandler do
        socket: opts.socket,
        use_ssl?: opts.use_ssl?,
        message_parser_state: Handshake.init_server() |> MessageParser.init(),
-       message_handler_state: MessageHandler.init(opts),
+       message_handler_state:
+         MessageHandler.init(%{socket: opts.socket, use_ssl?: opts.use_ssl?}),
        behaviour: opts.behaviour,
        behaviour_state: opts.behaviour.handle_init(),
        app: nil,
@@ -21,10 +28,12 @@ defmodule Membrane.RTMP.Server.ClientHandler do
      }}
   end
 
+  @impl true
   def handle_info({:tcp, socket, data}, %{use_ssl?: false} = state) when state.socket == socket do
     handle_data(data, state)
   end
 
+  @impl true
   def handle_info({:tcp_closed, socket}, %{use_ssl?: false} = state)
       when state.socket == socket do
     events = [:end_of_stream]
@@ -33,10 +42,12 @@ defmodule Membrane.RTMP.Server.ClientHandler do
     {:noreply, state}
   end
 
+  @impl true
   def handle_info({:ssl, socket, data}, %{use_ssl?: true} = state) when state.socket == socket do
     handle_data(data, state)
   end
 
+  @impl true
   def handle_info({:ssl_closed, socket}, %{use_ssl?: true} = state) when state.socket == socket do
     events = [:end_of_stream]
     state = handle_events(events, state)
@@ -44,6 +55,7 @@ defmodule Membrane.RTMP.Server.ClientHandler do
     {:noreply, state}
   end
 
+  @impl true
   def handle_info(:control_granted, state) do
     case state.use_ssl? do
       false -> :inet.setopts(state.socket, active: :once)
@@ -53,6 +65,7 @@ defmodule Membrane.RTMP.Server.ClientHandler do
     {:noreply, state}
   end
 
+  @impl true
   def handle_info(other_msg, state) do
     behaviour_state = state.behaviour.handle_info(other_msg, state.behaviour_state)
 

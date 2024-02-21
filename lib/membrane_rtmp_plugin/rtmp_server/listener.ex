@@ -1,8 +1,20 @@
 defmodule Membrane.RTMP.Server.Listener do
+  @moduledoc false
+
+  # Module responsible for maintaining the listening socket.
+
   use Task
   require Logger
   alias Membrane.RTMP.Server.ClientHandler
 
+  @spec run(
+          options :: %{
+            use_ssl?: boolean,
+            socket_module: :gen_tcp | :ssl,
+            server: pid(),
+            port: non_neg_integer()
+          }
+        ) :: no_return()
   def run(options) do
     options = Map.merge(options, %{socket_module: if(options.use_ssl?, do: :ssl, else: :gen_tcp)})
 

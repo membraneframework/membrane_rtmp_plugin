@@ -24,6 +24,23 @@ defmodule Membrane.RTMP.MessageHandler do
   # just to not waste time on chunking
   @server_chunk_size 4096
 
+  @type event() ::
+          {:set_chunk_size_required, non_neg_integer()}
+          | {:connected, Membrane.RTMP.Messages.Connect.t()}
+          | {:published, Membrane.RTMP.Messages.Publish.t()}
+          | :end_of_stream
+          | {:data_available, binary()}
+  @type t() :: %{
+          socket: :gen_tcp.socket() | :ssl.socket(),
+          socket_module: :gen_tcp | :ssl,
+          header_sent?: boolean(),
+          events: [event()],
+          receiver_pid: pid() | nil,
+          socket_retries: pos_integer(),
+          epoch: non_neg_integer()
+        }
+
+  @spec init(opts :: %{socket: :gen_tcp.socket() | :ssl.socket(), use_ssl?: boolean()}) :: t()
   def init(opts) do
     %{
       socket: opts.socket,
@@ -38,7 +55,7 @@ defmodule Membrane.RTMP.MessageHandler do
     }
   end
 
-  @spec handle_client_messages(list(), map()) :: map()
+  @spec handle_client_messages(list(), map()) :: {map(), list()}
   def handle_client_messages([], state) do
     request_packet(state.socket)
     {%{state | events: []}, state.events}
@@ -49,15 +66,10 @@ defmodule Membrane.RTMP.MessageHandler do
     |> Enum.reduce_while(state, fn {header, message}, acc ->
       do_handle_client_message(message, header, acc)
     end)
-    |> case do
-      {:error, :stream_validation, state} ->
-        state.socket_module.shutdown(state.socket, :read_write)
-        {state, state.events}
-
-      state ->
-        request_packet(state.socket)
-        {%{state | events: []}, Enum.reverse(state.events)}
-    end
+    |> then(fn state ->
+      request_packet(state.socket)
+      {%{state | events: []}, Enum.reverse(state.events)}
+    end)
   end
 
   # Expected flow of messages:

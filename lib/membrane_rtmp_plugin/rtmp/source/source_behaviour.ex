@@ -1,9 +1,10 @@
 defmodule Membrane.RTMP.Source.SourceBehaviour do
   @moduledoc """
-  TODO
+  An implementation of `Membrane.RTMP.Server.ClienHandlerBehaviour` compatible with the
+  `Membrane.RTMP.Source` element.
   """
 
-  @behaviour Membrane.RTMP.Server.Behaviour
+  @behaviour Membrane.RTMP.Server.ClientHandlerBehaviour
 
   @impl true
   def handle_init() do
