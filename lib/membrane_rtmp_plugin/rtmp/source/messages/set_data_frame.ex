@@ -5,7 +5,8 @@ defmodule Membrane.RTMP.Messages.SetDataFrame do
 
   @behaviour Membrane.RTMP.Message
 
-  alias Membrane.RTMP.AMF.Encoder
+  alias Membrane.RTMP.AMF0.Encoder
+  alias Membrane.RTMP.Messages.OnExpectAdditionalMedia
 
   defstruct ~w(duration file_size encoder width height video_codec_id video_data_rate framerate audio_codec_id
                 audio_data_rate audio_sample_rate audio_sample_size stereo)a
@@ -49,6 +50,11 @@ defmodule Membrane.RTMP.Messages.SetDataFrame do
   @impl true
   def from_data(["@setDataFrame", "onMetaData", properties]) do
     new(properties)
+  end
+
+  @impl true
+  def from_data(["@setDataFrame", "onExpectAdditionalMedia", _properties] = data) do
+    OnExpectAdditionalMedia.from_data(data)
   end
 
   @spec new([{String.t(), any()}]) :: t()

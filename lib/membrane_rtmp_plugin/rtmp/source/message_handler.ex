@@ -77,6 +77,11 @@ defmodule Membrane.RTMP.MessageHandler do
     {:cont, state}
   end
 
+  defp do_handle_client_message(%Messages.AdditionalMedia{} = media, header, state) do
+    state = get_additional_media_events(header, media, state)
+    {:cont, state}
+  end
+
   defp do_handle_client_message(%Handshake.Step{type: :s0_s1_s2} = step, _header, state) do
     state.socket_module.send(state.socket, Handshake.Step.serialize(step))
 
@@ -233,30 +238,65 @@ defmodule Membrane.RTMP.MessageHandler do
     }
   end
 
+  defp get_additional_media_events(rtmp_header, additional_media, %{header_sent?: true} = state) do
+    # NOTE: we are replacing the type_id from 18 to 8 (script data to audio data) as it carries the
+    # additional audio track
+    data = additional_media.media
+
+    header = %Membrane.RTMP.Header{
+      rtmp_header
+      | type_id: 8,
+        body_size: byte_size(data)
+    }
+
+    # NOTE: for additional media we are also setting the stream_id to 1.
+    # It is against the spec but it simplifies things for us since we don't have to
+    # handle dynamic pads in the RTMP source + our FLV demuxer handles that well.
+    payload = get_flv_tag(header, 1, data)
+
+    event = {:data_available, payload}
+
+    Map.update!(state, :events, &[event | &1])
+  end
+
+  defp get_additional_media_events(rtmp_header, additional_media, state) do
+    data = additional_media.media
+
+    header = %Membrane.RTMP.Header{rtmp_header | type_id: 8, body_size: byte_size(data)}
+    payload = get_flv_header() <> get_flv_tag(header, 1, data)
+
+    event = {:data_available, payload}
+
+    %{state | header_sent?: true, events: [event | state.event]}
+  end
+
   defp get_flv_header() do
     alias Membrane.FLV
 
     {header, 0} =
-      FLV.Serializer.serialize(%FLV.Header{audio_present?: true, video_present?: true}, 0)
+      FLV.Serializer.serialize(
+        %FLV.Header{audio_present?: true, video_present?: true},
+        0
+      )
 
     # Add PreviousTagSize, which is 0 for the first tag
     header <> <<0::32>>
   end
 
+  # according to the FLV spec, the stream ID should always be 0
+  # but we can use 1 for hacking around Twitch's addtional audio stream
   defp get_flv_tag(
          %Membrane.RTMP.Header{
            timestamp: timestamp,
            body_size: data_size,
            type_id: type_id
          },
+         stream_id \\ 0,
          payload
        ) do
     tag_size = data_size + 11
 
     <<upper_timestamp::8, lower_timestamp::24>> = <<timestamp::32>>
-
-    # according to the FLV spec, the stream ID should always be 0
-    stream_id = 0
 
     <<type_id::8, data_size::24, lower_timestamp::24, upper_timestamp::8, stream_id::24,
       payload::binary-size(data_size), tag_size::32>>

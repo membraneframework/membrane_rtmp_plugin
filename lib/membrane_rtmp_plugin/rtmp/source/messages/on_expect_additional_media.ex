@@ -1,6 +1,10 @@
-defmodule Membrane.RTMP.Messages.OnMetaData do
+defmodule Membrane.RTMP.Messages.OnExpectAdditionalMedia do
   @moduledoc """
-  Defines the RTMP `onMetaData` command (sent by nginx client).
+  Defines the RTMP `onExpectAdditionalMedia` command that is related to Twitch's RTMP additional
+  media track message.
+
+  The command is usually a part of `@setDataFrame` command but for more convencience it is
+  extracted.
   """
 
   @behaviour Membrane.RTMP.Message
@@ -8,14 +12,9 @@ defmodule Membrane.RTMP.Messages.OnMetaData do
   alias Membrane.RTMP.AMF0.Encoder
 
   @attributes_to_keys %{
-    "duration" => :duration,
-    "width" => :width,
-    "height" => :height,
-    "videocodecid" => :video_codec_id,
-    "videodatarate" => :video_data_rate,
-    "framerate" => :framerate,
-    "audiocodecid" => :audio_codec_id,
-    "audiodatarate" => :audio_data_rate
+    "additionalMedia" => :additional_media,
+    "defaultMedia" => :default_media,
+    "processingIntents" => :processing_intents
   }
 
   @keys_to_attributes Map.new(@attributes_to_keys, fn {key, value} -> {value, key} end)
@@ -23,20 +22,13 @@ defmodule Membrane.RTMP.Messages.OnMetaData do
   defstruct Map.keys(@keys_to_attributes)
 
   @type t :: %__MODULE__{
-          duration: number(),
-          # video related
-          width: number(),
-          height: number(),
-          video_codec_id: number(),
-          video_data_rate: number(),
-          framerate: number(),
-          # audio related
-          audio_codec_id: number(),
-          audio_data_rate: number()
+          additional_media: map(),
+          default_media: map(),
+          processing_intents: [String.t()]
         }
 
   @impl true
-  def from_data(["onMetaData", properties]) do
+  def from_data(["@setDataFrame", "onExpectAdditionalMedia", properties]) do
     new(properties)
   end
 

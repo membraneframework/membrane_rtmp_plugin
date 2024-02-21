@@ -3,7 +3,7 @@ defmodule Membrane.RTMP.Messages.FCPublish do
 
   @behaviour Membrane.RTMP.Message
 
-  alias Membrane.RTMP.AMF.Encoder
+  alias Membrane.RTMP.AMF0.Encoder
 
   @enforce_keys [:stream_key]
   defstruct [tx_id: 0] ++ @enforce_keys
