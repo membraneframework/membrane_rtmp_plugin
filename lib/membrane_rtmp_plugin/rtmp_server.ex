@@ -16,7 +16,7 @@ defmodule Membrane.RTMP.Server do
   """
   @type t :: %__MODULE__{
           port: :inet.port_number(),
-          behaviour: Membrane.RTMP.Server.Behaviour.t(),
+          behaviour: Membrane.RTMP.Server.ClientHandlerBehaviour.t(),
           listener: pid()
         }
 
