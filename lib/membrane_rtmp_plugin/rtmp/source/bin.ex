@@ -4,19 +4,6 @@ defmodule Membrane.RTMP.SourceBin do
 
   Outputs single audio and video which are ready for further processing with Membrane Elements.
   At this moment only AAC and H264 codecs are supported.
-
-  ## Usage
-
-  The bin requires the RTMP client to be already connected to the socket.
-  The socket passed to the bin must be in non-active mode (`active` set to `false`).
-
-  When the `Membrane.RTMP.Source` is initialized the bin sends `t:Membrane.RTMP.Source.socket_control_needed_t/0` notification.
-  Then, the control of the socket should be immediately granted to the `Source` with the `pass_control/2`,
-  and the `Source` will start reading packets from the socket.
-
-  The bin allows for providing custom validator module, that verifies some of the RTMP messages.
-  The module has to implement the `Membrane.RTMP.MessageValidator` protocol.
-  If the validation fails, a `t:Membrane.RTMP.Source.stream_validation_failed_t/0` notification is sent.
   """
   use Membrane.Bin
 
@@ -30,41 +17,17 @@ defmodule Membrane.RTMP.SourceBin do
     accepted_format: AAC,
     availability: :always
 
-  def_options socket: [
-                spec: :gen_tcp.socket() | :ssl.sslsocket(),
-                description: """
-                Socket, on which the bin will receive RTMP or RTMPS stream. The socket will be passed to the `RTMP.Source`.
-                The socket must be already connected to the RTMP client and be in non-active mode (`active` set to `false`).
-
-                In case of RTMPS the `use_ssl?` options must be set to true.
-                """
-              ],
-              use_ssl?: [
-                spec: boolean(),
-                default: false,
-                description: """
-                Tells whether the passed socket is a regular TCP socket or SSL one.
-                """
-              ],
-              validator: [
-                spec: Membrane.RTMP.MessageValidator.t(),
-                description: """
-                A `Membrane.RTMP.MessageValidator` implementation, used for validating the stream. By default allows
-                every incoming stream.
-                """,
-                default: %Membrane.RTMP.MessageValidator.Default{}
-              ]
+  def_options app: [], stream_key: [], server: []
 
   @impl true
   def handle_init(_ctx, %__MODULE__{} = opts) do
     structure = [
       child(:src, %RTMP.Source{
-        socket: opts.socket,
-        validator: opts.validator,
-        use_ssl?: opts.use_ssl?
+        server: opts.server,
+        app: opts.app,
+        stream_key: opts.stream_key
       })
       |> child(:demuxer, Membrane.FLV.Demuxer),
-      #
       child(:audio_parser, %Membrane.AAC.Parser{
         out_encapsulation: :none
       }),
