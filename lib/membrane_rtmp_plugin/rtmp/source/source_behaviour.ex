@@ -1,4 +1,4 @@
-defmodule Membrane.RTMP.Source.SourceBehaviour do
+defmodule Membrane.RTMP.Source.Behaviour do
   @moduledoc """
   An implementation of `Membrane.RTMP.Server.ClienHandlerBehaviour` compatible with the
   `Membrane.RTMP.Source` element.
@@ -37,6 +37,11 @@ defmodule Membrane.RTMP.Source.SourceBehaviour do
     buffers_to_send = Enum.reverse(state.buffered)
     state = %{state | source_pid: source_pid, buffered: []}
     Enum.each(buffers_to_send, fn buffer -> send(state.source_pid, {:data, buffer}) end)
+    state
+  end
+
+  @impl true
+  def handle_info(_other, state) do
     state
   end
 

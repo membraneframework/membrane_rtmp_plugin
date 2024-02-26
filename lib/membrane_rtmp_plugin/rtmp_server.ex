@@ -20,6 +20,10 @@ defmodule Membrane.RTMP.Server do
           listener: pid()
         }
 
+  def start_link(options) do
+    GenServer.start_link(__MODULE__, options, name: options.name)
+  end
+
   @impl true
   def init(options) do
     pid =

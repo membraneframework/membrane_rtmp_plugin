@@ -12,14 +12,15 @@ defmodule Membrane.RTMP.Server.ClientHandler do
   @impl true
   def init(opts) do
     opts = Map.new(opts)
+    message_parser_state = Handshake.init_server() |> MessageParser.init()
+    message_handler_state = MessageHandler.init(%{socket: opts.socket, use_ssl?: opts.use_ssl?})
 
     {:ok,
      %{
        socket: opts.socket,
        use_ssl?: opts.use_ssl?,
-       message_parser_state: Handshake.init_server() |> MessageParser.init(),
-       message_handler_state:
-         MessageHandler.init(%{socket: opts.socket, use_ssl?: opts.use_ssl?}),
+       message_parser_state: message_parser_state,
+       message_handler_state: message_handler_state,
        behaviour: opts.behaviour,
        behaviour_state: opts.behaviour.handle_init(),
        app: nil,
