@@ -174,7 +174,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
       GenServer.start_link(
         Membrane.RTMP.Server,
         %{
-          behaviour: Membrane.RTMP.Source.SourceBehaviour,
+          behaviour: Membrane.RTMP.Source.Behaviour,
           port: port,
           use_ssl?: use_ssl?,
           listen_options: listen_options
