@@ -51,7 +51,7 @@ end
 destination = System.get_env("RTMP_URL", "rtmp://localhost:1935")
 
 # Initialize the pipeline and start it
-{:ok, _supervisor, pipeline} = Example.start_link(destination: destination)
+{:ok, _supervisor, pipeline} = Membrane.Pipeline.start_link(Example, destination: destination)
 
 monitor_ref = Process.monitor(pipeline)
 
