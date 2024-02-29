@@ -20,19 +20,22 @@ defmodule Pipeline do
     structure = [
       child(:source, %Membrane.RTMP.SourceBin{
         socket: socket
-      }),
-      child(:video_payloader, %Membrane.H264.Parser{
-        output_stream_structure: :avc3
-      }),
-      child(:muxer, Membrane.FLV.Muxer),
-      child(:sink, %Membrane.File.Sink{location: @output_file}),
-      get_child(:source) |> via_out(:audio) |> via_in(Pad.ref(:audio, 0)) |> get_child(:muxer),
+      })
+      |> via_out(:audio)
+      |> child(:audio_parser, %Membrane.AAC.Parser{
+        out_encapsulation: :none,
+        output_config: :audio_specific_config
+      })
+      |> via_in(Pad.ref(:audio, 0))
+      |> child(:muxer, Membrane.FLV.Muxer)
+      |> child(:sink, %Membrane.File.Sink{location: @output_file}),
       get_child(:source)
       |> via_out(:video)
-      |> get_child(:video_payloader)
+      |> child(:video_parser, %Membrane.H264.Parser{
+        output_stream_structure: :avc1
+      })
       |> via_in(Pad.ref(:video, 0))
-      |> get_child(:muxer),
-      get_child(:muxer) |> get_child(:sink)
+      |> get_child(:muxer)
     ]
 
     {[spec: structure], %{}}
@@ -97,7 +100,7 @@ defmodule Example do
       ],
       socket_handler: fn socket ->
         # On new connection a pipeline is started
-        {:ok, _supervisor, pipeline} = Pipeline.start_link(socket: socket)
+        {:ok, _supervisor, pipeline} = Membrane.Pipeline.start_link(Pipeline, socket: socket)
         send(parent, {:pipeline_spawned, pipeline})
         {:ok, pipeline}
       end
