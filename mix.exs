@@ -43,7 +43,7 @@ defmodule Membrane.RTMP.Mixfile do
       {:membrane_precompiled_dependency_provider, "~> 0.1.0"},
       {:membrane_h26x_plugin, "~> 0.10.0"},
       {:membrane_h264_format, "~> 0.6.1"},
-      {:membrane_aac_plugin, "~> 0.18.0"},
+      {:membrane_aac_plugin, "~> 0.18.1"},
       {:membrane_flv_plugin, "~> 0.12.0"},
       {:membrane_file_plugin, "~> 0.17.0"},
       # testing
