@@ -52,6 +52,14 @@ defmodule Membrane.RTMP.Sink do
                 description: """
                 A list of tracks, which will be sent. Can be `:audio`, `:video` or both.
                 """
+              ],
+              reset_timestamps: [
+                spec: boolean(),
+                default: true,
+                description: """
+                If enabled, this feature adjusts the timing of outgoing FLV packets so that they begin from zero.
+                Leaves it untouched otherwise.
+                """
               ]
 
   @impl true
@@ -89,7 +97,8 @@ defmodule Membrane.RTMP.Sink do
         # remaining pad are simply forwarded to the output.
         # Always on if a single track is connected
         forward_mode?: single_track?,
-        video_base_dts: nil
+        video_base_dts: nil,
+        reset_timestampts: options.reset_timestamps
       })
 
     {[], state}
@@ -303,15 +312,13 @@ defmodule Membrane.RTMP.Sink do
   end
 
   defp write_frame(state, Pad.ref(:video, 0), buffer) do
-    dts = buffer.dts || buffer.pts
-    pts = buffer.pts || buffer.dts
-    {base_dts, state} = Bunch.Map.get_updated!(state, :video_base_dts, &(&1 || dts))
+    {{dts, pts}, state} = buffer_timings(buffer, state)
 
     case Native.write_video_frame(
            state.native,
            buffer.payload,
-           dts - base_dts,
-           pts - base_dts,
+           dts,
+           pts,
            buffer.metadata.h264.key_frame?
          ) do
       {:ok, native} ->
@@ -320,5 +327,20 @@ defmodule Membrane.RTMP.Sink do
       {:error, reason} ->
         raise "writing video frame failed with reason: #{inspect(reason)}"
     end
+  end
+
+  defp buffer_timings(buffer, state) do
+    dts = buffer.dts || buffer.pts
+    pts = buffer.pts || buffer.dts
+    correct_timings(dts, pts, state)
+  end
+
+  defp correct_timings(dts, pts, state = %{reset_timestamps: false}) do
+    {{dts, pts}, state}
+  end
+
+  defp correct_timings(dts, pts, state) do
+    {base_dts, state} = Bunch.Map.get_updated!(state, :video_base_dts, &(&1 || dts))
+    {{dts - base_dts, pts - base_dts}, state}
   end
 end
