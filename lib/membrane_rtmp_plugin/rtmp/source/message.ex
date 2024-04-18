@@ -29,7 +29,8 @@ defmodule Membrane.RTMP.Message do
     "createStream" => Messages.CreateStream,
     "publish" => Messages.Publish,
     "@setDataFrame" => Messages.SetDataFrame,
-    "onMetaData" => Messages.OnMetaData
+    "onMetaData" => Messages.OnMetaData,
+    "deleteStream" => Messages.DeleteStream
   }
 
   @amf_data_to_module %{
