@@ -335,7 +335,7 @@ defmodule Membrane.RTMP.Sink do
     correct_timings(dts, pts, state)
   end
 
-  defp correct_timings(dts, pts, state = %{reset_timestamps: false}) do
+  defp correct_timings(dts, pts, %{reset_timestamps: false} = state) do
     {{dts, pts}, state}
   end
 
