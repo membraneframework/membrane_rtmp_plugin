@@ -231,12 +231,10 @@ defmodule Membrane.RTMP.MessageHandler do
   end
 
   defp request_packet(%{header_sent?: false} = state) do
-    # IO.inspect("HEADER NOT YET SENT")
     :inet.setopts(state.socket, active: :once)
   end
 
   defp request_packet(_state) do
-    # IO.inspect("HEADER ALREADY SENT")
     :ok
   end
 

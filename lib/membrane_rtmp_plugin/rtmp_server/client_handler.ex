@@ -58,23 +58,13 @@ defmodule Membrane.RTMP.Server.ClientHandler do
 
   @impl true
   def handle_info(:control_granted, state) do
-    if state.use_ssl? do
-      :ssl.setopts(state.socket, active: :once)
-    else
-      :inet.setopts(state.socket, active: :once)
-    end
-
+    request_data(state)
     {:noreply, state}
   end
 
   @impl true
   def handle_info(:demand_data, state) do
-    if state.use_ssl? do
-      :ssl.setopts(state.socket, active: :once)
-    else
-      :inet.setopts(state.socket, active: :once)
-    end
-
+    request_data(state)
     {:noreply, state}
   end
 
@@ -88,6 +78,8 @@ defmodule Membrane.RTMP.Server.ClientHandler do
   defp handle_data(data, state) do
     {messages, message_parser_state} =
       MessageParser.parse_packet_messages(data, state.message_parser_state)
+
+    if messages == [], do: request_data(state)
 
     {message_handler_state, events} =
       MessageHandler.handle_client_messages(messages, state.message_handler_state)
@@ -132,6 +124,14 @@ defmodule Membrane.RTMP.Server.ClientHandler do
           state.behaviour.handle_stream_published(publish_msg, state.behaviour_state)
 
         %{state | behaviour_state: new_behaviour_state, stream_key: publish_msg.stream_key}
+    end
+  end
+
+  defp request_data(state) do
+    if state.use_ssl? do
+      :ssl.setopts(state.socket, active: :once)
+    else
+      :inet.setopts(state.socket, active: :once)
     end
   end
 end

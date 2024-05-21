@@ -10,42 +10,40 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   @input_file "test/fixtures/testsrc.flv"
   @app "liveapp"
   @stream_key "ala2137"
+  @default_port 22224
 
   @stream_length_ms 3000
   @video_frame_duration_ms 42
   @audio_frame_duration_ms 24
 
-  @tag :sometag
   test "SourceBin outputs the correct number of audio and video buffers when the client connects to the given app and stream key" do
     {port, pipeline} = start_rtmp_server(@app, @stream_key)
 
-    Process.sleep(100_000)
+    ffmpeg_task =
+      Task.async(fn ->
+        "rtmp://localhost:#{port}/#{@app}/#{@stream_key}" |> start_ffmpeg()
+      end)
 
-    # ffmpeg_task =
-    #   Task.async(fn ->
-    #     "rtmp://localhost:#{port}/#{@app}/#{@stream_key}" |> start_ffmpeg()
-    #   end)
+    assert_buffers(%{
+      pipeline: pipeline,
+      sink: :video_sink,
+      stream_length: @stream_length_ms,
+      buffers_expected: div(@stream_length_ms, @video_frame_duration_ms)
+    })
 
-    # assert_buffers(%{
-    #   pipeline: pipeline,
-    #   sink: :video_sink,
-    #   stream_length: @stream_length_ms,
-    #   buffers_expected: div(@stream_length_ms, @video_frame_duration_ms)
-    # })
+    assert_buffers(%{
+      pipeline: pipeline,
+      sink: :audio_sink,
+      stream_length: @stream_length_ms,
+      buffers_expected: div(@stream_length_ms, @audio_frame_duration_ms)
+    })
 
-    # assert_buffers(%{
-    #   pipeline: pipeline,
-    #   sink: :audio_sink,
-    #   stream_length: @stream_length_ms,
-    #   buffers_expected: div(@stream_length_ms, @audio_frame_duration_ms)
-    # })
+    assert_end_of_stream(pipeline, :audio_sink, :input)
+    assert_end_of_stream(pipeline, :video_sink, :input)
 
-    # assert_end_of_stream(pipeline, :audio_sink, :input)
-    # assert_end_of_stream(pipeline, :video_sink, :input)
-
-    # # Cleanup
-    # Testing.Pipeline.terminate(pipeline)
-    # assert :ok = Task.await(ffmpeg_task)
+    # Cleanup
+    Testing.Pipeline.terminate(pipeline)
+    assert :ok = Task.await(ffmpeg_task)
   end
 
   test "SourceBin doesn't output anything if the client tries to connect to different app or stream key" do
@@ -152,47 +150,14 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   end
 
   defp start_rtmp_server(app, stream_key, use_ssl? \\ false) do
-    listen_options =
-      if use_ssl? do
-        certfile = System.get_env("CERT_PATH")
-        keyfile = System.get_env("CERT_KEY_PATH")
-
-        [
-          :binary,
-          packet: :raw,
-          active: false,
-          certfile: certfile,
-          keyfile: keyfile
-        ]
-      else
-        [
-          :binary,
-          packet: :raw,
-          active: false
-        ]
-      end
-
-    # {:ok, server_pid} =
-    #   Membrane.RTMP.Server.start_link(%{
-    #     behaviour: Membrane.RTMP.Source.DefaultBehaviourImplementation,
-    #     port: port,
-    #     use_ssl?: use_ssl?,
-    #     listen_options: listen_options,
-    #     name: :rtmp,
-    #     behaviour_options: %{controlling_process: self()}
-    #   })
-
-    port = 22224
-
     options = [
       module: Membrane.RTMP.Source.TestPipeline,
-      custom_args: %{app: app, stream_key: stream_key, port: port},
+      custom_args: %{app: app, stream_key: stream_key, port: @default_port, use_ssl?: use_ssl?},
       test_process: self()
     ]
 
-    # {:ok, port} = GenServer.call(server_pid, :get_port)
     pipeline_pid = Testing.Pipeline.start_link_supervised!(options)
-    {port, pipeline_pid}
+    {@default_port, pipeline_pid}
   end
 
   defp start_ffmpeg(stream_url, opts \\ []) do
@@ -211,11 +176,13 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
       |> add_file_option(option_acodec("copy"))
       |> maybe_add_file_timestamps_offset(opts)
 
-    case FFmpex.execute(command) do
-      {:ok, ""} ->
+    {command, args} = FFmpex.prepare(command)
+
+    case System.cmd(command, args) do
+      {_output, 0} ->
         :ok
 
-      {:error, {error, exit_code}} ->
+      {error, exit_code} ->
         Logger.error(
           """
           FFmpeg exited with a non-zero exit code (#{exit_code}) and the error message:

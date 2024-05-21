@@ -20,7 +20,8 @@ defmodule Membrane.RTMP.Source do
             when not is_nil(opts.url) and is_nil(opts.client_handler)
 
   defguardp is_external_server(opts)
-            when not is_nil(opts.client_handler) and is_nil(opts.url)
+            when not is_nil(opts.client_handler) and
+                   is_nil(opts.url)
 
   @impl true
   def handle_init(_ctx, opts) when is_builtin_server(opts) do
@@ -30,7 +31,8 @@ defmodule Membrane.RTMP.Source do
       server: nil,
       url: opts.url,
       mode: :builtin_server,
-      client_handler: nil
+      client_handler: nil,
+      use_ssl?: nil
     }
 
     {[], state}
@@ -56,19 +58,35 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_setup(_ctx, %{mode: :builtin_server} = state) do
-    {port, app, stream_key} = parse_url(state.url)
+    {use_ssl?, port, app, stream_key} = parse_url(state.url)
+
+    listen_options =
+      if state.use_ssl? do
+        certfile = System.get_env("CERT_PATH")
+        keyfile = System.get_env("CERT_KEY_PATH")
+
+        [
+          :binary,
+          packet: :raw,
+          active: false,
+          certfile: certfile,
+          keyfile: keyfile
+        ]
+      else
+        [
+          :binary,
+          packet: :raw,
+          active: false
+        ]
+      end
 
     {:ok, server_pid} =
       Membrane.RTMP.Server.start_link(%{
         behaviour: Membrane.RTMP.Source.DefaultBehaviourImplementation,
         behaviour_options: %{controlling_process: self()},
         port: port,
-        use_ssl?: false,
-        listen_options: [
-          :binary,
-          packet: :raw,
-          active: false
-        ],
+        use_ssl?: use_ssl?,
+        listen_options: listen_options,
         name: :rtmp
       })
 
@@ -88,6 +106,9 @@ defmodule Membrane.RTMP.Source do
         {:output, %Membrane.RemoteStream{content_format: Membrane.FLV, type: :bytestream}}
     ]
 
+    :ok =
+      Membrane.RTMP.Source.DefaultBehaviourImplementation.request_for_data(state.client_handler)
+
     {stream_format, state}
   end
 
@@ -106,7 +127,6 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_info({:client_handler, client_handler_pid}, _ctx, %{mode: :builtin_server} = state) do
-    :ok = Membrane.RTMP.Source.DefaultBehaviourImplementation.request_for_data(client_handler_pid)
     {[setup: :complete], %{state | client_handler: client_handler_pid}}
   end
 
@@ -136,6 +156,12 @@ defmodule Membrane.RTMP.Source do
         _other -> {"", ""}
       end
 
-    {port, app, stream_key}
+    use_ssl? =
+      case uri.scheme do
+        "rtmp" -> false
+        "rtmps" -> true
+      end
+
+    {use_ssl?, port, app, stream_key}
   end
 end
