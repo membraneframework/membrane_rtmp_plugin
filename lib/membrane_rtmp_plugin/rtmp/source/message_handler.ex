@@ -226,13 +226,13 @@ defmodule Membrane.RTMP.MessageHandler do
     {:cont, state}
   end
 
-  defp request_packet(%{socket: {:sslsocket, _1, _2}, header_sent?: false} = state) do
-    :ssl.setopts(state.socket, active: :once)
-  end
+  # defp request_packet(%{socket: {:sslsocket, _1, _2}, header_sent?: false} = state) do
+  #   :ssl.setopts(state.socket, active: :once)
+  # end
 
-  defp request_packet(%{header_sent?: false} = state) do
-    :inet.setopts(state.socket, active: :once)
-  end
+  # defp request_packet(%{header_sent?: false} = state) do
+  #   :inet.setopts(state.socket, active: :once)
+  # end
 
   defp request_packet(_state) do
     :ok

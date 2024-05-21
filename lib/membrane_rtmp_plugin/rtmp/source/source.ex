@@ -11,7 +11,8 @@ defmodule Membrane.RTMP.Source do
   def_output_pad :output,
     availability: :always,
     accepted_format: Membrane.RemoteStream,
-    flow_control: :manual
+    flow_control: :manual,
+    demand_unit: :buffers
 
   def_options client_handler: [spec: pid(), default: nil],
               url: [spec: String.t(), default: nil]
@@ -113,8 +114,8 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_demand(:output, _size, _units, _ctx, state) do
-    send(state.client_handler, :demand_data)
+  def handle_demand(pad, size, :buffers, _ctx, state) do
+    send(state.client_handler, {:demand_data, size})
     {[], state}
   end
 

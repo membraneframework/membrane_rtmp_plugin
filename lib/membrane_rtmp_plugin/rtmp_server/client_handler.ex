@@ -25,7 +25,8 @@ defmodule Membrane.RTMP.Server.ClientHandler do
        behaviour_state: opts.behaviour.handle_init(opts.behaviour_options),
        app: nil,
        stream_key: nil,
-       server: opts.server
+       server: opts.server,
+       demanded: 10
      }}
   end
 
@@ -63,7 +64,8 @@ defmodule Membrane.RTMP.Server.ClientHandler do
   end
 
   @impl true
-  def handle_info(:demand_data, state) do
+  def handle_info({:demand_data, how_many_demanded}, state) do
+    state = %{state | demanded: state.demanded + how_many_demanded}
     request_data(state)
     {:noreply, state}
   end
@@ -79,12 +81,12 @@ defmodule Membrane.RTMP.Server.ClientHandler do
     {messages, message_parser_state} =
       MessageParser.parse_packet_messages(data, state.message_parser_state)
 
-    if messages == [], do: request_data(state)
-
     {message_handler_state, events} =
       MessageHandler.handle_client_messages(messages, state.message_handler_state)
 
     state = Enum.reduce(events, state, &handle_event/2)
+
+    request_data(state)
 
     {:noreply,
      %{
@@ -109,7 +111,7 @@ defmodule Membrane.RTMP.Server.ClientHandler do
         new_behaviour_state =
           state.behaviour.handle_data_available(payload, state.behaviour_state)
 
-        %{state | behaviour_state: new_behaviour_state}
+        %{state | behaviour_state: new_behaviour_state, demanded: state.demanded - 1}
 
       {:connected, connected_msg} ->
         new_behaviour_state =
@@ -128,10 +130,12 @@ defmodule Membrane.RTMP.Server.ClientHandler do
   end
 
   defp request_data(state) do
-    if state.use_ssl? do
-      :ssl.setopts(state.socket, active: :once)
-    else
-      :inet.setopts(state.socket, active: :once)
+    if state.demanded > 0 do
+      if state.use_ssl? do
+        :ssl.setopts(state.socket, active: :once)
+      else
+        :inet.setopts(state.socket, active: :once)
+      end
     end
   end
 end
