@@ -17,15 +17,15 @@ defmodule Membrane.RTMP.SourceBin do
     accepted_format: AAC,
     availability: :always
 
-  def_options app: [], stream_key: [], server: []
+  def_options client_handler: [default: nil],
+              url: [default: nil]
 
   @impl true
   def handle_init(_ctx, %__MODULE__{} = opts) do
     structure = [
       child(:src, %RTMP.Source{
-        server: opts.server,
-        app: opts.app,
-        stream_key: opts.stream_key
+        client_handler: opts.client_handler,
+        url: opts.url
       })
       |> child(:demuxer, Membrane.FLV.Demuxer),
       child(:audio_parser, %Membrane.AAC.Parser{

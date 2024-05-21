@@ -6,16 +6,14 @@ defmodule Membrane.RTMP.Source.TestPipeline do
   alias Membrane.Testing
 
   @impl true
-  def handle_setup(_ctx, %{
+  def handle_init(_ctx, %{
         app: app,
         stream_key: stream_key,
-        server: server
+        port: port
       }) do
     structure = [
       child(:src, %SourceBin{
-        app: app,
-        stream_key: stream_key,
-        server: server
+        url: "rtmp://localhost:#{port}/#{app}/#{stream_key}"
       }),
       child(:audio_sink, Testing.Sink),
       child(:video_sink, Testing.Sink),

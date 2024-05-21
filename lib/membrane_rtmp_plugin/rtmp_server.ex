@@ -72,6 +72,11 @@ defmodule Membrane.RTMP.Server do
     end
   end
 
+  def subscribe(server_pid, app, stream_key) do
+    send(server_pid, {:subscribe, app, stream_key, self()})
+    :ok
+  end
+
   defp maybe_send_subscription(app, stream_key, state) do
     if state.subscriptions[{app, stream_key}] != nil and state.mapping[{app, stream_key}] != nil do
       send(

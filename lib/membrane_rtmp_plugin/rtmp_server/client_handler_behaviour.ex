@@ -13,7 +13,7 @@ defmodule Membrane.RTMP.Server.ClientHandlerBehaviour do
   The callback invoked once the client handler is created.
   It should return the initial state of the client handler.
   """
-  @callback handle_init() :: t()
+  @callback handle_init(any()) :: t()
 
   @doc """
   The callback invoked when the client sends the `Membrane.RTMP.Messages.Connect.t()`

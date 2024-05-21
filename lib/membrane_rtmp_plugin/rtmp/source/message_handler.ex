@@ -57,7 +57,7 @@ defmodule Membrane.RTMP.MessageHandler do
 
   @spec handle_client_messages(list(), map()) :: {map(), list()}
   def handle_client_messages([], state) do
-    request_packet(state.socket)
+    request_packet(state)
     {%{state | events: []}, state.events}
   end
 
@@ -67,7 +67,7 @@ defmodule Membrane.RTMP.MessageHandler do
       do_handle_client_message(message, header, acc)
     end)
     |> then(fn state ->
-      request_packet(state.socket)
+      request_packet(state)
       {%{state | events: []}, Enum.reverse(state.events)}
     end)
   end
@@ -226,12 +226,18 @@ defmodule Membrane.RTMP.MessageHandler do
     {:cont, state}
   end
 
-  defp request_packet({:sslsocket, _1, _2} = socket) do
-    :ssl.setopts(socket, active: :once)
+  defp request_packet(%{socket: {:sslsocket, _1, _2}, header_sent?: false} = state) do
+    :ssl.setopts(state.socket, active: :once)
   end
 
-  defp request_packet(socket) do
-    :inet.setopts(socket, active: :once)
+  defp request_packet(%{header_sent?: false} = state) do
+    # IO.inspect("HEADER NOT YET SENT")
+    :inet.setopts(state.socket, active: :once)
+  end
+
+  defp request_packet(_state) do
+    # IO.inspect("HEADER ALREADY SENT")
+    :ok
   end
 
   defp get_media_events(rtmp_header, data, %{header_sent?: true} = state) do

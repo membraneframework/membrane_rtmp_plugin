@@ -43,15 +43,19 @@ defmodule Membrane.RTMP.MessageParser do
     }
   end
 
-  # The RTMP connection is based on TCP therefore we are operating on a continuous stream of bytes.
-  # In such case packets received on TCP sockets may contain a partial RTMP packet or several full packets.
-  #
-  # `MessageParser` is already able to request more data if packet is incomplete but it is not aware
-  # if its current buffer contains more than one message, therefore we need to call the `&MessageParser.handle_packet/2`
-  # as long as we decide to receive more messages (before starting to relay media packets).
-  #
-  # Once we hit `:need_more_data` the function returns the list of parsed messages and the message_parser then is ready
-  # to receive more data to continue with emitting new messages.
+  @doc """
+  Parses RTMP messages from a packet.
+
+  The RTMP connection is based on TCP therefore we are operating on a continuous stream of bytes.
+  In such case packets received on TCP sockets may contain a partial RTMP packet or several full packets.
+
+  `MessageParser` is already able to request more data if packet is incomplete but it is not aware
+  if its current buffer contains more than one message, therefore we need to call the `&MessageParser.handle_packet/2`
+  as long as we decide to receive more messages (before starting to relay media packets).
+
+  Once we hit `:need_more_data` the function returns the list of parsed messages and the message_parser then is ready
+  to receive more data to continue with emitting new messages.
+  """
   @spec parse_packet_messages(packet :: binary(), message_parser :: struct(), [{any(), any()}]) ::
           {[Message.t()], message_parser :: struct()}
   def parse_packet_messages(packet, message_parser, messages \\ [])
