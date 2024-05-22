@@ -3,7 +3,6 @@ defmodule Membrane.RTMP.Server do
   A simple RTMP server, which handles each new incoming connection.
   """
   alias Membrane.RTMP.Server.ClientHandlerBehaviour
-  alias Membrane.RTMP.Server.ClientHandler
 
   use GenServer
 

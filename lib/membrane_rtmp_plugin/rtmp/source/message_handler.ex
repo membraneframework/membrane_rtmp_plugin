@@ -37,12 +37,13 @@ defmodule Membrane.RTMP.MessageHandler do
           events: [event()],
           receiver_pid: pid() | nil,
           socket_retries: pos_integer(),
-          epoch: non_neg_integer()
+          epoch: non_neg_integer(),
+          published?: boolean()
         }
 
   @spec init(opts :: %{socket: :gen_tcp.socket() | :ssl.socket(), use_ssl?: boolean()}) :: t()
   def init(opts) do
-    %{
+    state = %{
       socket: opts.socket,
       socket_module: if(opts.use_ssl?, do: :ssl, else: :gen_tcp),
       header_sent?: false,
@@ -51,8 +52,12 @@ defmodule Membrane.RTMP.MessageHandler do
       # how many times the Source tries to get control of the socket
       socket_retries: 3,
       # epoch required for performing a handshake with the pipeline
-      epoch: 0
+      epoch: 0,
+      published?: false
     }
+
+    :ok = request_packet(state)
+    state
   end
 
   @spec handle_client_messages(list(), map()) :: {map(), list()}
@@ -144,7 +149,7 @@ defmodule Membrane.RTMP.MessageHandler do
     Responses.publish_success(publish_msg.stream_key)
     |> send_rtmp_payload(state.socket, chunk_stream_id: 3, stream_id: header.stream_id)
 
-    state = %{state | events: [{:published, publish_msg} | state.events]}
+    state = %{state | events: [{:published, publish_msg} | state.events], published?: true}
     {:cont, state}
   end
 
@@ -226,13 +231,13 @@ defmodule Membrane.RTMP.MessageHandler do
     {:cont, state}
   end
 
-  # defp request_packet(%{socket: {:sslsocket, _1, _2}, header_sent?: false} = state) do
-  #   :ssl.setopts(state.socket, active: :once)
-  # end
+  defp request_packet(%{socket: {:sslsocket, _1, _2}, published?: false} = state) do
+    :ssl.setopts(state.socket, active: :once)
+  end
 
-  # defp request_packet(%{header_sent?: false} = state) do
-  #   :inet.setopts(state.socket, active: :once)
-  # end
+  defp request_packet(%{published?: false} = state) do
+    :inet.setopts(state.socket, active: :once)
+  end
 
   defp request_packet(_state) do
     :ok

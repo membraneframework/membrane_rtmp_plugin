@@ -26,7 +26,7 @@ defmodule Membrane.RTMP.Server.ClientHandler do
        app: nil,
        stream_key: nil,
        server: opts.server,
-       demanded: 10
+       buffers_demanded: 0
      }}
   end
 
@@ -59,13 +59,12 @@ defmodule Membrane.RTMP.Server.ClientHandler do
 
   @impl true
   def handle_info(:control_granted, state) do
-    request_data(state)
     {:noreply, state}
   end
 
   @impl true
-  def handle_info({:demand_data, how_many_demanded}, state) do
-    state = %{state | demanded: state.demanded + how_many_demanded}
+  def handle_info({:demand_data, how_many_buffers_demanded}, state) do
+    state = %{state | buffers_demanded: how_many_buffers_demanded}
     request_data(state)
     {:noreply, state}
   end
@@ -111,7 +110,11 @@ defmodule Membrane.RTMP.Server.ClientHandler do
         new_behaviour_state =
           state.behaviour.handle_data_available(payload, state.behaviour_state)
 
-        %{state | behaviour_state: new_behaviour_state, demanded: state.demanded - 1}
+        %{
+          state
+          | behaviour_state: new_behaviour_state,
+            buffers_demanded: state.buffers_demanded - 1
+        }
 
       {:connected, connected_msg} ->
         new_behaviour_state =
@@ -130,7 +133,7 @@ defmodule Membrane.RTMP.Server.ClientHandler do
   end
 
   defp request_data(state) do
-    if state.demanded > 0 do
+    if state.buffers_demanded > 0 do
       if state.use_ssl? do
         :ssl.setopts(state.socket, active: :once)
       else
