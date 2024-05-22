@@ -10,13 +10,12 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   @input_file "test/fixtures/testsrc.flv"
   @app "liveapp"
   @stream_key "ala2137"
-  @default_port 22224
+  @default_port 22_224
 
   @stream_length_ms 3000
   @video_frame_duration_ms 42
   @audio_frame_duration_ms 24
 
-  @tag :sometag
   test "SourceBin outputs the correct number of audio and video buffers when the client connects to the given app and stream key" do
     {port, pipeline} = start_rtmp_server(@app, @stream_key)
 

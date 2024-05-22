@@ -72,6 +72,7 @@ defmodule Membrane.RTMP.Server do
     end
   end
 
+  @spec subscribe(pid(), String.t(), String.t()) :: :ok
   def subscribe(server_pid, app, stream_key) do
     send(server_pid, {:subscribe, app, stream_key, self()})
     :ok

@@ -68,6 +68,7 @@ defmodule Membrane.RTMP.Source.DefaultBehaviourImplementation do
     :ok
   end
 
+  @spec request_for_data(pid()) :: :ok
   def request_for_data(client_handler_pid) do
     send(client_handler_pid, {:send_me_data, self()})
     :ok
