@@ -2,34 +2,59 @@ defmodule Membrane.RTMP.Server do
   @moduledoc """
   A simple RTMP server, which handles each new incoming connection.
   """
+  alias Membrane.RTMP.Server.ClientHandlerBehaviour
+  alias Membrane.RTMP.Server.ClientHandler
 
   use GenServer
 
   require Logger
 
-  @enforce_keys [:port, :behaviour, :listener]
-
+  @enforce_keys [:behaviour, :behaviour_options, :port, :use_ssl?, :listen_options]
   defstruct @enforce_keys
 
   @typedoc """
   Defines options for the RTMP server.
   """
   @type t :: %__MODULE__{
+          behaviour: ClientHandlerBehaviour.t(),
+          behaviour_options: map(),
           port: :inet.port_number(),
-          behaviour: Membrane.RTMP.Server.ClientHandlerBehaviour.t(),
-          listener: pid()
+          use_ssl?: boolean(),
+          listen_options: any()
         }
 
-  @spec start_link(options :: map()) :: GenServer.on_start()
-  def start_link(options) do
-    GenServer.start_link(__MODULE__, options, name: options.name)
+  @doc """
+  Starts the RTMP server.
+  """
+  @spec start_link(server_options :: t(), name :: atom()) :: GenServer.on_start()
+  def start_link(server_options, name \\ :rtmp) do
+    GenServer.start_link(__MODULE__, server_options, name: name)
+  end
+
+  @doc """
+  Subscribes for the given app and stream key.
+  When a client connects (or has already connected) to the server with given app and stream key,
+  the subscriber will be informed.
+  """
+  @spec subscribe(pid(), String.t(), String.t()) :: :ok
+  def subscribe(server_pid, app, stream_key) do
+    send(server_pid, {:subscribe, app, stream_key, self()})
+    :ok
+  end
+
+  @doc """
+  Returns the port on which the server listens for connection.
+  """
+  @spec get_port(pid()) :: :inet.port()
+  def get_port(server_pid) do
+    GenServer.call(server_pid, :get_port)
   end
 
   @impl true
-  def init(options) do
+  def init(server_options) do
     pid =
       Task.start_link(Membrane.RTMP.Server.Listener, :run, [
-        Map.merge(options, %{server: self()})
+        Map.merge(server_options, %{server: self()})
       ])
 
     {:ok,
@@ -39,7 +64,7 @@ defmodule Membrane.RTMP.Server do
        listener: pid,
        port: nil,
        to_reply: [],
-       use_ssl?: options.use_ssl?
+       use_ssl?: server_options.use_ssl?
      }}
   end
 
@@ -70,12 +95,6 @@ defmodule Membrane.RTMP.Server do
     else
       {:noreply, %{state | to_reply: [from | state.to_reply]}}
     end
-  end
-
-  @spec subscribe(pid(), String.t(), String.t()) :: :ok
-  def subscribe(server_pid, app, stream_key) do
-    send(server_pid, {:subscribe, app, stream_key, self()})
-    :ok
   end
 
   defp maybe_send_subscription(app, stream_key, state) do

@@ -6,8 +6,6 @@ defmodule Membrane.RTMP.Source do
   use Membrane.Source
   require Membrane.Logger
 
-  alias Membrane.RTMP.Server.ClientHandlerBehaviour
-
   def_output_pad :output,
     availability: :always,
     accepted_format: Membrane.RemoteStream,
@@ -82,13 +80,12 @@ defmodule Membrane.RTMP.Source do
       end
 
     {:ok, server_pid} =
-      Membrane.RTMP.Server.start_link(%{
+      Membrane.RTMP.Server.start_link(%Membrane.RTMP.Server{
         behaviour: Membrane.RTMP.Source.DefaultBehaviourImplementation,
         behaviour_options: %{controlling_process: self()},
         port: port,
         use_ssl?: use_ssl?,
-        listen_options: listen_options,
-        name: :rtmp
+        listen_options: listen_options
       })
 
     state = %{state | app: app, stream_key: stream_key, server: server_pid}
@@ -114,7 +111,7 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_demand(pad, size, :buffers, _ctx, state) do
+  def handle_demand(:output, size, :buffers, _ctx, state) do
     send(state.client_handler, {:demand_data, size})
     {[], state}
   end
