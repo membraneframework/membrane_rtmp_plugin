@@ -16,7 +16,6 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   @video_frame_duration_ms 42
   @audio_frame_duration_ms 24
 
-  @tag :sometag
   test "SourceBin outputs the correct number of audio and video buffers when the client connects to the given app and stream key" do
     {port, pipeline} = start_rtmp_server(@app, @stream_key)
 

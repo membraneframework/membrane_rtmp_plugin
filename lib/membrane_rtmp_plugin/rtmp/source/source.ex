@@ -3,9 +3,9 @@ defmodule Membrane.RTMP.Source do
   Membrane Element for receiving an RTMP stream. Acts as a RTMP Server.
   This implementation is limited to only AAC and H264 streams.
   """
-  alias Membrane.RTMP.Server.ClientHandler
   use Membrane.Source
   require Membrane.Logger
+  alias Membrane.RTMP.Server.ClientHandler
 
   def_output_pad :output,
     availability: :always,

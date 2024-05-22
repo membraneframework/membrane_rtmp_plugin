@@ -2,11 +2,11 @@ defmodule Membrane.RTMP.Server do
   @moduledoc """
   A simple RTMP server, which handles each new incoming connection.
   """
-  alias Membrane.RTMP.Server.ClientHandlerBehaviour
-
   use GenServer
 
   require Logger
+
+  alias Membrane.RTMP.Server.ClientHandlerBehaviour
 
   @enforce_keys [:behaviour, :behaviour_options, :port, :use_ssl?, :listen_options]
   defstruct @enforce_keys
