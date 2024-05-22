@@ -3,6 +3,7 @@ defmodule Membrane.RTMP.Source do
   Membrane Element for receiving an RTMP stream. Acts as a RTMP Server.
   This implementation is limited to only AAC and H264 streams.
   """
+  alias Membrane.RTMP.Server.ClientHandler
   use Membrane.Source
   require Membrane.Logger
 
@@ -112,7 +113,7 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_demand(:output, size, :buffers, _ctx, state) do
-    send(state.client_handler, {:demand_data, size})
+    :ok = ClientHandler.demand_data(state.client_handler, size)
     {[], state}
   end
 

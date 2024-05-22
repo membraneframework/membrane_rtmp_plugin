@@ -9,6 +9,15 @@ defmodule Membrane.RTMP.Server.ClientHandler do
   require Logger
   alias Membrane.RTMP.{Handshake, MessageHandler, MessageParser}
 
+  @doc """
+  Makes the client handler ask client for the desired number of buffers
+  """
+  @spec demand_data(pid(), non_neg_integer()) :: :ok
+  def demand_data(client_handler_pid, how_many_buffers_demanded) do
+    send(client_handler_pid, {:demand_data, how_many_buffers_demanded})
+    :ok
+  end
+
   @impl true
   def init(opts) do
     opts = Map.new(opts)
