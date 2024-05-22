@@ -68,6 +68,10 @@ defmodule Membrane.RTMP.SourceBin do
     {[notify_parent: notification], state}
   end
 
+  def handle_child_notification(:unexpected_socket_closed, :src, _ctx, state) do
+    {[notify_parent: :unexpected_socket_close], state}
+  end
+
   @doc """
   Passes the control of the socket to the `source`.
 

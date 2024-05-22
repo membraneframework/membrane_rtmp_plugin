@@ -23,7 +23,6 @@ defmodule Example do
   @impl true
   def handle_init(_ctx, destination: destination) do
     structure = [
-      child(:rtmp_sink, %Membrane.RTMP.Sink{rtmp_url: destination}),
       child(:video_source, %Membrane.Hackney.Source{
         location: @video_url,
         hackney_opts: [follow_redirect: true]
@@ -34,7 +33,7 @@ defmodule Example do
       })
       |> child(:video_realtimer, Membrane.Realtimer)
       |> via_in(Pad.ref(:video, 0))
-      |> get_child(:rtmp_sink),
+      |> child(:rtmp_sink, %Membrane.RTMP.Sink{rtmp_url: destination}),
       child(:audio_source, %Membrane.Hackney.Source{
         location: @audio_url,
         hackney_opts: [follow_redirect: true]
@@ -70,7 +69,7 @@ end
 destination = System.get_env("RTMP_URL", "rtmp://localhost:1935")
 
 # Initialize the pipeline and start it
-{:ok, _supervisor, pipeline} = Example.start_link(destination: destination)
+{:ok, _supervisor, pipeline} = Membrane.Pipeline.start_link(Example, destination: destination)
 
 monitor_ref = Process.monitor(pipeline)
 
