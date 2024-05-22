@@ -35,7 +35,8 @@ defmodule Membrane.RTMP.Server.ClientHandler do
        app: nil,
        stream_key: nil,
        server: opts.server,
-       buffers_demanded: 0
+       buffers_demanded: 0,
+       published?: false
      }}
   end
 
@@ -68,6 +69,7 @@ defmodule Membrane.RTMP.Server.ClientHandler do
 
   @impl true
   def handle_info(:control_granted, state) do
+    request_data(state)
     {:noreply, state}
   end
 
@@ -137,12 +139,17 @@ defmodule Membrane.RTMP.Server.ClientHandler do
         new_behaviour_state =
           state.behaviour.handle_stream_published(publish_msg, state.behaviour_state)
 
-        %{state | behaviour_state: new_behaviour_state, stream_key: publish_msg.stream_key}
+        %{
+          state
+          | behaviour_state: new_behaviour_state,
+            stream_key: publish_msg.stream_key,
+            published?: true
+        }
     end
   end
 
   defp request_data(state) do
-    if state.buffers_demanded > 0 do
+    if state.buffers_demanded > 0 or state.published? == false do
       if state.use_ssl? do
         :ssl.setopts(state.socket, active: :once)
       else

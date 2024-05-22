@@ -37,8 +37,7 @@ defmodule Membrane.RTMP.MessageHandler do
           events: [event()],
           receiver_pid: pid() | nil,
           socket_retries: pos_integer(),
-          epoch: non_neg_integer(),
-          published?: boolean()
+          epoch: non_neg_integer()
         }
 
   @spec init(opts :: %{socket: :gen_tcp.socket() | :ssl.socket(), use_ssl?: boolean()}) :: t()
@@ -52,17 +51,14 @@ defmodule Membrane.RTMP.MessageHandler do
       # how many times the Source tries to get control of the socket
       socket_retries: 3,
       # epoch required for performing a handshake with the pipeline
-      epoch: 0,
-      published?: false
+      epoch: 0
     }
 
-    :ok = request_packet(state)
     state
   end
 
   @spec handle_client_messages(list(), map()) :: {map(), list()}
   def handle_client_messages([], state) do
-    request_packet(state)
     {%{state | events: []}, state.events}
   end
 
@@ -72,7 +68,6 @@ defmodule Membrane.RTMP.MessageHandler do
       do_handle_client_message(message, header, acc)
     end)
     |> then(fn state ->
-      request_packet(state)
       {%{state | events: []}, Enum.reverse(state.events)}
     end)
   end
@@ -149,7 +144,7 @@ defmodule Membrane.RTMP.MessageHandler do
     Responses.publish_success(publish_msg.stream_key)
     |> send_rtmp_payload(state.socket, chunk_stream_id: 3, stream_id: header.stream_id)
 
-    state = %{state | events: [{:published, publish_msg} | state.events], published?: true}
+    state = %{state | events: [{:published, publish_msg} | state.events]}
     {:cont, state}
   end
 
@@ -229,18 +224,6 @@ defmodule Membrane.RTMP.MessageHandler do
     Logger.debug("Unknown message: #{inspect(message)}")
 
     {:cont, state}
-  end
-
-  defp request_packet(%{socket: {:sslsocket, _1, _2}, published?: false} = state) do
-    :ssl.setopts(state.socket, active: :once)
-  end
-
-  defp request_packet(%{published?: false} = state) do
-    :inet.setopts(state.socket, active: :once)
-  end
-
-  defp request_packet(_state) do
-    :ok
   end
 
   defp get_media_events(rtmp_header, data, %{header_sent?: true} = state) do
