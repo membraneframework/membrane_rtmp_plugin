@@ -90,7 +90,7 @@ defmodule Membrane.RTMP.Source do
       })
 
     state = %{state | app: app, stream_key: stream_key, server: server_pid}
-    {[setup: :incomplete], state}
+    {[], state}
   end
 
   @impl true
@@ -112,8 +112,13 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_demand(:output, size, :buffers, _ctx, state) do
-    :ok = ClientHandler.demand_data(state.client_handler, size)
+  def handle_demand(:output, size, :buffers, _ctx, %{client_handler: nil} = state) do
+    {[], state}
+  end
+
+  @impl true
+  def handle_demand(:output, size, :buffers, _ctx, %{client_handler: client_handler} = state) do
+    :ok = ClientHandler.demand_data(client_handler, size)
     {[], state}
   end
 
@@ -126,7 +131,7 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_info({:client_handler, client_handler_pid}, _ctx, %{mode: :builtin_server} = state) do
-    {[setup: :complete], %{state | client_handler: client_handler_pid}}
+    {[redemand: :output], %{state | client_handler: client_handler_pid}}
   end
 
   @impl true
