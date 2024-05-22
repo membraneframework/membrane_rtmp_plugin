@@ -6,6 +6,7 @@ defmodule Membrane.RTMP.Source do
   use Membrane.Source
   require Membrane.Logger
   alias Membrane.RTMP.Server.ClientHandler
+  alias Membrane.RTMP.Source.DefaultBehaviourImplementation
 
   def_output_pad :output,
     availability: :always,
@@ -82,7 +83,7 @@ defmodule Membrane.RTMP.Source do
 
     {:ok, server_pid} =
       Membrane.RTMP.Server.start_link(%Membrane.RTMP.Server{
-        behaviour: Membrane.RTMP.Source.DefaultBehaviourImplementation,
+        behaviour: DefaultBehaviourImplementation,
         behaviour_options: %{controlling_process: self()},
         port: port,
         use_ssl?: use_ssl?,
@@ -99,26 +100,48 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_playing(_ctx, state) do
+  def handle_playing(_ctx, %{mode: :external_server} = state) do
     stream_format = [
       stream_format:
         {:output, %Membrane.RemoteStream{content_format: Membrane.FLV, type: :bytestream}}
     ]
 
-    :ok =
-      Membrane.RTMP.Source.DefaultBehaviourImplementation.request_for_data(state.client_handler)
+    :ok = DefaultBehaviourImplementation.request_for_data(state.client_handler)
 
     {stream_format, state}
   end
 
   @impl true
-  def handle_demand(:output, size, :buffers, _ctx, %{client_handler: nil} = state) do
+  def handle_playing(_ctx, %{mode: :builtin_server} = state) do
+    stream_format = [
+      stream_format:
+        {:output, %Membrane.RemoteStream{content_format: Membrane.FLV, type: :bytestream}}
+    ]
+
+    {stream_format, state}
+  end
+
+  @impl true
+  def handle_demand(
+        :output,
+        _size,
+        :buffers,
+        _ctx,
+        %{client_handler: nil, mode: :builtin_server} = state
+      ) do
     {[], state}
   end
 
   @impl true
-  def handle_demand(:output, size, :buffers, _ctx, %{client_handler: client_handler} = state) do
+  def handle_demand(
+        :output,
+        size,
+        :buffers,
+        _ctx,
+        %{client_handler: client_handler, mode: :builtin_server} = state
+      ) do
     :ok = ClientHandler.demand_data(client_handler, size)
+    :ok = DefaultBehaviourImplementation.request_for_data(state.client_handler)
     {[], state}
   end
 
