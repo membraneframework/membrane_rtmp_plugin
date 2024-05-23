@@ -26,8 +26,9 @@ defmodule Membrane.RTMP.Server do
   Starts the RTMP server.
   """
   @spec start_link(server_options :: t(), name :: atom()) :: GenServer.on_start()
-  def start_link(server_options, name \\ :rtmp) do
-    GenServer.start_link(__MODULE__, server_options, name: name)
+  def start_link(server_options, name \\ nil) do
+    gen_server_opts = if name == nil, do: [], else: [name: name]
+    GenServer.start_link(__MODULE__, server_options, gen_server_opts)
   end
 
   @doc """

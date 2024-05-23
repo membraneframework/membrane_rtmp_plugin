@@ -146,6 +146,18 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
+  def handle_demand(
+        :output,
+        size,
+        :buffers,
+        _ctx,
+        %{client_handler: client_handler, mode: :external_server} = state
+      ) do
+    :ok = ClientHandler.demand_data(client_handler, size)
+    {[], state}
+  end
+
+  @impl true
   def handle_info({:client_connected, app, stream_key}, _ctx, %{mode: :builtin_server} = state) do
     :ok = Membrane.RTMP.Server.subscribe(state.server, state.app, state.stream_key)
     state = %{state | app: app, stream_key: stream_key}

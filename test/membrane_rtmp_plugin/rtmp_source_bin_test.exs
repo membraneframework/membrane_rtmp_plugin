@@ -18,12 +18,24 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
 
   @tag :sometag
   test "SourceBin outputs the correct number of audio and video buffers when the client connects to the given app and stream key" do
-    {port, pipeline} = start_rtmp_server(@app, @stream_key)
+    self = self()
+
+    pipeline_startup_task =
+      Task.async(fn ->
+        start_pipeline_with_external_rtmp_server(@app, @stream_key, self)
+      end)
+
+    port =
+      receive do
+        {:port, port} -> port
+      end
 
     ffmpeg_task =
       Task.async(fn ->
         "rtmp://localhost:#{port}/#{@app}/#{@stream_key}" |> start_ffmpeg()
       end)
+
+    pipeline = Task.await(pipeline_startup_task)
 
     assert_buffers(%{
       pipeline: pipeline,
@@ -48,7 +60,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   end
 
   test "SourceBin doesn't output anything if the client tries to connect to different app or stream key" do
-    {port, pipeline} = start_rtmp_server(@app, @stream_key)
+    {port, pipeline} = start_pipeline_with_builtin_rtmp_server(@app, @stream_key)
     other_app = "other_app"
     other_stream_key = "other_stream_key"
 
@@ -67,12 +79,24 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
 
   @tag :rtmps
   test "SourceBin allows for RTMPS connection" do
-    {port, pipeline} = start_rtmp_server(@app, @stream_key, true)
+    self = self()
+
+    pipeline_startup_task =
+      Task.async(fn ->
+        start_pipeline_with_external_rtmp_server(@app, @stream_key, self, 0, true)
+      end)
+
+    port =
+      receive do
+        {:port, port} -> port
+      end
 
     ffmpeg_task =
       Task.async(fn ->
         "rtmps://localhost:#{port}/#{@app}/#{@stream_key}" |> start_ffmpeg()
       end)
+
+    pipeline = Task.await(pipeline_startup_task)
 
     assert_buffers(%{
       pipeline: pipeline,
@@ -102,12 +126,24 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     # offset half a second in the past
     offset = @extended_timestamp_tag / 1_000 - 0.5
 
-    {port, pipeline} = start_rtmp_server(@app, @stream_key)
+    self = self()
+
+    pipeline_startup_task =
+      Task.async(fn ->
+        start_pipeline_with_external_rtmp_server(@app, @stream_key, self)
+      end)
+
+    port =
+      receive do
+        {:port, port} -> port
+      end
 
     ffmpeg_task =
       Task.async(fn ->
         "rtmp://localhost:#{port}/#{@app}/#{@stream_key}" |> start_ffmpeg(ts_offset: offset)
       end)
+
+    pipeline = Task.await(pipeline_startup_task)
 
     assert_buffers(%{
       pipeline: pipeline,
@@ -128,12 +164,24 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     # offset five seconds in the future
     offset = @extended_timestamp_tag / 1_000 + 5
 
-    {port, pipeline} = start_rtmp_server(@app, @stream_key)
+    self = self()
+
+    pipeline_startup_task =
+      Task.async(fn ->
+        start_pipeline_with_external_rtmp_server(@app, @stream_key, self)
+      end)
+
+    port =
+      receive do
+        {:port, port} -> port
+      end
 
     ffmpeg_task =
       Task.async(fn ->
         "rtmp://localhost:#{port}/#{@app}/#{@stream_key}" |> start_ffmpeg(ts_offset: offset)
       end)
+
+    pipeline = Task.await(pipeline_startup_task)
 
     assert_buffers(%{
       pipeline: pipeline,
@@ -150,15 +198,77 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     assert :ok = Task.await(ffmpeg_task)
   end
 
-  defp start_rtmp_server(app, stream_key, use_ssl? \\ false) do
+  defp start_pipeline_with_builtin_rtmp_server(app, stream_key, use_ssl? \\ false) do
     options = [
-      module: Membrane.RTMP.Source.TestPipeline,
+      module: Membrane.RTMP.Source.WithBuiltinServerTestPipeline,
       custom_args: %{app: app, stream_key: stream_key, port: @default_port, use_ssl?: use_ssl?},
       test_process: self()
     ]
 
     pipeline_pid = Testing.Pipeline.start_link_supervised!(options)
     {@default_port, pipeline_pid}
+  end
+
+  defp start_pipeline_with_external_rtmp_server(
+         app,
+         stream_key,
+         parent,
+         port \\ 0,
+         use_ssl? \\ false
+       ) do
+    listen_options =
+      if use_ssl? do
+        certfile = System.get_env("CERT_PATH")
+        keyfile = System.get_env("CERT_KEY_PATH")
+
+        [
+          :binary,
+          packet: :raw,
+          active: false,
+          certfile: certfile,
+          keyfile: keyfile
+        ]
+      else
+        [
+          :binary,
+          packet: :raw,
+          active: false
+        ]
+      end
+
+    {:ok, server_pid} =
+      Membrane.RTMP.Server.start_link(%Membrane.RTMP.Server{
+        behaviour: Membrane.RTMP.Source.DefaultBehaviourImplementation,
+        behaviour_options: %{controlling_process: self()},
+        port: port,
+        use_ssl?: use_ssl?,
+        listen_options: listen_options
+      })
+
+    {:ok, assigned_port} = Membrane.RTMP.Server.get_port(server_pid)
+
+    send(parent, {:port, assigned_port})
+
+    :ok =
+      receive do
+        {:client_connected, ^app, ^stream_key} -> :ok
+      end
+
+    :ok = Membrane.RTMP.Server.subscribe(server_pid, app, stream_key)
+
+    client_handler =
+      receive do
+        {:client_handler, client_handler} -> client_handler
+      end
+
+    options = [
+      module: Membrane.RTMP.Source.WithExternalServerTestPipeline,
+      custom_args: %{client_handler: client_handler},
+      test_process: parent
+    ]
+
+    {:ok, _supervisor, pid} = Testing.Pipeline.start_link(options)
+    pid
   end
 
   defp start_ffmpeg(stream_url, opts \\ []) do

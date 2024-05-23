@@ -1,4 +1,4 @@
-defmodule Membrane.RTMP.Source.TestPipeline do
+defmodule Membrane.RTMP.Source.WithExternalServerTestPipeline do
   @moduledoc false
   use Membrane.Pipeline
 
@@ -7,20 +7,17 @@ defmodule Membrane.RTMP.Source.TestPipeline do
 
   @impl true
   def handle_init(_ctx, %{
-        app: app,
-        stream_key: stream_key,
-        port: port,
-        use_ssl?: use_ssl?
+        client_handler: client_handler
       }) do
-    protocol = if use_ssl?, do: "rtmps", else: "rtmp"
-
     structure = [
       child(:src, %SourceBin{
-        url: "#{protocol}://localhost:#{port}/#{app}/#{stream_key}"
+        client_handler: client_handler
       }),
       child(:audio_sink, Testing.Sink),
       child(:video_sink, Testing.Sink),
-      get_child(:src) |> via_out(:audio) |> get_child(:audio_sink),
+      get_child(:src)
+      |> via_out(:audio)
+      |> get_child(:audio_sink),
       get_child(:src) |> via_out(:video) |> get_child(:video_sink)
     ]
 
