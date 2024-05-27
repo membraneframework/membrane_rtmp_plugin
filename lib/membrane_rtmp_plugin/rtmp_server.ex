@@ -36,7 +36,7 @@ defmodule Membrane.RTMP.Server do
   When a client connects (or has already connected) to the server with given app and stream key,
   the subscriber will be informed.
   """
-  @spec subscribe(pid(), String.t(), String.t()) :: :ok
+  @spec subscribe(pid() | atom(), String.t(), String.t()) :: :ok
   def subscribe(server_pid, app, stream_key) do
     send(server_pid, {:subscribe, app, stream_key, self()})
     :ok
