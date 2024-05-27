@@ -25,7 +25,11 @@ defmodule Membrane.RTMP.Source.DefaultBehaviourImplementation do
   @impl true
   def handle_stream_published(publish_msg, state) do
     state = %{state | stream_key: publish_msg.stream_key}
-    send(state.controlling_process, {:client_connected, state.app, state.stream_key})
+
+    if state.controlling_process do
+      send(state.controlling_process, {:client_connected, state.app, state.stream_key})
+    end
+
     state
   end
 

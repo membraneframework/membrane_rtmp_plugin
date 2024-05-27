@@ -46,7 +46,7 @@ defmodule Membrane.RTMP.Server do
   Returns the port on which the server listens for connection.
   """
   @spec get_port(pid()) :: :inet.port_number()
-  def(get_port(server_pid)) do
+  def get_port(server_pid) do
     GenServer.call(server_pid, :get_port)
   end
 

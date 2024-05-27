@@ -193,10 +193,9 @@ defmodule Membrane.RTMP.Source do
     port = uri.port
 
     {app, stream_key} =
-      case String.split(uri.path, "/") do
-        ["", app, stream_key] -> {app, stream_key}
-        ["", app] -> {app, ""}
-        _other -> {"", ""}
+      case String.trim_leading(uri.path, "/") |> String.trim_trailing("/") |> String.split("/") do
+        [app, stream_key] -> {app, stream_key}
+        [app] -> {app, ""}
       end
 
     use_ssl? =
