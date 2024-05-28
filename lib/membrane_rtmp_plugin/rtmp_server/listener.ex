@@ -32,8 +32,7 @@ defmodule Membrane.RTMP.Server.Listener do
         socket: client,
         use_ssl?: options.use_ssl?,
         behaviour: options.behaviour,
-        server: options.server,
-        behaviour_options: options.behaviour_options
+        server: options.server
       )
 
     case :gen_tcp.controlling_process(client, client_handler) do

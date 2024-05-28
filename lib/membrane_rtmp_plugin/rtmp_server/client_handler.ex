@@ -24,14 +24,16 @@ defmodule Membrane.RTMP.Server.ClientHandler do
     message_parser_state = Handshake.init_server() |> MessageParser.init()
     message_handler_state = MessageHandler.init(%{socket: opts.socket, use_ssl?: opts.use_ssl?})
 
+    %behaviour_module{} = opts.behaviour
+
     {:ok,
      %{
        socket: opts.socket,
        use_ssl?: opts.use_ssl?,
        message_parser_state: message_parser_state,
        message_handler_state: message_handler_state,
-       behaviour: opts.behaviour,
-       behaviour_state: opts.behaviour.handle_init(opts.behaviour_options),
+       behaviour: behaviour_module,
+       behaviour_state: behaviour_module.handle_init(opts.behaviour),
        app: nil,
        stream_key: nil,
        server: opts.server,

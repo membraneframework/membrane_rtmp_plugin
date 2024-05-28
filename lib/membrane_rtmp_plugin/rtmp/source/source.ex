@@ -83,8 +83,7 @@ defmodule Membrane.RTMP.Source do
 
     {:ok, server_pid} =
       Membrane.RTMP.Server.start_link(%Membrane.RTMP.Server{
-        behaviour: DefaultBehaviourImplementation,
-        behaviour_options: %{controlling_process: self()},
+        behaviour: %DefaultBehaviourImplementation{controlling_process: self()},
         port: port,
         use_ssl?: use_ssl?,
         listen_options: listen_options

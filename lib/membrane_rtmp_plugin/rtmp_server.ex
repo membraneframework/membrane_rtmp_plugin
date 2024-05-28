@@ -8,7 +8,7 @@ defmodule Membrane.RTMP.Server do
 
   alias Membrane.RTMP.Server.ClientHandlerBehaviour
 
-  @enforce_keys [:behaviour, :behaviour_options, :port, :use_ssl?, :listen_options]
+  @enforce_keys [:behaviour, :port, :use_ssl?, :listen_options]
   defstruct @enforce_keys
 
   @typedoc """
@@ -16,7 +16,6 @@ defmodule Membrane.RTMP.Server do
   """
   @type t :: %__MODULE__{
           behaviour: ClientHandlerBehaviour.t(),
-          behaviour_options: map(),
           port: :inet.port_number(),
           use_ssl?: boolean(),
           listen_options: any()
