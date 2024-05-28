@@ -22,6 +22,8 @@ defmodule Membrane.RTMP.Server do
           listen_options: any()
         }
 
+  @type server_identifier :: pid() | atom()
+
   @doc """
   Starts the RTMP server.
   """
@@ -36,9 +38,9 @@ defmodule Membrane.RTMP.Server do
   When a client connects (or has already connected) to the server with given app and stream key,
   the subscriber will be informed.
   """
-  @spec subscribe(pid() | atom(), String.t(), String.t()) :: :ok
-  def subscribe(server_pid, app, stream_key) do
-    GenServer.cast(server_pid, {:subscribe, app, stream_key, self()})
+  @spec subscribe(server_identifier(), String.t(), String.t()) :: :ok
+  def subscribe(server_identifier, app, stream_key) do
+    GenServer.cast(server_identifier, {:subscribe, app, stream_key, self()})
     :ok
   end
 
@@ -49,8 +51,8 @@ defmodule Membrane.RTMP.Server do
   Note: first you need to call `#{__MODULE__}.subscribe/3` to subscribe
   for a given `app` and `stream_key`.
   """
-  @spec subscribe(pid() | atom(), non_neg_integer()) :: {:ok, pid()} | :error
-  def await_subscription(server_pid, timeout \\ 5_000) do
+  @spec await_subscription(non_neg_integer()) :: {:ok, pid()} | :error
+  def await_subscription(timeout \\ 5_000) do
     receive do
       {:client_handler, client_handler} -> {:ok, client_handler}
     after
@@ -61,9 +63,9 @@ defmodule Membrane.RTMP.Server do
   @doc """
   Returns the port on which the server listens for connection.
   """
-  @spec get_port(pid()) :: :inet.port_number()
-  def get_port(server_pid) do
-    GenServer.call(server_pid, :get_port)
+  @spec get_port(server_identifier()) :: :inet.port_number()
+  def get_port(server_identifier) do
+    GenServer.call(server_identifier, :get_port)
   end
 
   @impl true
