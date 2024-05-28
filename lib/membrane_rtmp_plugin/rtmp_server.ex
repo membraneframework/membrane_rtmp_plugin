@@ -38,7 +38,7 @@ defmodule Membrane.RTMP.Server do
   """
   @spec subscribe(pid() | atom(), String.t(), String.t()) :: :ok
   def subscribe(server_pid, app, stream_key) do
-    send(server_pid, {:subscribe, app, stream_key, self()})
+    GenServer.cast(server_pid, {:subscribe, app, stream_key, self()})
     :ok
   end
 
@@ -69,15 +69,24 @@ defmodule Membrane.RTMP.Server do
   end
 
   @impl true
-  def handle_info({:register_client, app, stream_key, client_handler_pid}, state) do
-    state = put_in(state, [:mapping, {app, stream_key}], client_handler_pid)
+  def handle_call(:get_port, from, state) do
+    if state.port do
+      {:reply, state.port, state}
+    else
+      {:noreply, %{state | to_reply: [from | state.to_reply]}}
+    end
+  end
+
+  @impl true
+  def handle_cast({:subscribe, app, stream_key, subscriber_pid}, state) do
+    state = put_in(state, [:subscriptions, {app, stream_key}], subscriber_pid)
     maybe_send_subscription(app, stream_key, state)
     {:noreply, state}
   end
 
   @impl true
-  def handle_info({:subscribe, app, stream_key, subscriber_pid}, state) do
-    state = put_in(state, [:subscriptions, {app, stream_key}], subscriber_pid)
+  def handle_info({:register_client, app, stream_key, client_handler_pid}, state) do
+    state = put_in(state, [:mapping, {app, stream_key}], client_handler_pid)
     maybe_send_subscription(app, stream_key, state)
     {:noreply, state}
   end
@@ -86,15 +95,6 @@ defmodule Membrane.RTMP.Server do
   def handle_info({:port, port}, state) do
     Enum.each(state.to_reply, &GenServer.reply(&1, port))
     {:noreply, %{state | port: port, to_reply: []}}
-  end
-
-  @impl true
-  def handle_call(:get_port, from, state) do
-    if state.port do
-      {:reply, state.port, state}
-    else
-      {:noreply, %{state | to_reply: [from | state.to_reply]}}
-    end
   end
 
   defp maybe_send_subscription(app, stream_key, state) do
