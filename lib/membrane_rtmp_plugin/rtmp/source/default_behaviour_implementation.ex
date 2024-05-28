@@ -4,9 +4,9 @@ defmodule Membrane.RTMP.Source.DefaultBehaviourImplementation do
   `Membrane.RTMP.Source` element.
   """
 
-  defstruct [:controlling_process]
-
   @behaviour Membrane.RTMP.Server.ClientHandlerBehaviour
+
+  defstruct [:controlling_process]
 
   @impl true
   def handle_init(opts) do
