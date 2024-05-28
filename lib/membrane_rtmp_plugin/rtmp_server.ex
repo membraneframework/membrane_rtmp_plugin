@@ -43,6 +43,22 @@ defmodule Membrane.RTMP.Server do
   end
 
   @doc """
+  Awaits for the client handler of the connection to which the user has previously subscribed.
+
+  Note: this function call is blocking!
+  Note: first you need to call `#{__MODULE__}.subscribe/3` to subscribe
+  for a given `app` and `stream_key`.
+  """
+  @spec subscribe(pid() | atom(), non_neg_integer()) :: {:ok, pid()} | :error
+  def await_subscription(server_pid, timeout \\ 5_000) do
+    receive do
+      {:client_handler, client_handler} -> {:ok, client_handler}
+    after
+      timeout -> :error
+    end
+  end
+
+  @doc """
   Returns the port on which the server listens for connection.
   """
   @spec get_port(pid()) :: :inet.port_number()
