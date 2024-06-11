@@ -69,7 +69,23 @@ In order to successfully build and install the plugin, you need to have **ffmpeg
 Server-side example, in which Membrane element will act as an RTMP server and receive the stream, can be found under [`examples/source.exs`](examples/source.exs). Run it with:
 
 ```bash
-elixir examples/source.exs
+mix run examples/source.exs
+```
+
+When the server is ready you can connect to it with RTMP. If you just want to test it, you can use FFmpeg:
+
+```bash
+ffmpeg -re -i test/fixtures/testsrc.flv -f flv -c:v copy -c:a copy rtmp://localhost:1935/app/stream_key
+```
+
+### RTMP receive with standalone RTMP server
+
+If you want to see how you could setup the `Membrane.RTMP.Server` on your own and use it
+with cooperation with the `Membane.RTMP.SourceBin`, take a look at [`examples/source_with_standalone_server.exs`](examples/source_with_standalone_server.exs)
+Run it with:
+
+```bash
+mix run examples/source.exs
 ```
 
 When the server is ready you can connect to it with RTMP. If you just want to test it, you can use FFmpeg:
@@ -83,13 +99,13 @@ ffmpeg -re -i test/fixtures/testsrc.flv -f flv -c:v copy -c:a copy rtmp://localh
 Streaming implementation example is provided with the following [`examples/sink.exs`](examples/sink.exs). Run it with:
 
 ```bash
-elixir examples/sink.exs
+mix run examples/sink.exs
 ```
 
 If you are interested in streaming only a single track. e.g. video, use [`examples/sink_video.exs`](examples/sink_video.exs) instead:
 
 ```bash
-elixir examples/sink_video.exs
+mix run examples/sink_video.exs
 ```
 
 It will connect to RTMP server provided via URL and stream H264 video and AAC audio.

@@ -11,7 +11,7 @@ defmodule Pipeline do
   def handle_init(_ctx, opts) do
     structure = [
       child(:source, %Membrane.RTMP.SourceBin{
-        url: "rtmp://127.0.0.1:1935/app/stream_key"
+        client_handler: opts[:client_handler]
       })
       |> via_out(:audio)
       |> child(:audio_parser, %Membrane.AAC.Parser{
@@ -37,7 +37,7 @@ defmodule Pipeline do
   @impl true
   def handle_element_end_of_stream(:sink, _pad, _ctx, state) do
     send(state.controller_pid, :eos)
-    {[], state}
+    {[terminate: :normal], state}
   end
 
   @impl true
@@ -46,15 +46,38 @@ defmodule Pipeline do
   end
 end
 
-# Start a pipeline with `Membrane.RTMP.Source` that will spawn an RTMP server waiting for
-# the client connection on given URL
-{:ok, _supervisor, pipeline} = Membrane.Pipeline.start_link(Pipeline, controller_pid: self())
+# Run the standalone server
+{:ok, server} =
+  Membrane.RTMP.Server.start_link(
+    behaviour: %Membrane.RTMP.Source.ClientHandler{controlling_process: self()},
+    port: 1935,
+    use_ssl?: false
+  )
+
+# Subscribe to receive client handler that connected to the
+# server with given app id and stream key
+:ok = Membrane.RTMP.Server.subscribe(server, "app", "stream_key")
+
+# Wait for the client handler
+client_handler =
+  receive do
+    {:client_handler, client_handler} ->
+      client_handler
+  end
+
+# Start the pipeline and provide it with the client_handler
+
+{:ok, _supervisor, _pipeline} =
+  Membrane.Pipeline.start_link(Pipeline, client_handler: client_handler, controller_pid: self())
 
 # Wait for end of stream
 :ok =
   receive do
     :eos -> :ok
   end
+
+# Terminate the server
+Process.exit(server, :normal)
 
 # Terminate the pipeline
 :ok = Membrane.Pipeline.terminate(pipeline)

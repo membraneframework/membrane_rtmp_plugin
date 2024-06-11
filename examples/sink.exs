@@ -5,14 +5,6 @@
 
 Logger.configure(level: :info)
 
-Mix.install([
-  :membrane_realtimer_plugin,
-  :membrane_hackney_plugin,
-  :membrane_h264_plugin,
-  :membrane_aac_plugin,
-  {:membrane_rtmp_plugin, path: __DIR__ |> Path.join("..") |> Path.expand()}
-])
-
 defmodule Example do
   use Membrane.Pipeline
 
