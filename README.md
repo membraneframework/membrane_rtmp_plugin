@@ -75,7 +75,7 @@ elixir examples/source.exs
 When the server is ready you can connect to it with RTMP. If you just want to test it, you can use FFmpeg:
 
 ```bash
-ffmpeg -re -i test/fixtures/testsrc.flv -f flv -c:v copy -c:a copy rtmp://localhost:5000/app/stream_key
+ffmpeg -re -i test/fixtures/testsrc.flv -f flv -c:v copy -c:a copy rtmp://localhost:1935/app/stream_key
 ```
 
 ### Streaming with RTMP

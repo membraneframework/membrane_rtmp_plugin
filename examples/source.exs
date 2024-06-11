@@ -16,10 +16,10 @@ defmodule Pipeline do
   @output_file "received.flv"
 
   @impl true
-  def handle_init(_ctx, socket: socket) do
+  def handle_init(_ctx, opts) do
     structure = [
       child(:source, %Membrane.RTMP.SourceBin{
-        socket: socket
+        url: "rtmp://127.0.0.1:1935/app/stream_key"
       })
       |> via_out(:audio)
       |> child(:audio_parser, %Membrane.AAC.Parser{
@@ -38,43 +38,14 @@ defmodule Pipeline do
       |> get_child(:muxer)
     ]
 
-    {[spec: structure], %{}}
-  end
-
-  # Once the source initializes, we grant it the control over the tcp socket
-  @impl true
-  def handle_child_notification(
-        {:socket_control_needed, _socket, _source} = notification,
-        :source,
-        _ctx,
-        state
-      ) do
-    send(self(), notification)
-
-    {[], state}
-  end
-
-  def handle_child_notification(_notification, _child, _ctx, state) do
-    {[], state}
-  end
-
-  @impl true
-  def handle_info({:socket_control_needed, socket, source} = notification, _ctx, state) do
-    case Membrane.RTMP.SourceBin.pass_control(socket, source) do
-      :ok ->
-        :ok
-
-      {:error, :not_owner} ->
-        Process.send_after(self(), notification, 200)
-    end
-
-    {[], state}
+    {[spec: structure], %{controller_pid: opts[:controller_pid]}}
   end
 
   # The rest of the module is used for self-termination of the pipeline after processing finishes
   @impl true
   def handle_element_end_of_stream(:sink, _pad, _ctx, state) do
-    {[terminate: :shutdown], state}
+    send(state.controller_pid, :eos)
+    {[terminate: :normal], state}
   end
 
   @impl true
@@ -83,44 +54,9 @@ defmodule Pipeline do
   end
 end
 
-defmodule Example do
-  @server_ip {127, 0, 0, 1}
-  @server_port 5000
+{:ok, _supervisor, _pipeline} = Membrane.Pipeline.start_link(Pipeline, controller_pid: self())
 
-  def run() do
-    parent = self()
-
-    server_options = %Membrane.RTMP.Source.TcpServer{
-      port: @server_port,
-      listen_options: [
-        :binary,
-        packet: :raw,
-        active: false,
-        ip: @server_ip
-      ],
-      socket_handler: fn socket ->
-        # On new connection a pipeline is started
-        {:ok, _supervisor, pipeline} = Membrane.Pipeline.start_link(Pipeline, socket: socket)
-        send(parent, {:pipeline_spawned, pipeline})
-        {:ok, pipeline}
-      end
-    }
-
-    Membrane.RTMP.Source.TcpServer.start_link(server_options)
-
-    pipeline =
-      receive do
-        {:pipeline_spawned, pid} ->
-          pid
-      end
-
-    ref = Process.monitor(pipeline)
-
-    receive do
-      {:DOWN, ^ref, :process, _obj, _reason} ->
-        :ok
-    end
+:ok =
+  receive do
+    :eos -> :ok
   end
-end
-
-Example.run()
