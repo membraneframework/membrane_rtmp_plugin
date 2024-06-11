@@ -2,11 +2,17 @@ defmodule Membrane.RTMP.Source do
   @moduledoc """
   Membrane Element for receiving an RTMP stream. Acts as a RTMP Server.
   This implementation is limited to only AAC and H264 streams.
+
+  The source can be used in the following two scenarios:
+  * by providing the URL on which the client is expected to connect - note, that if the client doesn't
+  connect on this URL, the source won't complete its setup
+  * by spawning `Membrane.RTMP.Server`, subscribing for a given app and stream key on which the client
+  will connect, waiting for a client handler and passing the client handler to the `#{inspect(__MODULE__)}`.
   """
   use Membrane.Source
   require Membrane.Logger
-  alias Membrane.RTMP.Source.ClientHandler, as: SourceClientHandler
   alias Membrane.RTMP.Server.ClientHandler
+  alias Membrane.RTMP.Source.ClientHandler, as: SourceClientHandler
 
   def_output_pad :output,
     availability: :always,
@@ -14,8 +20,22 @@ defmodule Membrane.RTMP.Source do
     flow_control: :manual,
     demand_unit: :buffers
 
-  def_options client_handler: [spec: pid(), default: nil],
-              url: [spec: String.t(), default: nil]
+  def_options client_handler: [
+                default: nil,
+                spec: pid(),
+                description: """
+                A pid of a process acting as a client handler.
+                Can be gained with the use of `Membrane.RTMP.Server`.
+                """
+              ],
+              url: [
+                default: nil,
+                spec: String.t(),
+                description: """
+                An URL on which the client is expected to connect, for example:
+                rtmp://127.0.0.1:1935/app/stream_key
+                """
+              ]
 
   defguardp is_builtin_server(opts)
             when not is_nil(opts.url) and is_nil(opts.client_handler)

@@ -4,6 +4,12 @@ defmodule Membrane.RTMP.SourceBin do
 
   Outputs single audio and video which are ready for further processing with Membrane Elements.
   At this moment only AAC and H264 codecs are supported.
+
+  The bin can be used in the following two scenarios:
+  * by providing the URL on which the client is expected to connect - note, that if the client doesn't
+  connect on this URL, the bin won't complete its setup
+  * by spawning `Membrane.RTMP.Server`, subscribing for a given app and stream key on which the client
+  will connect, waiting for a client handler and passing the client handler to the `#{inspect(__MODULE__)}`.
   """
   use Membrane.Bin
 
@@ -17,8 +23,22 @@ defmodule Membrane.RTMP.SourceBin do
     accepted_format: AAC,
     availability: :always
 
-  def_options client_handler: [default: nil],
-              url: [default: nil]
+  def_options client_handler: [
+                default: nil,
+                spec: pid(),
+                description: """
+                A pid of a process acting as a client handler.
+                Can be gained with the use of `Membrane.RTMP.Server`.
+                """
+              ],
+              url: [
+                default: nil,
+                spec: String.t(),
+                description: """
+                An URL on which the client is expected to connect, for example:
+                rtmp://127.0.0.1:1935/app/stream_key
+                """
+              ]
 
   @impl true
   def handle_init(_ctx, %__MODULE__{} = opts) do
