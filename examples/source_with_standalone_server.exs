@@ -67,7 +67,7 @@ client_handler =
 
 # Start the pipeline and provide it with the client_handler
 
-{:ok, _supervisor, _pipeline} =
+{:ok, _supervisor, pipeline} =
   Membrane.Pipeline.start_link(Pipeline, client_handler: client_handler, controller_pid: self())
 
 # Wait for end of stream
