@@ -5,8 +5,8 @@ defmodule Membrane.RTMP.Source do
   """
   use Membrane.Source
   require Membrane.Logger
+  alias Membrane.RTMP.Source.ClientHandler, as: SourceClientHandler
   alias Membrane.RTMP.Server.ClientHandler
-  alias Membrane.RTMP.Source.DefaultBehaviourImplementation
 
   def_output_pad :output,
     availability: :always,
@@ -61,33 +61,12 @@ defmodule Membrane.RTMP.Source do
   def handle_setup(_ctx, %{mode: :builtin_server} = state) do
     {use_ssl?, port, app, stream_key} = parse_url(state.url)
 
-    listen_options =
-      if state.use_ssl? do
-        certfile = System.get_env("CERT_PATH")
-        keyfile = System.get_env("CERT_KEY_PATH")
-
-        [
-          :binary,
-          packet: :raw,
-          active: false,
-          certfile: certfile,
-          keyfile: keyfile
-        ]
-      else
-        [
-          :binary,
-          packet: :raw,
-          active: false
-        ]
-      end
-
     {:ok, server_pid} =
-      Membrane.RTMP.Server.start_link(%Membrane.RTMP.Server{
-        behaviour: %DefaultBehaviourImplementation{controlling_process: self()},
+      Membrane.RTMP.Server.start_link(
+        behaviour: %SourceClientHandler{controlling_process: self()},
         port: port,
-        use_ssl?: use_ssl?,
-        listen_options: listen_options
-      })
+        use_ssl?: use_ssl?
+      )
 
     state = %{state | app: app, stream_key: stream_key, server: server_pid}
     {[], state}
@@ -105,7 +84,7 @@ defmodule Membrane.RTMP.Source do
         {:output, %Membrane.RemoteStream{content_format: Membrane.FLV, type: :bytestream}}
     ]
 
-    :ok = DefaultBehaviourImplementation.request_for_data(state.client_handler)
+    :ok = SourceClientHandler.request_for_data(state.client_handler)
 
     {stream_format, state}
   end
@@ -140,7 +119,7 @@ defmodule Membrane.RTMP.Source do
         %{client_handler: client_handler, mode: :builtin_server} = state
       ) do
     :ok = ClientHandler.demand_data(client_handler, size)
-    :ok = DefaultBehaviourImplementation.request_for_data(state.client_handler)
+    :ok = SourceClientHandler.request_for_data(client_handler)
     {[], state}
   end
 

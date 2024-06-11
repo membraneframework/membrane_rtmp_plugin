@@ -215,35 +215,14 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
          port \\ 0,
          use_ssl? \\ false
        ) do
-    listen_options =
-      if use_ssl? do
-        certfile = System.get_env("CERT_PATH")
-        keyfile = System.get_env("CERT_KEY_PATH")
-
-        [
-          :binary,
-          packet: :raw,
-          active: false,
-          certfile: certfile,
-          keyfile: keyfile
-        ]
-      else
-        [
-          :binary,
-          packet: :raw,
-          active: false
-        ]
-      end
-
     {:ok, server_pid} =
-      Membrane.RTMP.Server.start_link(%Membrane.RTMP.Server{
-        behaviour: %Membrane.RTMP.Source.DefaultBehaviourImplementation{
+      Membrane.RTMP.Server.start_link(
+        behaviour: %Membrane.RTMP.Source.ClientHandler{
           controlling_process: self()
         },
         port: port,
-        use_ssl?: use_ssl?,
-        listen_options: listen_options
-      })
+        use_ssl?: use_ssl?
+      )
 
     {:ok, assigned_port} = Membrane.RTMP.Server.get_port(server_pid)
 

@@ -8,27 +8,25 @@ defmodule Membrane.RTMP.Server do
 
   alias Membrane.RTMP.Server.ClientHandlerBehaviour
 
-  @enforce_keys [:behaviour, :port, :use_ssl?, :listen_options]
-  defstruct @enforce_keys
-
   @typedoc """
   Defines options for the RTMP server.
   """
-  @type t :: %__MODULE__{
+  @type t :: [
           behaviour: ClientHandlerBehaviour.t(),
           port: :inet.port_number(),
           use_ssl?: boolean(),
-          listen_options: any()
-        }
+          name: atom() | nil
+        ]
 
   @type server_identifier :: pid() | atom()
 
   @doc """
   Starts the RTMP server.
   """
-  @spec start_link(server_options :: t(), name :: atom()) :: GenServer.on_start()
-  def start_link(server_options, name \\ nil) do
-    gen_server_opts = if name == nil, do: [], else: [name: name]
+  @spec start_link(server_options :: t()) :: GenServer.on_start()
+  def start_link(server_options) do
+    gen_server_opts = if server_options[:name] == nil, do: [], else: [name: server_options[:name]]
+    server_options = Enum.into(server_options, %{})
     GenServer.start_link(__MODULE__, server_options, gen_server_opts)
   end
 

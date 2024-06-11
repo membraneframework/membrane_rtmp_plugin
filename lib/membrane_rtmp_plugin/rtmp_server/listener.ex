@@ -9,7 +9,7 @@ defmodule Membrane.RTMP.Server.Listener do
 
   @spec run(
           options :: %{
-            use_ssl?: boolean,
+            use_ssl?: boolean(),
             socket_module: :gen_tcp | :ssl,
             server: pid(),
             port: non_neg_integer()
@@ -18,7 +18,27 @@ defmodule Membrane.RTMP.Server.Listener do
   def run(options) do
     options = Map.merge(options, %{socket_module: if(options.use_ssl?, do: :ssl, else: :gen_tcp)})
 
-    {:ok, socket} = options.socket_module.listen(options.port, options.listen_options)
+    listen_options =
+      if options.use_ssl? do
+        certfile = System.get_env("CERT_PATH")
+        keyfile = System.get_env("CERT_KEY_PATH")
+
+        [
+          :binary,
+          packet: :raw,
+          active: false,
+          certfile: certfile,
+          keyfile: keyfile
+        ]
+      else
+        [
+          :binary,
+          packet: :raw,
+          active: false
+        ]
+      end
+
+    {:ok, socket} = options.socket_module.listen(options.port, listen_options)
     send(options.server, {:port, :inet.port(socket)})
 
     accept_loop(socket, options)
