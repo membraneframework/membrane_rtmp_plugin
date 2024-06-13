@@ -48,6 +48,9 @@ defmodule Membrane.RTMP.MessageHandler do
       header_sent?: false,
       events: [],
       receiver_pid: nil,
+      #
+      publish_msg: nil,
+      publish_header: nil,
       # how many times the Source tries to get control of the socket
       socket_retries: 3,
       # epoch required for performing a handshake with the pipeline
@@ -70,6 +73,14 @@ defmodule Membrane.RTMP.MessageHandler do
     |> then(fn state ->
       {%{state | events: []}, Enum.reverse(state.events)}
     end)
+  end
+
+  @spec send_publish_success(map()) :: {map(), list()}
+  def send_publish_success(state) do
+    Responses.publish_success(state.publish_msg.stream_key)
+    |> send_rtmp_payload(state.socket, chunk_stream_id: 3, stream_id: state.publish_header.stream_id)
+
+    {%{state | events: []}, [{:published, state.publish_msg} | state.events]}
   end
 
   # Expected flow of messages:
@@ -140,13 +151,11 @@ defmodule Membrane.RTMP.MessageHandler do
   defp do_handle_client_message(%Messages.Publish{} = publish_msg, %Header{} = header, state) do
     %Messages.UserControl{event_type: @stream_begin_type, data: <<0, 0, 0, 1>>}
     |> send_rtmp_payload(state.socket, chunk_stream_id: 2)
+    # at this point abort handshake and ask server if someone is subscribed to this url
+    IO.inspect(publish_msg.stream_key, label: "paused handshake for")
 
-    # THIS
-    Responses.publish_success(publish_msg.stream_key)
-    |> send_rtmp_payload(state.socket, chunk_stream_id: 3, stream_id: header.stream_id)
-
-    state = %{state | events: [{:published, publish_msg} | state.events]}
-    {:cont, state}
+    # state = send_publish_success(publish_msg, header.stream_id, state)
+    {:halt, %{state | publish_msg: publish_msg, publish_header: header}}
   end
 
   # A message containing stream metadata

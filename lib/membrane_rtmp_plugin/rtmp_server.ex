@@ -107,6 +107,20 @@ defmodule Membrane.RTMP.Server do
   end
 
   @impl true
+  def handle_info({:client_register_attempt, app, stream_key, client_handler_pid}, state) do
+    IO.inspect("handle_info :client_register_attempt #{app} #{stream_key}")
+    # check if anyone is subscribed to app and stream_key
+    if state.subscriptions[{app, stream_key}] != nil do
+      IO.inspect("sub exist")
+      # respond to client handler that subscription exist
+      send(client_handler_pid, :sub_exists)
+    end
+
+    # maybe_send_subscription(app, stream_key, state)
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_info({:port, port}, state) do
     Enum.each(state.to_reply, &GenServer.reply(&1, port))
     {:noreply, %{state | port: port, to_reply: []}}
@@ -114,7 +128,6 @@ defmodule Membrane.RTMP.Server do
 
   defp maybe_send_subscription(app, stream_key, state) do
     if state.subscriptions[{app, stream_key}] != nil and state.client_reference_mapping[{app, stream_key}] != nil do
-      send(state.client_reference_mapping[{app, stream_key}], :subscribed)
       send(
         state.subscriptions[{app, stream_key}],
         {:client_ref, state.client_reference_mapping[{app, stream_key}], app, stream_key}
