@@ -70,6 +70,12 @@ defmodule Membrane.RTMP.Server.ClientHandler do
   end
 
   @impl true
+  def handle_info(:subscribed, state) do
+    IO.puts("siemapl")
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_info(:control_granted, state) do
     request_data(state)
     {:noreply, state}

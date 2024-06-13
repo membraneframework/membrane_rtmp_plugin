@@ -113,8 +113,8 @@ defmodule Membrane.RTMP.Server do
   end
 
   defp maybe_send_subscription(app, stream_key, state) do
-    if state.subscriptions[{app, stream_key}] != nil and
-         state.client_reference_mapping[{app, stream_key}] != nil do
+    if state.subscriptions[{app, stream_key}] != nil and state.client_reference_mapping[{app, stream_key}] != nil do
+      send(state.client_reference_mapping[{app, stream_key}], :subscribed)
       send(
         state.subscriptions[{app, stream_key}],
         {:client_ref, state.client_reference_mapping[{app, stream_key}], app, stream_key}

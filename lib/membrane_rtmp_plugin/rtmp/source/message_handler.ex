@@ -141,6 +141,7 @@ defmodule Membrane.RTMP.MessageHandler do
     %Messages.UserControl{event_type: @stream_begin_type, data: <<0, 0, 0, 1>>}
     |> send_rtmp_payload(state.socket, chunk_stream_id: 2)
 
+    # THIS
     Responses.publish_success(publish_msg.stream_key)
     |> send_rtmp_payload(state.socket, chunk_stream_id: 3, stream_id: header.stream_id)
 
