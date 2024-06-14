@@ -11,8 +11,8 @@ defmodule Membrane.RTMP.Source do
   """
   use Membrane.Source
   require Membrane.Logger
-  alias Membrane.RTMP.Server.ClientHandler
   alias __MODULE__.ClientHandler, as: SourceClientHandler
+  alias Membrane.RTMP.Server.ClientHandler
 
   def_output_pad :output,
     availability: :always,
