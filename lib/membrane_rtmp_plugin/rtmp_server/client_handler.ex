@@ -38,7 +38,8 @@ defmodule Membrane.RTMP.Server.ClientHandler do
        stream_key: nil,
        server: opts.server,
        buffers_demanded: 0,
-       published?: false
+       published?: false,
+       client_register_attempt_made?: false
      }}
   end
 
@@ -104,11 +105,14 @@ defmodule Membrane.RTMP.Server.ClientHandler do
     {message_handler_state, events} =
       MessageHandler.handle_client_messages(messages, state.message_handler_state)
 
-    if message_handler_state.publish_msg != nil do
+    state = if message_handler_state.publish_msg != nil and not state.client_register_attempt_made? do
       %{publish_msg: %Membrane.RTMP.Messages.Publish{stream_key: stream_key}} = message_handler_state
-      IO.inspect(stream_key, label: "stream_key")
+      IO.inspect(stream_key, label: "client_handler.ex stream_key")
       # ask server if someone is subscribed to this
       send(state.server, {:client_register_attempt, state.app, stream_key, self()})
+      %{state | client_register_attempt_made?: true}
+    else
+      state
     end
 
     state = Enum.reduce(events, state, &handle_event/2)

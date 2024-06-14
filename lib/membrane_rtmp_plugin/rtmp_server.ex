@@ -108,10 +108,9 @@ defmodule Membrane.RTMP.Server do
 
   @impl true
   def handle_info({:client_register_attempt, app, stream_key, client_handler_pid}, state) do
-    IO.inspect("handle_info :client_register_attempt #{app} #{stream_key}")
+    IO.inspect("rtmp_server.ex handle_info :client_register_attempt #{app} #{stream_key}")
     # check if anyone is subscribed to app and stream_key
     if state.subscriptions[{app, stream_key}] != nil do
-      IO.inspect("sub exist")
       # respond to client handler that subscription exist
       send(client_handler_pid, :sub_exists)
     end
