@@ -7,12 +7,12 @@ defmodule Membrane.RTMP.Source do
   * by providing the URL on which the client is expected to connect - note, that if the client doesn't
   connect on this URL, the source won't complete its setup
   * by spawning `Membrane.RTMP.Server`, subscribing for a given app and stream key on which the client
-  will connect, waiting for a client handler and passing the client handler to the `#{inspect(__MODULE__)}`.
+  will connect, waiting for a client reference and passing the client reference to the `#{inspect(__MODULE__)}`.
   """
   use Membrane.Source
   require Membrane.Logger
   alias Membrane.RTMP.Server.ClientHandler
-  alias Membrane.RTMP.Source.ClientHandler, as: SourceClientHandler
+  alias __MODULE__.ClientHandler, as: SourceClientHandler
 
   def_output_pad :output,
     availability: :always,
@@ -20,11 +20,11 @@ defmodule Membrane.RTMP.Source do
     flow_control: :manual,
     demand_unit: :buffers
 
-  def_options client_handler: [
+  def_options client_ref: [
                 default: nil,
                 spec: pid(),
                 description: """
-                A pid of a process acting as a client handler.
+                A pid of a process acting as a client reference.
                 Can be gained with the use of `Membrane.RTMP.Server`.
                 """
               ],
@@ -38,10 +38,10 @@ defmodule Membrane.RTMP.Source do
               ]
 
   defguardp is_builtin_server(opts)
-            when not is_nil(opts.url) and is_nil(opts.client_handler)
+            when not is_nil(opts.url) and is_nil(opts.client_ref)
 
   defguardp is_external_server(opts)
-            when not is_nil(opts.client_handler) and
+            when not is_nil(opts.client_ref) and
                    is_nil(opts.url)
 
   @impl true
@@ -52,7 +52,7 @@ defmodule Membrane.RTMP.Source do
       server: nil,
       url: opts.url,
       mode: :builtin_server,
-      client_handler: nil,
+      client_ref: nil,
       use_ssl?: nil
     }
 
@@ -63,7 +63,7 @@ defmodule Membrane.RTMP.Source do
   def handle_init(_ctx, opts) when is_external_server(opts) do
     state = %{
       mode: :external_server,
-      client_handler: opts.client_handler
+      client_ref: opts.client_ref
     }
 
     {[], state}
@@ -83,7 +83,7 @@ defmodule Membrane.RTMP.Source do
 
     {:ok, server_pid} =
       Membrane.RTMP.Server.start_link(
-        behaviour: %SourceClientHandler{controlling_process: self()},
+        handler: %SourceClientHandler{controlling_process: self()},
         port: port,
         use_ssl?: use_ssl?
       )
@@ -104,7 +104,7 @@ defmodule Membrane.RTMP.Source do
         {:output, %Membrane.RemoteStream{content_format: Membrane.FLV, type: :bytestream}}
     ]
 
-    :ok = SourceClientHandler.request_for_data(state.client_handler)
+    :ok = SourceClientHandler.request_for_data(state.client_ref)
 
     {stream_format, state}
   end
@@ -125,7 +125,7 @@ defmodule Membrane.RTMP.Source do
         _size,
         :buffers,
         _ctx,
-        %{client_handler: nil, mode: :builtin_server} = state
+        %{client_ref: nil, mode: :builtin_server} = state
       ) do
     {[], state}
   end
@@ -136,10 +136,10 @@ defmodule Membrane.RTMP.Source do
         size,
         :buffers,
         _ctx,
-        %{client_handler: client_handler, mode: :builtin_server} = state
+        %{client_ref: client_ref, mode: :builtin_server} = state
       ) do
-    :ok = ClientHandler.demand_data(client_handler, size)
-    :ok = SourceClientHandler.request_for_data(client_handler)
+    :ok = ClientHandler.demand_data(client_ref, size)
+    :ok = SourceClientHandler.request_for_data(client_ref)
     {[], state}
   end
 
@@ -149,9 +149,9 @@ defmodule Membrane.RTMP.Source do
         size,
         :buffers,
         _ctx,
-        %{client_handler: client_handler, mode: :external_server} = state
+        %{client_ref: client_ref, mode: :external_server} = state
       ) do
-    :ok = ClientHandler.demand_data(client_handler, size)
+    :ok = ClientHandler.demand_data(client_ref, size)
     {[], state}
   end
 
@@ -163,8 +163,12 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_info({:client_handler, client_handler_pid}, _ctx, %{mode: :builtin_server} = state) do
-    {[redemand: :output], %{state | client_handler: client_handler_pid}}
+  def handle_info(
+        {:client_ref, client_ref_pid, _app, _stream_key},
+        _ctx,
+        %{mode: :builtin_server} = state
+      ) do
+    {[redemand: :output], %{state | client_ref: client_ref_pid}}
   end
 
   @impl true

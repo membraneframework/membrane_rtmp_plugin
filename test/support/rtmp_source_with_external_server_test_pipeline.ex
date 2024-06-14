@@ -7,11 +7,11 @@ defmodule Membrane.RTMP.Source.WithExternalServerTestPipeline do
 
   @impl true
   def handle_init(_ctx, %{
-        client_handler: client_handler
+        client_ref: client_ref
       }) do
     structure = [
       child(:src, %SourceBin{
-        client_handler: client_handler
+        client_ref: client_ref
       }),
       child(:audio_sink, Testing.Sink),
       child(:video_sink, Testing.Sink),

@@ -8,7 +8,7 @@ defmodule Pipeline do
   @output_file "received.flv"
 
   @impl true
-  def handle_init(_ctx, opts) do
+  def handle_init(_ctx, _opts) do
     structure = [
       child(:source, %Membrane.RTMP.SourceBin{
         url: "rtmp://127.0.0.1:1935/app/stream_key"
@@ -30,14 +30,13 @@ defmodule Pipeline do
       |> get_child(:muxer)
     ]
 
-    {[spec: structure], %{controller_pid: opts[:controller_pid]}}
+    {[spec: structure], %{}}
   end
 
   # The rest of the module is used for self-termination of the pipeline after processing finishes
   @impl true
   def handle_element_end_of_stream(:sink, _pad, _ctx, state) do
-    send(state.controller_pid, :eos)
-    {[], state}
+    {[terminate: :normal], state}
   end
 
   @impl true
@@ -48,13 +47,12 @@ end
 
 # Start a pipeline with `Membrane.RTMP.Source` that will spawn an RTMP server waiting for
 # the client connection on given URL
-{:ok, _supervisor, pipeline} = Membrane.Pipeline.start_link(Pipeline, controller_pid: self())
+{:ok, _supervisor, pipeline} = Membrane.Pipeline.start_link(Pipeline)
 
-# Wait for end of stream
+# Wait for the pipeline to terminate itself
+ref = Process.monitor(pipeline)
+
 :ok =
   receive do
-    :eos -> :ok
+    {:DOWN, ^ref, _process, ^pipeline, :normal} -> :ok
   end
-
-# Terminate the pipeline
-:ok = Membrane.Pipeline.terminate(pipeline)

@@ -75,8 +75,8 @@ defmodule Membrane.RTMP.Source.ClientHandler do
   end
 
   @spec request_for_data(pid()) :: :ok
-  def request_for_data(client_handler_pid) do
-    send(client_handler_pid, {:send_me_data, self()})
+  def request_for_data(client_reference) do
+    send(client_reference, {:send_me_data, self()})
     :ok
   end
 end

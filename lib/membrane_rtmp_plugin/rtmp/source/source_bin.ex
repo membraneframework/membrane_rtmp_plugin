@@ -9,7 +9,7 @@ defmodule Membrane.RTMP.SourceBin do
   * by providing the URL on which the client is expected to connect - note, that if the client doesn't
   connect on this URL, the bin won't complete its setup
   * by spawning `Membrane.RTMP.Server`, subscribing for a given app and stream key on which the client
-  will connect, waiting for a client handler and passing the client handler to the `#{inspect(__MODULE__)}`.
+  will connect, waiting for a client reference and passing the client reference to the `#{inspect(__MODULE__)}`.
   """
   use Membrane.Bin
 
@@ -23,11 +23,11 @@ defmodule Membrane.RTMP.SourceBin do
     accepted_format: AAC,
     availability: :always
 
-  def_options client_handler: [
+  def_options client_ref: [
                 default: nil,
                 spec: pid(),
                 description: """
-                A pid of a process acting as a client handler.
+                A pid of a process acting as a client reference.
                 Can be gained with the use of `Membrane.RTMP.Server`.
                 """
               ],
@@ -44,7 +44,7 @@ defmodule Membrane.RTMP.SourceBin do
   def handle_init(_ctx, %__MODULE__{} = opts) do
     structure = [
       child(:src, %RTMP.Source{
-        client_handler: opts.client_handler,
+        client_ref: opts.client_ref,
         url: opts.url
       })
       |> child(:demuxer, Membrane.FLV.Demuxer),

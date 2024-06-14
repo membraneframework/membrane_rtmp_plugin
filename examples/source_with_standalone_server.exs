@@ -11,7 +11,7 @@ defmodule Pipeline do
   def handle_init(_ctx, opts) do
     structure = [
       child(:source, %Membrane.RTMP.SourceBin{
-        client_handler: opts[:client_handler]
+        client_ref: opts[:client_ref]
       })
       |> via_out(:audio)
       |> child(:audio_parser, %Membrane.AAC.Parser{
@@ -30,13 +30,12 @@ defmodule Pipeline do
       |> get_child(:muxer)
     ]
 
-    {[spec: structure], %{controller_pid: opts[:controller_pid]}}
+    {[spec: structure], %{}}
   end
 
   # The rest of the module is used for self-termination of the pipeline after processing finishes
   @impl true
   def handle_element_end_of_stream(:sink, _pad, _ctx, state) do
-    send(state.controller_pid, :eos)
     {[terminate: :normal], state}
   end
 
@@ -46,38 +45,36 @@ defmodule Pipeline do
   end
 end
 
+# The client will connect on `rtmp://localhost:1935/app/stream_key`
+port = 1935
+app = "app"
+stream_key = "stream_key"
+
 # Run the standalone server
 {:ok, server} =
   Membrane.RTMP.Server.start_link(
-    behaviour: %Membrane.RTMP.Source.ClientHandler{controlling_process: self()},
-    port: 1935,
+    handler: %Membrane.RTMP.Source.ClientHandler{controlling_process: self()},
+    port: port,
     use_ssl?: false
   )
 
-# Subscribe to receive client handler that connected to the
+# Subscribe to receive client reference that connected to the
 # server with given app id and stream key
-:ok = Membrane.RTMP.Server.subscribe(server, "app", "stream_key")
+:ok = Membrane.RTMP.Server.subscribe(server, app, stream_key)
 
-# Wait for the client handler
-client_handler =
-  receive do
-    {:client_handler, client_handler} ->
-      client_handler
-  end
-
-# Start the pipeline and provide it with the client_handler
-
+# Wait for the client reference
+{:ok, client_ref} = Membrane.RTMP.Server.await_subscription(app, stream_key)
+# Start the pipeline and provide it with the client_ref
 {:ok, _supervisor, pipeline} =
-  Membrane.Pipeline.start_link(Pipeline, client_handler: client_handler, controller_pid: self())
+  Membrane.Pipeline.start_link(Pipeline, client_ref: client_ref)
 
-# Wait for end of stream
+# Wait for the pipeline to terminate itself
+ref = Process.monitor(pipeline)
+
 :ok =
   receive do
-    :eos -> :ok
+    {:DOWN, ^ref, _process, ^pipeline, :normal} -> :ok
   end
 
 # Terminate the server
 Process.exit(server, :normal)
-
-# Terminate the pipeline
-:ok = Membrane.Pipeline.terminate(pipeline)

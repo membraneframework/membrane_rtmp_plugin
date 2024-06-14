@@ -47,21 +47,21 @@ defmodule Membrane.RTMP.Server.Listener do
   defp accept_loop(socket, options) do
     {:ok, client} = :gen_tcp.accept(socket)
 
-    {:ok, client_handler} =
+    {:ok, client_reference} =
       GenServer.start_link(ClientHandler,
         socket: client,
         use_ssl?: options.use_ssl?,
-        behaviour: options.behaviour,
+        handler: options.handler,
         server: options.server
       )
 
-    case :gen_tcp.controlling_process(client, client_handler) do
+    case :gen_tcp.controlling_process(client, client_reference) do
       :ok ->
-        send(client_handler, :control_granted)
+        send(client_reference, :control_granted)
 
       {:error, reason} ->
         Logger.error(
-          "Couldn't pass control to process: #{inspect(client_handler)} due to: #{inspect(reason)}"
+          "Couldn't pass control to process: #{inspect(client_reference)} due to: #{inspect(reason)}"
         )
     end
 

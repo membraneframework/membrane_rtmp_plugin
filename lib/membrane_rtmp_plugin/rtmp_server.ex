@@ -12,7 +12,7 @@ defmodule Membrane.RTMP.Server do
   Defines options for the RTMP server.
   """
   @type t :: [
-          behaviour: ClientHandlerBehaviour.t(),
+          handler: ClientHandlerBehaviour.t(),
           port: :inet.port_number(),
           use_ssl?: boolean(),
           name: atom() | nil
@@ -42,16 +42,16 @@ defmodule Membrane.RTMP.Server do
   end
 
   @doc """
-  Awaits for the client handler of the connection to which the user has previously subscribed.
+  Awaits for the client reference of the connection to which the user has previously subscribed.
 
   Note: this function call is blocking!
   Note: first you need to call `#{__MODULE__}.subscribe/3` to subscribe
   for a given `app` and `stream_key`.
   """
-  @spec await_subscription(non_neg_integer()) :: {:ok, pid()} | :error
-  def await_subscription(timeout \\ 5_000) do
+  @spec await_subscription(String.t(), String.t(), non_neg_integer()) :: {:ok, pid()} | :error
+  def await_subscription(app, stream_key, timeout \\ 5_000) do
     receive do
-      {:client_handler, client_handler} -> {:ok, client_handler}
+      {:client_ref, client_ref, ^app, ^stream_key} -> {:ok, client_ref}
     after
       timeout -> :error
     end
@@ -75,7 +75,7 @@ defmodule Membrane.RTMP.Server do
     {:ok,
      %{
        subscriptions: %{},
-       mapping: %{},
+       client_reference_mapping: %{},
        listener: pid,
        port: nil,
        to_reply: [],
@@ -100,8 +100,8 @@ defmodule Membrane.RTMP.Server do
   end
 
   @impl true
-  def handle_info({:register_client, app, stream_key, client_handler_pid}, state) do
-    state = put_in(state, [:mapping, {app, stream_key}], client_handler_pid)
+  def handle_info({:register_client, app, stream_key, client_reference_pid}, state) do
+    state = put_in(state, [:client_reference_mapping, {app, stream_key}], client_reference_pid)
     maybe_send_subscription(app, stream_key, state)
     {:noreply, state}
   end
@@ -113,10 +113,11 @@ defmodule Membrane.RTMP.Server do
   end
 
   defp maybe_send_subscription(app, stream_key, state) do
-    if state.subscriptions[{app, stream_key}] != nil and state.mapping[{app, stream_key}] != nil do
+    if state.subscriptions[{app, stream_key}] != nil and
+         state.client_reference_mapping[{app, stream_key}] != nil do
       send(
         state.subscriptions[{app, stream_key}],
-        {:client_handler, state.mapping[{app, stream_key}]}
+        {:client_ref, state.client_reference_mapping[{app, stream_key}], app, stream_key}
       )
     end
   end

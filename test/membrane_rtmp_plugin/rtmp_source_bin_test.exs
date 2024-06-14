@@ -217,7 +217,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
        ) do
     {:ok, server_pid} =
       Membrane.RTMP.Server.start_link(
-        behaviour: %Membrane.RTMP.Source.ClientHandler{
+        handler: %Membrane.RTMP.Source.ClientHandler{
           controlling_process: self()
         },
         port: port,
@@ -235,14 +235,12 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
 
     :ok = Membrane.RTMP.Server.subscribe(server_pid, app, stream_key)
 
-    client_handler =
-      receive do
-        {:client_handler, client_handler} -> client_handler
-      end
+    {:ok, client_reference} =
+      Membrane.RTMP.Server.await_subscription(app, stream_key)
 
     options = [
       module: Membrane.RTMP.Source.WithExternalServerTestPipeline,
-      custom_args: %{client_handler: client_handler},
+      custom_args: %{client_ref: client_reference},
       test_process: parent
     ]
 

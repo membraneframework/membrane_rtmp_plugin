@@ -13,8 +13,8 @@ defmodule Membrane.RTMP.Server.ClientHandler do
   Makes the client handler ask client for the desired number of buffers
   """
   @spec demand_data(pid(), non_neg_integer()) :: :ok
-  def demand_data(client_handler_pid, how_many_buffers_demanded) do
-    send(client_handler_pid, {:demand_data, how_many_buffers_demanded})
+  def demand_data(client_reference, how_many_buffers_demanded) do
+    send(client_reference, {:demand_data, how_many_buffers_demanded})
     :ok
   end
 
@@ -24,7 +24,7 @@ defmodule Membrane.RTMP.Server.ClientHandler do
     message_parser_state = Handshake.init_server() |> MessageParser.init()
     message_handler_state = MessageHandler.init(%{socket: opts.socket, use_ssl?: opts.use_ssl?})
 
-    %behaviour_module{} = opts.behaviour
+    %handler_module{} = opts.handler
 
     {:ok,
      %{
@@ -32,8 +32,8 @@ defmodule Membrane.RTMP.Server.ClientHandler do
        use_ssl?: opts.use_ssl?,
        message_parser_state: message_parser_state,
        message_handler_state: message_handler_state,
-       behaviour: behaviour_module,
-       behaviour_state: behaviour_module.handle_init(opts.behaviour),
+       handler: handler_module,
+       handler_state: handler_module.handle_init(opts.handler),
        app: nil,
        stream_key: nil,
        server: opts.server,
@@ -84,9 +84,9 @@ defmodule Membrane.RTMP.Server.ClientHandler do
 
   @impl true
   def handle_info(other_msg, state) do
-    behaviour_state = state.behaviour.handle_info(other_msg, state.behaviour_state)
+    handler_state = state.handler.handle_info(other_msg, state.handler_state)
 
-    {:noreply, %{state | behaviour_state: behaviour_state}}
+    {:noreply, %{state | handler_state: handler_state}}
   end
 
   defp handle_data(data, state) do
@@ -112,38 +112,38 @@ defmodule Membrane.RTMP.Server.ClientHandler do
     # call callbacks
     case event do
       :end_of_stream ->
-        new_behaviour_state = state.behaviour.handle_end_of_stream(state.behaviour_state)
-        %{state | behaviour_state: new_behaviour_state}
+        new_handler_state = state.handler.handle_end_of_stream(state.handler_state)
+        %{state | handler_state: new_handler_state}
 
       {:set_chunk_size_required, chunk_size} ->
         new_message_parser_state = %{state.message_parser_state | chunk_size: chunk_size}
         %{state | message_parser_state: new_message_parser_state}
 
       {:data_available, payload} ->
-        new_behaviour_state =
-          state.behaviour.handle_data_available(payload, state.behaviour_state)
+        new_handler_state =
+          state.handler.handle_data_available(payload, state.handler_state)
 
         %{
           state
-          | behaviour_state: new_behaviour_state,
+          | handler_state: new_handler_state,
             buffers_demanded: state.buffers_demanded - 1
         }
 
       {:connected, connected_msg} ->
-        new_behaviour_state =
-          state.behaviour.handle_connected(connected_msg, state.behaviour_state)
+        new_handler_state =
+          state.handler.handle_connected(connected_msg, state.handler_state)
 
-        %{state | behaviour_state: new_behaviour_state, app: connected_msg.app}
+        %{state | handler_state: new_handler_state, app: connected_msg.app}
 
       {:published, publish_msg} ->
         send(state.server, {:register_client, state.app, publish_msg.stream_key, self()})
 
-        new_behaviour_state =
-          state.behaviour.handle_stream_published(publish_msg, state.behaviour_state)
+        new_handler_state =
+          state.handler.handle_stream_published(publish_msg, state.handler_state)
 
         %{
           state
-          | behaviour_state: new_behaviour_state,
+          | handler_state: new_handler_state,
             stream_key: publish_msg.stream_key,
             published?: true
         }

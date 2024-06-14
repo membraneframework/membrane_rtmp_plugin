@@ -48,7 +48,7 @@ behaviour can be provided by RTMP server user.
 
 ## SourceBin
 
-Requires a client handler, which has been connected to the client, or an URL on which the client is supposed to connect. It receives RTMP stream, demuxes it and outputs H264 video and AAC audio.
+Requires a client reference, which identifies a client handler that has been connected to the client, or an URL on which the client is supposed to connect. It receives RTMP stream, demuxes it and outputs H264 video and AAC audio.
 
 ## Client
 
@@ -66,7 +66,9 @@ In order to successfully build and install the plugin, you need to have **ffmpeg
 
 ### RTMP receiver
 
-Server-side example, in which Membrane element will act as an RTMP server and receive the stream, can be found under [`examples/source.exs`](examples/source.exs). Run it with:
+Server-side example, in which Membrane element will act as an RTMP server and receive the stream, can be found under [`examples/source.exs`](examples/source.exs). Please note that
+this script allows only for a single client connecting to the RTMP server.
+Run it with:
 
 ```bash
 mix run examples/source.exs
@@ -77,6 +79,7 @@ When the server is ready you can connect to it with RTMP. If you just want to te
 ```bash
 ffmpeg -re -i test/fixtures/testsrc.flv -f flv -c:v copy -c:a copy rtmp://localhost:1935/app/stream_key
 ```
+When the script terminates, the `testsrc` content should be available in the `received.flv` file.
 
 ### RTMP receive with standalone RTMP server
 
@@ -93,6 +96,7 @@ When the server is ready you can connect to it with RTMP. If you just want to te
 ```bash
 ffmpeg -re -i test/fixtures/testsrc.flv -f flv -c:v copy -c:a copy rtmp://localhost:1935/app/stream_key
 ```
+When the script terminates, the `testsrc` content should be available in the `received.flv` file.
 
 ### Streaming with RTMP
 
