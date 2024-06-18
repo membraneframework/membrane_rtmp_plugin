@@ -41,9 +41,14 @@ sudo apt-get install ffmpeg
 pacman -S ffmpeg
 ```
 
+## RTMP Server
+An simple RTMP server that accepts clients connecting on a given port and allows to distinguish between them
+based on app ID and stream key. Each client that has connected is asigned a dedicated client handler, which
+behaviour can be provided by RTMP server user.
+
 ## SourceBin
 
-Requires a socket, which has been connected to the client. It receives RTMP stream, demuxes it and outputs H264 video and AAC audio.
+Requires a client reference, which identifies a client handler that has been connected to the client, or an URL on which the client is supposed to connect. It receives RTMP stream, demuxes it and outputs H264 video and AAC audio.
 
 ## Client
 
@@ -53,10 +58,6 @@ Currently only the following codecs are supported:
 - H264 for video
 - AAC for audio
 
-## TCP Server
-
-It's a simple implementation of tcp server. It opens a tcp port and listens for incoming connections. For each new connection, a user-provided function is executed.
-
 ### Prerequisites
 
 In order to successfully build and install the plugin, you need to have **ffmpeg == 4.4** installed on your system
@@ -65,17 +66,37 @@ In order to successfully build and install the plugin, you need to have **ffmpeg
 
 ### RTMP receiver
 
-Server-side example, in which Membrane will act as an RTMP server and receive the stream, can be found under [`examples/source.exs`](examples/source.exs). Run it with:
+Server-side example, in which Membrane element will act as an RTMP server and receive the stream, can be found under [`examples/source.exs`](examples/source.exs). Please note that
+this script allows only for a single client connecting to the RTMP server.
+Run it with:
 
 ```bash
-elixir examples/source.exs
+mix run examples/source.exs
 ```
 
 When the server is ready you can connect to it with RTMP. If you just want to test it, you can use FFmpeg:
 
 ```bash
-ffmpeg -re -i test/fixtures/testsrc.flv -f flv -c:v copy -c:a copy rtmp://localhost:5000
+ffmpeg -re -i test/fixtures/testsrc.flv -f flv -c:v copy -c:a copy rtmp://localhost:1935/app/stream_key
 ```
+When the script terminates, the `testsrc` content should be available in the `received.flv` file.
+
+### RTMP receive with standalone RTMP server
+
+If you want to see how you could setup the `Membrane.RTMP.Server` on your own and use it
+with cooperation with the `Membane.RTMP.SourceBin`, take a look at [`examples/source_with_standalone_server.exs`](examples/source_with_standalone_server.exs)
+Run it with:
+
+```bash
+mix run examples/source.exs
+```
+
+When the server is ready you can connect to it with RTMP. If you just want to test it, you can use FFmpeg:
+
+```bash
+ffmpeg -re -i test/fixtures/testsrc.flv -f flv -c:v copy -c:a copy rtmp://localhost:1935/app/stream_key
+```
+When the script terminates, the `testsrc` content should be available in the `received.flv` file.
 
 ### Streaming with RTMP
 

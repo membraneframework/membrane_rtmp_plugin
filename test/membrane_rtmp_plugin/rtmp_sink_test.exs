@@ -76,10 +76,13 @@ defmodule Membrane.RTMP.SinkTest do
 
     Enum.each(
       tracks,
-      &assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(&1, 0), 5_000)
+      &assert_start_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(^&1, 0), 5_000)
     )
 
-    Enum.each(tracks, &assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(&1, 0), 5_000))
+    Enum.each(
+      tracks,
+      &assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(^&1, 0), 5_000)
+    )
 
     :ok = Pipeline.terminate(sink_pipeline_pid)
     # RTMP server should terminate when the connection is closed

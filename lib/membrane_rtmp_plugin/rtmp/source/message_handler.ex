@@ -5,17 +5,13 @@ defmodule Membrane.RTMP.MessageHandler do
   # Appropriate responses are sent to the messages received during the initialization phase
   # The data received in video and audio is forwarded to the outputs
 
-  require Membrane.Logger
-
-  alias Membrane.{Buffer, Logger}
+  require Membrane.Logger, as: Logger
 
   alias Membrane.RTMP.{
     Handshake,
     Header,
     Message,
-    MessageParser,
     Messages,
-    MessageValidator,
     Responses
   }
 
@@ -28,10 +24,42 @@ defmodule Membrane.RTMP.MessageHandler do
   # just to not waste time on chunking
   @server_chunk_size 4096
 
-  @spec handle_client_messages(list(), map()) :: map()
-  def handle_client_messages([], state) do
-    request_packet(state.socket)
+  @type event() ::
+          {:set_chunk_size_required, non_neg_integer()}
+          | {:connected, Membrane.RTMP.Messages.Connect.t()}
+          | {:published, Membrane.RTMP.Messages.Publish.t()}
+          | :end_of_stream
+          | {:data_available, binary()}
+  @type t() :: %{
+          socket: :gen_tcp.socket() | :ssl.socket(),
+          socket_module: :gen_tcp | :ssl,
+          header_sent?: boolean(),
+          events: [event()],
+          receiver_pid: pid() | nil,
+          socket_retries: pos_integer(),
+          epoch: non_neg_integer()
+        }
+
+  @spec init(opts :: %{socket: :gen_tcp.socket() | :ssl.socket(), use_ssl?: boolean()}) :: t()
+  def init(opts) do
+    state = %{
+      socket: opts.socket,
+      socket_module: if(opts.use_ssl?, do: :ssl, else: :gen_tcp),
+      header_sent?: false,
+      events: [],
+      receiver_pid: nil,
+      # how many times the Source tries to get control of the socket
+      socket_retries: 3,
+      # epoch required for performing a handshake with the pipeline
+      epoch: 0
+    }
+
     state
+  end
+
+  @spec handle_client_messages(list(), map()) :: {map(), list()}
+  def handle_client_messages([], state) do
+    {%{state | events: []}, state.events}
   end
 
   def handle_client_messages(messages, state) do
@@ -39,16 +67,9 @@ defmodule Membrane.RTMP.MessageHandler do
     |> Enum.reduce_while(state, fn {header, message}, acc ->
       do_handle_client_message(message, header, acc)
     end)
-    |> case do
-      {:error, :stream_validation, state} ->
-        state.socket_module.shutdown(state.socket, :read_write)
-
-        state
-
-      state ->
-        request_packet(state.socket)
-        %{state | actions: Enum.reverse(state.actions)}
-    end
+    |> then(fn state ->
+      {%{state | events: []}, Enum.reverse(state.events)}
+    end)
   end
 
   # Expected flow of messages:
@@ -64,12 +85,12 @@ defmodule Membrane.RTMP.MessageHandler do
 
   defp do_handle_client_message(%module{data: data}, header, state)
        when module in [Messages.Audio, Messages.Video] do
-    state = get_media_actions(header, data, state)
+    state = get_media_events(header, data, state)
     {:cont, state}
   end
 
   defp do_handle_client_message(%Messages.AdditionalMedia{} = media, header, state) do
-    state = get_additional_media_actions(header, media, state)
+    state = get_additional_media_events(header, media, state)
     {:cont, state}
   end
 
@@ -81,108 +102,59 @@ defmodule Membrane.RTMP.MessageHandler do
   end
 
   defp do_handle_client_message(%Messages.SetChunkSize{chunk_size: chunk_size}, _header, state) do
-    parser = %{state.message_parser | chunk_size: chunk_size}
-    {:cont, %{state | message_parser: parser}}
+    {:cont, %{state | events: [{:set_chunk_size_required, chunk_size} | state.events]}}
   end
 
   @stream_begin_type 0
-  @validation_stage :connect
-  defp do_handle_client_message(%Messages.Connect{} = connect, _header, state) do
-    case MessageValidator.validate_connect(state.validator, connect) do
-      {:ok, _msg} = result ->
-        [
-          %Messages.WindowAcknowledgement{size: @window_acknowledgement_size},
-          %Messages.SetPeerBandwidth{size: @peer_bandwidth_size},
-          # stream begin type
-          %Messages.UserControl{event_type: @stream_begin_type, data: <<0, 0, 0, 0>>},
-          # the chunk size is independent for both sides
-          %Messages.SetChunkSize{chunk_size: @server_chunk_size}
-        ]
-        |> Enum.each(&send_rtmp_payload(&1, state.socket, chunk_stream_id: 2))
+  defp do_handle_client_message(%Messages.Connect{} = connect_msg, _header, state) do
+    [
+      %Messages.WindowAcknowledgement{size: @window_acknowledgement_size},
+      %Messages.SetPeerBandwidth{size: @peer_bandwidth_size},
+      # stream begin type
+      %Messages.UserControl{event_type: @stream_begin_type, data: <<0, 0, 0, 0>>},
+      # the chunk size is independent for both sides
+      %Messages.SetChunkSize{chunk_size: @server_chunk_size}
+    ]
+    |> Enum.each(&send_rtmp_payload(&1, state.socket, chunk_stream_id: 2))
 
-        Responses.connection_success()
-        |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
+    Responses.connection_success()
+    |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
 
-        Responses.on_bw_done()
-        |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
+    Responses.on_bw_done()
+    |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
 
-        {:cont, validation_action(state, @validation_stage, result)}
-
-      {:error, _reason} = error ->
-        {:halt, {:error, :stream_validation, validation_action(state, @validation_stage, error)}}
-    end
+    state = %{state | events: [{:connected, connect_msg} | state.events]}
+    {:cont, state}
   end
 
   # According to ffmpeg's documentation, this command should make the server release channel for a media stream
   # We are simply acknowledging the message
-  @validation_stage :release_stream
-  defp do_handle_client_message(%Messages.ReleaseStream{} = release_stream, _header, state) do
-    case MessageValidator.validate_release_stream(state.validator, release_stream) do
-      {:ok, _msg} = result ->
-        release_stream.tx_id
-        |> Responses.default_result([0.0, :null])
-        |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
+  defp do_handle_client_message(%Messages.ReleaseStream{} = release_stream_msg, _header, state) do
+    release_stream_msg.tx_id
+    |> Responses.default_result([0.0, :null])
+    |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
 
-        {:cont, validation_action(state, @validation_stage, result)}
-
-      {:error, _reason} = error ->
-        {:halt, {:error, :stream_validation, validation_action(state, @validation_stage, error)}}
-    end
+    {:cont, state}
   end
 
-  @validation_stage :publish
-  defp do_handle_client_message(%Messages.Publish{} = publish, %Header{} = header, state) do
-    case MessageValidator.validate_publish(state.validator, publish) do
-      {:ok, _msg} = result ->
-        %Messages.UserControl{event_type: @stream_begin_type, data: <<0, 0, 0, 1>>}
-        |> send_rtmp_payload(state.socket, chunk_stream_id: 2)
+  defp do_handle_client_message(%Messages.Publish{} = publish_msg, %Header{} = header, state) do
+    %Messages.UserControl{event_type: @stream_begin_type, data: <<0, 0, 0, 1>>}
+    |> send_rtmp_payload(state.socket, chunk_stream_id: 2)
 
-        Responses.publish_success(publish.stream_key)
-        |> send_rtmp_payload(state.socket, chunk_stream_id: 3, stream_id: header.stream_id)
+    Responses.publish_success(publish_msg.stream_key)
+    |> send_rtmp_payload(state.socket, chunk_stream_id: 3, stream_id: header.stream_id)
 
-        {:cont, validation_action(state, @validation_stage, result)}
-
-      {:error, _reason} = error ->
-        {:halt, {:error, :stream_validation, validation_action(state, @validation_stage, error)}}
-    end
+    state = %{state | events: [{:published, publish_msg} | state.events]}
+    {:cont, state}
   end
 
   # A message containing stream metadata
-  @validation_stage :set_data_frame
-  defp do_handle_client_message(%Messages.SetDataFrame{} = data_frame, _header, state) do
-    case MessageValidator.validate_set_data_frame(state.validator, data_frame) do
-      {:ok, _msg} = result ->
-        {:cont, validation_action(state, @validation_stage, result)}
-
-      {:error, _reason} = error ->
-        {:halt, {:error, :stream_validation, validation_action(state, @validation_stage, error)}}
-    end
+  defp do_handle_client_message(%Messages.SetDataFrame{} = _data_frame, _header, state) do
+    {:cont, state}
   end
 
-  @validation_stage :on_expect_additional_media
-  defp do_handle_client_message(
-         %Messages.OnExpectAdditionalMedia{} = additional_media,
-         _header,
-         state
-       ) do
-    case MessageValidator.validate_on_expect_additional_media(state.validator, additional_media) do
-      {:ok, _msg} = result ->
-        {:cont, validation_action(state, @validation_stage, result)}
-
-      {:error, _reason} = error ->
-        {:halt, {:error, :stream_validation, validation_action(state, @validation_stage, error)}}
-    end
-  end
-
-  @validation_stage :on_meta_data
-  defp do_handle_client_message(%Messages.OnMetaData{} = on_meta_data, _header, state) do
-    case MessageValidator.validate_on_meta_data(state.validator, on_meta_data) do
-      {:ok, _msg} = result ->
-        {:cont, validation_action(state, @validation_stage, result)}
-
-      {:error, _reason} = error ->
-        {:halt, {:error, :stream_validation, validation_action(state, @validation_stage, error)}}
-    end
+  defp do_handle_client_message(%Messages.OnMetaData{} = _on_meta_data, _header, state) do
+    {:cont, state}
   end
 
   # According to ffmpeg's documentation, this command should prepare the server to receive media streams
@@ -234,7 +206,7 @@ defmodule Membrane.RTMP.MessageHandler do
   end
 
   defp do_handle_client_message(%Messages.DeleteStream{}, _header, state) do
-    {:halt, %{state | actions: [{:end_of_stream, :output} | state.actions]}}
+    {:halt, %{state | events: [:end_of_stream | state.events]}}
   end
 
   # Check bandwidth message
@@ -254,31 +226,23 @@ defmodule Membrane.RTMP.MessageHandler do
     {:cont, state}
   end
 
-  defp request_packet({:sslsocket, _1, _2} = socket) do
-    :ssl.setopts(socket, active: :once)
-  end
-
-  defp request_packet(socket) do
-    :inet.setopts(socket, active: :once)
-  end
-
-  defp get_media_actions(rtmp_header, data, %{header_sent?: true} = state) do
+  defp get_media_events(rtmp_header, data, %{header_sent?: true} = state) do
     payload = get_flv_tag(rtmp_header, data)
 
-    Map.update!(state, :actions, &[{:buffer, {:output, %Buffer{payload: payload}}} | &1])
+    Map.update!(state, :events, &[{:data_available, payload} | &1])
   end
 
-  defp get_media_actions(rtmp_header, data, state) do
+  defp get_media_events(rtmp_header, data, state) do
     payload = get_flv_header() <> get_flv_tag(rtmp_header, data)
 
     %{
       state
       | header_sent?: true,
-        actions: [{:buffer, {:output, %Buffer{payload: payload}}} | state.actions]
+        events: [{:data_available, payload} | state.events]
     }
   end
 
-  defp get_additional_media_actions(rtmp_header, additional_media, %{header_sent?: true} = state) do
+  defp get_additional_media_events(rtmp_header, additional_media, %{header_sent?: true} = state) do
     # NOTE: we are replacing the type_id from 18 to 8 (script data to audio data) as it carries the
     # additional audio track
     data = additional_media.media
@@ -294,20 +258,20 @@ defmodule Membrane.RTMP.MessageHandler do
     # handle dynamic pads in the RTMP source + our FLV demuxer handles that well.
     payload = get_flv_tag(header, 1, data)
 
-    action = {:buffer, {:output, %Buffer{payload: payload}}}
+    event = {:data_available, payload}
 
-    Map.update!(state, :actions, &[action | &1])
+    Map.update!(state, :events, &[event | &1])
   end
 
-  defp get_additional_media_actions(rtmp_header, additional_media, state) do
+  defp get_additional_media_events(rtmp_header, additional_media, state) do
     data = additional_media.media
 
     header = %Membrane.RTMP.Header{rtmp_header | type_id: 8, body_size: byte_size(data)}
     payload = get_flv_header() <> get_flv_tag(header, 1, data)
 
-    action = {:buffer, {:output, %Buffer{payload: payload}}}
+    event = {:data_available, payload}
 
-    %{state | header_sent?: true, actions: [action | state.actions]}
+    %{state | header_sent?: true, events: [event | state.event]}
   end
 
   defp get_flv_header() do
@@ -357,49 +321,6 @@ defmodule Membrane.RTMP.MessageHandler do
     payload = Message.chunk_payload(body, chunk_stream_id, @server_chunk_size)
 
     socket_module(socket).send(socket, [header | payload])
-  end
-
-  defp validation_action(state, stage, result) do
-    notification =
-      case result do
-        {:ok, msg} -> {:notify_parent, {:stream_validation_success, stage, msg}}
-        {:error, reason} -> {:notify_parent, {:stream_validation_error, stage, reason}}
-      end
-
-    Map.update!(state, :actions, &[notification | &1])
-  end
-
-  # The RTMP connection is based on TCP therefore we are operating on a continuous stream of bytes.
-  # In such case packets received on TCP sockets may contain a partial RTMP packet or several full packets.
-  #
-  # `MessageParser` is already able to request more data if packet is incomplete but it is not aware
-  # if its current buffer contains more than one message, therefore we need to call the `&MessageParser.handle_packet/2`
-  # as long as we decide to receive more messages (before starting to relay media packets).
-  #
-  # Once we hit `:need_more_data` the function returns the list of parsed messages and the message_parser then is ready
-  # to receive more data to continue with emitting new messages.
-  @spec parse_packet_messages(packet :: binary(), message_parser :: struct(), [{any(), any()}]) ::
-          {[Message.t()], message_parser :: struct()}
-  def parse_packet_messages(packet, message_parser, messages \\ [])
-
-  def parse_packet_messages(<<>>, %{buffer: <<>>} = message_parser, messages) do
-    {Enum.reverse(messages), message_parser}
-  end
-
-  def parse_packet_messages(packet, message_parser, messages) do
-    case MessageParser.handle_packet(packet, message_parser) do
-      {header, message, message_parser} ->
-        parse_packet_messages(<<>>, message_parser, [{header, message} | messages])
-
-      {:need_more_data, message_parser} ->
-        {Enum.reverse(messages), message_parser}
-
-      {:handshake_done, message_parser} ->
-        parse_packet_messages(<<>>, message_parser, messages)
-
-      {%Handshake.Step{} = step, message_parser} ->
-        parse_packet_messages(<<>>, message_parser, [{nil, step} | messages])
-    end
   end
 
   @compile {:inline, socket_module: 1}

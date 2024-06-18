@@ -5,26 +5,36 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
 
   require Logger
 
-  alias Membrane.RTMP.Source.{SslServer, TcpServer}
   alias Membrane.Testing
 
   @input_file "test/fixtures/testsrc.flv"
-  @local_ip "127.0.0.1"
+  @app "liveapp"
   @stream_key "ala2137"
+  @default_port 22_224
 
   @stream_length_ms 3000
   @video_frame_duration_ms 42
   @audio_frame_duration_ms 24
 
-  test "SourceBin outputs the correct number of audio and video buffers" do
-    {:ok, port} = start_tcp_server()
+  test "SourceBin outputs the correct number of audio and video buffers when the client connects to the given app and stream key" do
+    self = self()
+
+    pipeline_startup_task =
+      Task.async(fn ->
+        start_pipeline_with_external_rtmp_server(@app, @stream_key, self)
+      end)
+
+    port =
+      receive do
+        {:port, port} -> port
+      end
 
     ffmpeg_task =
       Task.async(fn ->
-        get_stream_url(port) |> start_ffmpeg()
+        "rtmp://localhost:#{port}/#{@app}/#{@stream_key}" |> start_ffmpeg()
       end)
 
-    pipeline = await_pipeline_started()
+    pipeline = Task.await(pipeline_startup_task)
 
     assert_buffers(%{
       pipeline: pipeline,
@@ -48,16 +58,44 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     assert :ok = Task.await(ffmpeg_task)
   end
 
-  @tag :rtmps
-  test "SourceBin allows for RTMPS connection" do
-    {:ok, port} = start_ssl_server()
+  test "SourceBin doesn't output anything if the client tries to connect to different app or stream key" do
+    {port, pipeline} = start_pipeline_with_builtin_rtmp_server(@app, @stream_key)
+    other_app = "other_app"
+    other_stream_key = "other_stream_key"
 
     ffmpeg_task =
       Task.async(fn ->
-        get_stream_url(port, nil, true) |> start_ffmpeg()
+        "rtmp://localhost:#{port}/#{other_app}/#{other_stream_key}" |> start_ffmpeg()
       end)
 
-    pipeline = await_pipeline_started()
+    refute_sink_buffer(pipeline, :video_sink, _any)
+    refute_sink_buffer(pipeline, :audio_sink, _any)
+
+    # Cleanup
+    Testing.Pipeline.terminate(pipeline)
+    assert :ok = Task.await(ffmpeg_task)
+  end
+
+  @tag :rtmps
+  test "SourceBin allows for RTMPS connection" do
+    self = self()
+
+    pipeline_startup_task =
+      Task.async(fn ->
+        start_pipeline_with_external_rtmp_server(@app, @stream_key, self, 0, true)
+      end)
+
+    port =
+      receive do
+        {:port, port} -> port
+      end
+
+    ffmpeg_task =
+      Task.async(fn ->
+        "rtmps://localhost:#{port}/#{@app}/#{@stream_key}" |> start_ffmpeg()
+      end)
+
+    pipeline = Task.await(pipeline_startup_task)
 
     assert_buffers(%{
       pipeline: pipeline,
@@ -87,14 +125,24 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     # offset half a second in the past
     offset = @extended_timestamp_tag / 1_000 - 0.5
 
-    {:ok, port} = start_tcp_server(%Support.TestValidator{})
+    self = self()
+
+    pipeline_startup_task =
+      Task.async(fn ->
+        start_pipeline_with_external_rtmp_server(@app, @stream_key, self)
+      end)
+
+    port =
+      receive do
+        {:port, port} -> port
+      end
 
     ffmpeg_task =
       Task.async(fn ->
-        get_stream_url(port, @stream_key) |> start_ffmpeg(ts_offset: offset)
+        "rtmp://localhost:#{port}/#{@app}/#{@stream_key}" |> start_ffmpeg(ts_offset: offset)
       end)
 
-    pipeline = await_pipeline_started()
+    pipeline = Task.await(pipeline_startup_task)
 
     assert_buffers(%{
       pipeline: pipeline,
@@ -115,14 +163,24 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     # offset five seconds in the future
     offset = @extended_timestamp_tag / 1_000 + 5
 
-    {:ok, port} = start_tcp_server()
+    self = self()
+
+    pipeline_startup_task =
+      Task.async(fn ->
+        start_pipeline_with_external_rtmp_server(@app, @stream_key, self)
+      end)
+
+    port =
+      receive do
+        {:port, port} -> port
+      end
 
     ffmpeg_task =
       Task.async(fn ->
-        get_stream_url(port, @stream_key) |> start_ffmpeg(ts_offset: offset)
+        "rtmp://localhost:#{port}/#{@app}/#{@stream_key}" |> start_ffmpeg(ts_offset: offset)
       end)
 
-    pipeline = await_pipeline_started()
+    pipeline = Task.await(pipeline_startup_task)
 
     assert_buffers(%{
       pipeline: pipeline,
@@ -139,151 +197,55 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     assert :ok = Task.await(ffmpeg_task)
   end
 
-  test "Correct Stream ID is correctly verified" do
-    {:ok, port} = start_tcp_server(%Support.TestValidator{stream_key: @stream_key})
+  defp start_pipeline_with_builtin_rtmp_server(app, stream_key, use_ssl? \\ false) do
+    options = [
+      module: Membrane.RTMP.Source.WithBuiltinServerTestPipeline,
+      custom_args: %{app: app, stream_key: stream_key, port: @default_port, use_ssl?: use_ssl?},
+      test_process: self()
+    ]
 
-    ffmpeg_task =
-      Task.async(fn ->
-        get_stream_url(port, @stream_key) |> start_ffmpeg()
-      end)
-
-    pipeline = await_pipeline_started()
-
-    assert_pipeline_notified(
-      pipeline,
-      :src,
-      {:stream_validation_success, :publish, "correct stream key"}
-    )
-
-    assert_end_of_stream(pipeline, :audio_sink, :input, @stream_length_ms + 500)
-    assert_end_of_stream(pipeline, :video_sink, :input)
-
-    # Cleanup
-    Testing.Pipeline.terminate(pipeline)
-    assert :ok = Task.await(ffmpeg_task)
+    pipeline_pid = Testing.Pipeline.start_link_supervised!(options)
+    {@default_port, pipeline_pid}
   end
 
-  test "Wrong Stream ID is denied" do
-    {:ok, port} = start_tcp_server(%Support.TestValidator{stream_key: @stream_key <> "123"})
+  defp start_pipeline_with_external_rtmp_server(
+         app,
+         stream_key,
+         parent,
+         port \\ 0,
+         use_ssl? \\ false
+       ) do
+    {:ok, server_pid} =
+      Membrane.RTMP.Server.start_link(
+        handler: %Membrane.RTMP.Source.ClientHandler{
+          controlling_process: self()
+        },
+        port: port,
+        use_ssl?: use_ssl?
+      )
 
-    ffmpeg_task =
-      Task.async(fn ->
-        get_stream_url(port, @stream_key <> "wrong") |> start_ffmpeg()
-      end)
+    {:ok, assigned_port} = Membrane.RTMP.Server.get_port(server_pid)
 
-    pipeline = await_pipeline_started()
+    send(parent, {:port, assigned_port})
 
-    assert_pipeline_notified(
-      pipeline,
-      :src,
-      {:stream_validation_error, :publish, "wrong stream key"}
-    )
+    :ok =
+      receive do
+        {:client_connected, ^app, ^stream_key} -> :ok
+      end
 
-    # Cleanup
-    Testing.Pipeline.terminate(pipeline)
-    assert :error = Task.await(ffmpeg_task)
-  end
+    :ok = Membrane.RTMP.Server.subscribe(server_pid, app, stream_key)
 
-  test "Handles client socket close before start of stream" do
-    {:ok, port} = start_tcp_server()
+    {:ok, client_reference} =
+      Membrane.RTMP.Server.await_subscription(app, stream_key)
 
-    Task.async(fn ->
-      host = @local_ip |> String.to_charlist() |> :inet.parse_address() |> elem(1)
-      {:ok, socket} = :gen_tcp.connect(host, port, [], :infinity)
-      :gen_tcp.close(socket)
-    end)
+    options = [
+      module: Membrane.RTMP.Source.WithExternalServerTestPipeline,
+      custom_args: %{client_ref: client_reference},
+      test_process: parent
+    ]
 
-    pipeline = await_pipeline_started()
-
-    assert_end_of_stream(pipeline, :audio_sink, :input)
-    assert_end_of_stream(pipeline, :video_sink, :input)
-
-    assert_pipeline_notified(pipeline, :src, :unexpected_socket_close)
-  end
-
-  defp start_tcp_server(validator \\ %Membrane.RTMP.MessageValidator.Default{}) do
-    test_process = self()
-
-    options = %TcpServer{
-      port: 0,
-      listen_options: [
-        :binary,
-        packet: :raw,
-        active: false,
-        ip: @local_ip |> String.to_charlist() |> :inet.parse_address() |> elem(1)
-      ],
-      socket_handler: fn socket ->
-        options = [
-          module: Membrane.RTMP.Source.TestPipeline,
-          custom_args: %{
-            socket: socket,
-            test_process: test_process,
-            validator: validator,
-            use_ssl?: false
-          },
-          test_process: test_process
-        ]
-
-        {:ok, _supervisor_pid, pipeline_pid} = Testing.Pipeline.start_link(options)
-        {:ok, pipeline_pid}
-      end,
-      parent: test_process
-    }
-
-    {:ok, _tcp_server} = TcpServer.start_link(options)
-
-    receive do
-      {:tcp_server_started, socket} ->
-        :inet.port(socket)
-    end
-  end
-
-  @port 9797
-  defp start_ssl_server(validator \\ %Membrane.RTMP.MessageValidator.Default{}) do
-    test_process = self()
-
-    certfile = System.get_env("CERT_PATH")
-    keyfile = System.get_env("CERT_KEY_PATH")
-
-    options = %SslServer{
-      port: @port,
-      listen_options: [
-        :binary,
-        packet: :raw,
-        active: false,
-        ip: @local_ip |> String.to_charlist() |> :inet.parse_address() |> elem(1),
-        certfile: certfile,
-        keyfile: keyfile
-      ],
-      socket_handler: fn socket ->
-        options = [
-          module: Membrane.RTMP.Source.TestPipeline,
-          custom_args: %{
-            socket: socket,
-            test_process: test_process,
-            validator: validator,
-            use_ssl?: true
-          },
-          test_process: test_process
-        ]
-
-        {:ok, _supervisor_pid, pipeline_pid} = Testing.Pipeline.start_link(options)
-        {:ok, pipeline_pid}
-      end,
-      parent: test_process
-    }
-
-    {:ok, _ssl_server} = SslServer.start_link(options)
-
-    receive do
-      {:ssl_server_started, _socket} ->
-        {:ok, @port}
-    end
-  end
-
-  defp get_stream_url(port, key \\ nil, use_ssl? \\ false) do
-    "rtmp#{if use_ssl?, do: "s", else: ""}://#{@local_ip}:#{port}" <>
-      if key, do: "/app/" <> key, else: ""
+    {:ok, _supervisor, pid} = Testing.Pipeline.start_link(options)
+    pid
   end
 
   defp start_ffmpeg(stream_url, opts \\ []) do
@@ -302,11 +264,13 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
       |> add_file_option(option_acodec("copy"))
       |> maybe_add_file_timestamps_offset(opts)
 
-    case FFmpex.execute(command) do
-      {:ok, ""} ->
+    {command, args} = FFmpex.prepare(command)
+
+    case System.cmd(command, args) do
+      {_output, 0} ->
         :ok
 
-      {:error, {error, exit_code}} ->
+      {error, exit_code} ->
         Logger.error(
           """
           FFmpeg exited with a non-zero exit code (#{exit_code}) and the error message:
@@ -333,12 +297,6 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
       argument: offset,
       contexts: [:output]
     })
-  end
-
-  defp await_pipeline_started() do
-    receive do
-      {:pipeline_started, pid} -> pid
-    end
   end
 
   defp assert_buffers(%{last_dts: _dts} = state) do
