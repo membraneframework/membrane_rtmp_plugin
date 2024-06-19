@@ -61,6 +61,7 @@ stream_key = "stream_key"
 # Subscribe to receive client reference that connected to the
 # server with given app id and stream key
 :ok = Membrane.RTMP.Server.subscribe(server, app, stream_key)
+# Start the pipeline and provide it with the client_handler
 
 # Wait for the client reference
 {:ok, client_ref} = Membrane.RTMP.Server.await_subscription(app, stream_key)
