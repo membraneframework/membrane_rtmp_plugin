@@ -24,11 +24,11 @@ defmodule Membrane.RTMP.SourceBin do
 
   def_output_pad :video,
     accepted_format: H264,
-    availability: :always
+    availability: :on_request
 
   def_output_pad :audio,
     accepted_format: AAC,
-    availability: :always
+    availability: :on_request
 
   def_options socket: [
                 spec: :gen_tcp.socket() | :ssl.sslsocket(),
@@ -57,34 +57,101 @@ defmodule Membrane.RTMP.SourceBin do
 
   @impl true
   def handle_init(_ctx, %__MODULE__{} = opts) do
-    structure = [
+    spec = [
       child(:src, %RTMP.Source{
         socket: opts.socket,
         validator: opts.validator,
         use_ssl?: opts.use_ssl?
       })
-      |> child(:demuxer, Membrane.FLV.Demuxer),
-      #
-      child(:audio_parser, %Membrane.AAC.Parser{
-        out_encapsulation: :none
-      }),
-      child(:video_parser, Membrane.H264.Parser),
-      #
-      get_child(:demuxer)
-      |> via_out(Pad.ref(:audio, 0))
-      |> get_child(:audio_parser)
-      |> bin_output(:audio),
-      #
-      get_child(:demuxer)
-      |> via_out(Pad.ref(:video, 0))
-      |> get_child(:video_parser)
-      |> bin_output(:video)
+      |> child(:demuxer, Membrane.FLV.Demuxer)
     ]
 
-    {[spec: structure], %{}}
+    state = %{
+      demuxer_audio_pad_ref: nil,
+      demuxer_video_pad_ref: nil
+    }
+
+    {[spec: spec], state}
   end
 
   @impl true
+  def handle_pad_added(Pad.ref(:audio, _ref) = pad, _ctx, state) do
+    spec =
+      if state.demuxer_audio_pad_ref != nil do
+        [
+          get_child(:demuxer)
+          |> via_out(state.demuxer_audio_pad_ref)
+          |> child(:audio_parser, %Membrane.AAC.Parser{
+            out_encapsulation: :none
+          })
+          |> bin_output(pad)
+        ]
+      else
+        [
+          child(:funnel_audio, Membrane.Funnel)
+          |> bin_output(pad)
+        ]
+      end
+
+    {[spec: spec], state}
+  end
+
+  def handle_pad_added(Pad.ref(:video, _ref) = pad, _ctx, state) do
+    spec =
+      if state.demuxer_video_pad_ref != nil do
+        [
+          get_child(:demuxer)
+          |> via_out(state.demuxer_video_pad_ref)
+          |> child(:video_parser, Membrane.H264.Parser)
+          |> bin_output(pad)
+        ]
+      else
+        [
+          child(:funnel_video, Membrane.Funnel)
+          |> bin_output(pad)
+        ]
+      end
+
+    {[spec: spec], state}
+  end
+
+  @impl true
+  def handle_child_notification({:new_stream, pad_ref, :AAC}, :demuxer, ctx, state) do
+    audio_pad_ref = get_pad(:audio, ctx)
+
+    if audio_pad_ref != nil do
+      {[
+         spec: [
+           get_child(:demuxer)
+           |> via_out(pad_ref)
+           |> child(:audio_parser, %Membrane.AAC.Parser{
+             out_encapsulation: :none
+           })
+           |> get_child(:funnel_audio)
+         ]
+       ], state}
+    else
+      {[], %{state | demuxer_audio_pad_ref: pad_ref}}
+    end
+  end
+
+  def handle_child_notification({:new_stream, pad_ref, :H264}, :demuxer, ctx, state) do
+    video_pad_ref = get_pad(:video, ctx)
+
+    if video_pad_ref != nil do
+      {[
+         spec: [
+           get_child(:demuxer)
+           |> via_out(pad_ref)
+           |> child(:video_parser, Membrane.H264.Parser)
+           |> get_child(:funnel_video)
+         ]
+       ], state}
+    else
+      {[], %{state | demuxer_video_pad_ref: pad_ref}}
+    end
+  end
+
   def handle_child_notification(
         {type, _socket, _pid} = notification,
         :src,
@@ -127,5 +194,11 @@ defmodule Membrane.RTMP.SourceBin do
   @spec secure_pass_control(:ssl.sslsocket(), pid()) :: :ok | {:error, any()}
   def secure_pass_control(socket, source) do
     :ssl.controlling_process(socket, source)
+  end
+
+  defp get_pad(name, ctx) do
+    ctx.pads
+    |> Map.keys()
+    |> Enum.find(fn pad_ref -> Pad.name_by_ref(pad_ref) == name end)
   end
 end
