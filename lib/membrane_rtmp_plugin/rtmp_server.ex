@@ -31,27 +31,26 @@ defmodule Membrane.RTMP.Server do
   end
 
   @doc """
-  Subscribes for the given app and stream key.
-  When a client connects (or has already connected) to the server with given app and stream key,
-  the subscriber will be informed.
+  Subscribes for any app/stream_key.
+  When a new client connects, subscriber will be informed, if currently is awaiting client_ref for a given app/stream_key
   """
-  @spec subscribe(server_identifier(), String.t(), String.t()) :: :ok
-  def subscribe(server_identifier, app, stream_key) do
-    GenServer.cast(server_identifier, {:subscribe, app, stream_key, self()})
+  @spec subscribe_any(server_identifier()) :: :ok
+  def subscribe_any(server_identifier) do
+    GenServer.cast(server_identifier, {:subscribe_any, self()})
     :ok
   end
 
   @doc """
-  Awaits for the client reference of the connection to which the user has previously subscribed.
+  Awaits for the client reference of the connection to specified app/stream_key
 
   Note: this function call is blocking!
-  Note: first you need to call `#{__MODULE__}.subscribe/3` to subscribe
-  for a given `app` and `stream_key`.
+  Note: first you need to call `#{__MODULE__}.subscribe_any/1`.
   """
-  @spec await_subscription(String.t(), String.t(), non_neg_integer()) :: {:ok, pid()} | :error
-  def await_subscription(app, stream_key, timeout \\ 5_000) do
+  @spec await_client_ref(String.t(), String.t(), non_neg_integer()) :: {:ok, pid()} | :error
+  def await_client_ref(app, stream_key, timeout \\ 5_000) do
     receive do
-      {:client_ref, client_ref, ^app, ^stream_key} -> {:ok, client_ref}
+      {:client_ref, client_ref, ^app, ^stream_key} ->
+        {:ok, client_ref}
     after
       timeout -> :error
     end
@@ -74,12 +73,14 @@ defmodule Membrane.RTMP.Server do
 
     {:ok,
      %{
-       subscriptions: %{},
+       subscriptions_any: [],
        client_reference_mapping: %{},
+       client_waiting_queue: %{},
        listener: pid,
        port: nil,
        to_reply: [],
-       use_ssl?: server_options.use_ssl?
+       use_ssl?: server_options.use_ssl?,
+       lambda: server_options.lambda
      }}
   end
 
@@ -93,29 +94,34 @@ defmodule Membrane.RTMP.Server do
   end
 
   @impl true
-  def handle_cast({:subscribe, app, stream_key, subscriber_pid}, state) do
-    state = put_in(state, [:subscriptions, {app, stream_key}], subscriber_pid)
-    maybe_send_subscription(app, stream_key, state)
+  def handle_cast({:subscribe_any, subscriber_pid}, state) do
+    subs = [state.subscriptions_any ++ subscriber_pid]
+    state = %{state | subscriptions_any: subs}
+
+    # try to send all client_refs from :client_waiting_queue to this subscriber, maybe is awaiting one of /app/stream_keys
+    state.client_waiting_queue
+    |> Enum.each(fn {{app, stream_key}, client_ref} ->
+      send(subscriber_pid, {:client_ref, client_ref, app, stream_key})
+    end)
+
     {:noreply, state}
   end
 
   @impl true
   def handle_info({:register_client, app, stream_key, client_reference_pid}, state) do
+    state.lambda.(app, stream_key)
     state = put_in(state, [:client_reference_mapping, {app, stream_key}], client_reference_pid)
-    maybe_send_subscription(app, stream_key, state)
-    {:noreply, state}
+    client_waiting_queue = state.client_waiting_queue |> Map.delete({app, stream_key})
+    {:noreply, %{state | client_waiting_queue: client_waiting_queue}}
   end
 
   @impl true
-  def handle_info({:client_register_attempt, app, stream_key, client_handler_pid}, state) do
-    IO.inspect("rtmp_server.ex handle_info :client_register_attempt #{app} #{stream_key}")
-    # check if anyone is subscribed to app and stream_key
-    if state.subscriptions[{app, stream_key}] != nil do
-      # respond to client handler that subscription exist
-      send(client_handler_pid, :sub_exists)
-    end
+  def handle_info({:register_client_in_queue, app, stream_key, client_ref}, state) do
+    state = put_in(state, [:client_waiting_queue, {app, stream_key}], client_ref)
+    # send client ref_to anyone possibly awaiting it
+    state.subscriptions_any
+    |> Enum.each(fn subscriber -> send(subscriber, {:client_ref, client_ref, app, stream_key}) end)
 
-    # maybe_send_subscription(app, stream_key, state)
     {:noreply, state}
   end
 
@@ -123,14 +129,5 @@ defmodule Membrane.RTMP.Server do
   def handle_info({:port, port}, state) do
     Enum.each(state.to_reply, &GenServer.reply(&1, port))
     {:noreply, %{state | port: port, to_reply: []}}
-  end
-
-  defp maybe_send_subscription(app, stream_key, state) do
-    if state.subscriptions[{app, stream_key}] != nil and state.client_reference_mapping[{app, stream_key}] != nil do
-      send(
-        state.subscriptions[{app, stream_key}],
-        {:client_ref, state.client_reference_mapping[{app, stream_key}], app, stream_key}
-      )
-    end
   end
 end

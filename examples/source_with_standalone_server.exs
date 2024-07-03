@@ -50,21 +50,30 @@ port = 1935
 app = "app"
 stream_key = "stream_key"
 
+lambda = fn app, stream_key ->
+  IO.inspect("lambda #{app} #{stream_key}")
+end
+
 # Run the standalone server
 {:ok, server} =
   Membrane.RTMP.Server.start_link(
     handler: %Membrane.RTMP.Source.ClientHandler{controlling_process: self()},
     port: port,
-    use_ssl?: false
+    use_ssl?: false,
+    lambda: lambda
   )
 
 # Subscribe to receive client reference that connected to the
 # server with given app id and stream key
-:ok = Membrane.RTMP.Server.subscribe(server, app, stream_key)
-# Start the pipeline and provide it with the client_handler
 
+Enum.each(3..1, fn x ->
+  IO.puts(x)
+  :timer.sleep(1000)
+end)
+
+:ok = Membrane.RTMP.Server.subscribe_any(server)
 # Wait for the client reference
-{:ok, client_ref} = Membrane.RTMP.Server.await_subscription(app, stream_key)
+{:ok, client_ref} = Membrane.RTMP.Server.await_client_ref(app, stream_key)
 # Start the pipeline and provide it with the client_ref
 {:ok, _supervisor, pipeline} =
   Membrane.Pipeline.start_link(Pipeline, client_ref: client_ref)

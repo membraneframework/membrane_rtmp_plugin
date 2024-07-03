@@ -78,17 +78,9 @@ defmodule Membrane.RTMP.Server.ClientHandler do
 
   @impl true
   def handle_info({:demand_data, how_many_buffers_demanded}, state) do
-    state = %{state | buffers_demanded: how_many_buffers_demanded}
+    state = %{finish_handshake(state) | buffers_demanded: how_many_buffers_demanded}
     request_data(state)
     {:noreply, state}
-  end
-
-  @impl true
-  def handle_info(:sub_exists, state) do
-    # finish RTMP handshake
-    {message_handler_state, events} = MessageHandler.send_publish_success(state.message_handler_state)
-    state = Enum.reduce(events, state, &handle_event/2)
-    {:noreply, %{state | message_handler_state: message_handler_state}}
   end
 
   @impl true
@@ -105,15 +97,16 @@ defmodule Membrane.RTMP.Server.ClientHandler do
     {message_handler_state, events} =
       MessageHandler.handle_client_messages(messages, state.message_handler_state)
 
-    state = if message_handler_state.publish_msg != nil and not state.client_register_attempt_made? do
-      %{publish_msg: %Membrane.RTMP.Messages.Publish{stream_key: stream_key}} = message_handler_state
-      IO.inspect(stream_key, label: "client_handler.ex stream_key")
-      # ask server if someone is subscribed to this
-      send(state.server, {:client_register_attempt, state.app, stream_key, self()})
-      %{state | client_register_attempt_made?: true}
-    else
-      state
-    end
+    state =
+      if message_handler_state.publish_msg != nil and not state.client_register_attempt_made? do
+        %{publish_msg: %Membrane.RTMP.Messages.Publish{stream_key: stream_key}} =
+          message_handler_state
+
+        send(state.server, {:register_client_in_queue, state.app, stream_key, self()})
+        %{state | client_register_attempt_made?: true}
+      else
+        state
+      end
 
     state = Enum.reduce(events, state, &handle_event/2)
 
@@ -126,7 +119,6 @@ defmodule Membrane.RTMP.Server.ClientHandler do
          message_handler_state: message_handler_state
      }}
   end
-
 
   defp handle_event(event, state) do
     # call callbacks
@@ -179,4 +171,14 @@ defmodule Membrane.RTMP.Server.ClientHandler do
       end
     end
   end
+
+  defp finish_handshake(state) when not state.published? do
+    {message_handler_state, events} =
+      MessageHandler.send_publish_success(state.message_handler_state)
+
+    state = Enum.reduce(events, state, &handle_event/2)
+    %{state | message_handler_state: message_handler_state}
+  end
+
+  defp finish_handshake(state), do: state
 end

@@ -78,7 +78,10 @@ defmodule Membrane.RTMP.MessageHandler do
   @spec send_publish_success(map()) :: {map(), list()}
   def send_publish_success(state) do
     Responses.publish_success(state.publish_msg.stream_key)
-    |> send_rtmp_payload(state.socket, chunk_stream_id: 3, stream_id: state.publish_header.stream_id)
+    |> send_rtmp_payload(state.socket,
+      chunk_stream_id: 3,
+      stream_id: state.publish_header.stream_id
+    )
 
     {%{state | events: []}, [{:published, state.publish_msg} | state.events]}
   end
@@ -151,10 +154,10 @@ defmodule Membrane.RTMP.MessageHandler do
   defp do_handle_client_message(%Messages.Publish{} = publish_msg, %Header{} = header, state) do
     %Messages.UserControl{event_type: @stream_begin_type, data: <<0, 0, 0, 1>>}
     |> send_rtmp_payload(state.socket, chunk_stream_id: 2)
-    # at this point abort handshake and ask server if someone is subscribed to this url
-    IO.inspect(publish_msg.stream_key, label: "paused handshake for")
 
-    # state = send_publish_success(publish_msg, header.stream_id, state)
+    # at this point pause the unfinished handshake until pipeline demands data from this client
+    # (this mechanism prevents accepting streams with no listeners)
+
     {:halt, %{state | publish_msg: publish_msg, publish_header: header}}
   end
 

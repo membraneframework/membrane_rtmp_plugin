@@ -157,7 +157,7 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_info({:client_connected, app, stream_key}, _ctx, %{mode: :builtin_server} = state) do
-    :ok = Membrane.RTMP.Server.subscribe(state.server, state.app, state.stream_key)
+    :ok = Membrane.RTMP.Server.subscribe_any(state.server)
     state = %{state | app: app, stream_key: stream_key}
     {[], state}
   end
