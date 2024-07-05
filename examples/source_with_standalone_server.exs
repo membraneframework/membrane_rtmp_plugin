@@ -45,15 +45,18 @@ defmodule Pipeline do
   end
 end
 
+Logger.configure(level: :error)
+
 # The client will connect on `rtmp://localhost:1935/app/stream_key`
 port = 1935
 app = "app"
 stream_key = "stream_key"
 
-lambda = fn app, stream_key ->
-  IO.inspect("lambda #{app} #{stream_key}")
+lambda = fn server, app, stream_key ->
+  send(server, {:lambda, "hello from the other side #{app} #{stream_key}"})
 end
 
+IO.inspect(self(), label: "self")
 # Run the standalone server
 {:ok, server} =
   Membrane.RTMP.Server.start_link(

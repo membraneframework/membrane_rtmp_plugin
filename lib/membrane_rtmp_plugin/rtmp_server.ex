@@ -15,7 +15,8 @@ defmodule Membrane.RTMP.Server do
           handler: ClientHandlerBehaviour.t(),
           port: :inet.port_number(),
           use_ssl?: boolean(),
-          name: atom() | nil
+          name: atom() | nil,
+          lambda: function() | nil
         ]
 
   @type server_identifier :: pid() | atom()
@@ -109,7 +110,6 @@ defmodule Membrane.RTMP.Server do
 
   @impl true
   def handle_info({:register_client, app, stream_key, client_reference_pid}, state) do
-    state.lambda.(app, stream_key)
     state = put_in(state, [:client_reference_mapping, {app, stream_key}], client_reference_pid)
     client_waiting_queue = state.client_waiting_queue |> Map.delete({app, stream_key})
     {:noreply, %{state | client_waiting_queue: client_waiting_queue}}
@@ -117,6 +117,10 @@ defmodule Membrane.RTMP.Server do
 
   @impl true
   def handle_info({:register_client_in_queue, app, stream_key, client_ref}, state) do
+    if is_function(state.lambda) do
+      state.lambda.(self(), app, stream_key)
+    end
+
     state = put_in(state, [:client_waiting_queue, {app, stream_key}], client_ref)
     # send client ref_to anyone possibly awaiting it
     state.subscriptions_any
@@ -129,5 +133,11 @@ defmodule Membrane.RTMP.Server do
   def handle_info({:port, port}, state) do
     Enum.each(state.to_reply, &GenServer.reply(&1, port))
     {:noreply, %{state | port: port, to_reply: []}}
+  end
+
+  @impl true
+  def handle_info({:lambda, message}, state) do
+    IO.inspect(message, label: "message")
+    {:noreply, state}
   end
 end

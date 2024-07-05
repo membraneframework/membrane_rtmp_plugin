@@ -221,7 +221,8 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
           controlling_process: self()
         },
         port: port,
-        use_ssl?: use_ssl?
+        use_ssl?: use_ssl?,
+        lambda: nil
       )
 
     {:ok, assigned_port} = Membrane.RTMP.Server.get_port(server_pid)
@@ -233,10 +234,10 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
         {:client_connected, ^app, ^stream_key} -> :ok
       end
 
-    :ok = Membrane.RTMP.Server.subscribe(server_pid, app, stream_key)
+    :ok = Membrane.RTMP.Server.subscribe_any(server_pid)
 
     {:ok, client_reference} =
-      Membrane.RTMP.Server.await_subscription(app, stream_key)
+      Membrane.RTMP.Server.await_client_ref(app, stream_key)
 
     options = [
       module: Membrane.RTMP.Source.WithExternalServerTestPipeline,
