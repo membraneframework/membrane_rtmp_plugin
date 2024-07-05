@@ -52,11 +52,11 @@ port = 1935
 app = "app"
 stream_key = "stream_key"
 
+# example lambda function that upon launching will send a message back to parent server.
 lambda = fn server, app, stream_key ->
   send(server, {:lambda, "hello from the other side #{app} #{stream_key}"})
 end
 
-IO.inspect(self(), label: "self")
 # Run the standalone server
 {:ok, server} =
   Membrane.RTMP.Server.start_link(
@@ -66,17 +66,13 @@ IO.inspect(self(), label: "self")
     lambda: lambda
   )
 
-# Subscribe to receive client reference that connected to the
-# server with given app id and stream key
-
-Enum.each(3..1, fn x ->
-  IO.puts(x)
-  :timer.sleep(1000)
-end)
-
+# Subscribe any app stream key to be informed when new client connects,
+# so you can await its ref and pull data from it.
 :ok = Membrane.RTMP.Server.subscribe_any(server)
-# Wait for the client reference
+
+# Wait for the client reference for given app stream_key
 {:ok, client_ref} = Membrane.RTMP.Server.await_client_ref(app, stream_key)
+
 # Start the pipeline and provide it with the client_ref
 {:ok, _supervisor, pipeline} =
   Membrane.Pipeline.start_link(Pipeline, client_ref: client_ref)

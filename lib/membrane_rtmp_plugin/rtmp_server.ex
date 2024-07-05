@@ -1,6 +1,12 @@
 defmodule Membrane.RTMP.Server do
   @moduledoc """
   A simple RTMP server, which handles each new incoming connection.
+
+  When new client connects to the server, it goes into :client_waiting_queue and its RTMP handshake will remanin unfinished.
+  Only when pipeline tries to pull data from client, its handshake will be finished, and client will be registered.
+
+  Also when new client connects, optional, annonymous function defined by user is triggered.
+  The lambda function is given PID of parent server, app and stream key.
   """
   use GenServer
 
@@ -99,7 +105,7 @@ defmodule Membrane.RTMP.Server do
     subs = [state.subscriptions_any ++ subscriber_pid]
     state = %{state | subscriptions_any: subs}
 
-    # try to send all client_refs from :client_waiting_queue to this subscriber, maybe is awaiting one of /app/stream_keys
+    # try to send all client_refs from :client_waiting_queue to this subscriber, maybe is already awaiting one of /app/stream_keys
     state.client_waiting_queue
     |> Enum.each(fn {{app, stream_key}, client_ref} ->
       send(subscriber_pid, {:client_ref, client_ref, app, stream_key})
@@ -137,7 +143,7 @@ defmodule Membrane.RTMP.Server do
 
   @impl true
   def handle_info({:lambda, message}, state) do
-    IO.inspect(message, label: "message")
+    IO.inspect(message, label: "new message from lambda")
     {:noreply, state}
   end
 end
