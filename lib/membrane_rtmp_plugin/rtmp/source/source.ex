@@ -85,7 +85,8 @@ defmodule Membrane.RTMP.Source do
       Membrane.RTMP.Server.start_link(
         handler: %SourceClientHandler{controlling_process: self()},
         port: port,
-        use_ssl?: use_ssl?
+        use_ssl?: use_ssl?,
+        lambda: nil
       )
 
     state = %{state | app: app, stream_key: stream_key, server: server_pid}
