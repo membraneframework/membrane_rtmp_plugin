@@ -49,12 +49,12 @@ Logger.configure(level: :error)
 
 # The client will connect on `rtmp://localhost:1935/app/stream_key`
 port = 1935
-app = "app"
-stream_key = "stream_key"
 
 # example lambda function that upon launching will send a message back to parent server.
-lambda = fn server, app, stream_key ->
-  send(server, {:lambda, "hello from the other side #{app} #{stream_key}"})
+parent_process_pid = self()
+
+lambda = fn client_ref, app, stream_key ->
+  send(parent_process_pid, {:client_ref, client_ref, app, stream_key})
 end
 
 # Run the standalone server
@@ -66,12 +66,15 @@ end
     lambda: lambda
   )
 
-# Subscribe any app stream key to be informed when new client connects,
-# so you can await its ref and pull data from it.
-:ok = Membrane.RTMP.Server.subscribe_any(server)
+app = "app"
+stream_key = "stream_key"
 
-# Wait for the client reference for given app stream_key
-{:ok, client_ref} = Membrane.RTMP.Server.await_client_ref(app, stream_key)
+{:ok, client_ref} = receive do
+  {:client_ref, client_ref, ^app, ^stream_key} ->
+    {:ok, client_ref}
+  after
+    5000 -> :timeout
+  end
 
 # Start the pipeline and provide it with the client_ref
 {:ok, _supervisor, pipeline} =

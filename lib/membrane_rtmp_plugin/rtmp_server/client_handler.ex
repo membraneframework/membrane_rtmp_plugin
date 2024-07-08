@@ -39,7 +39,8 @@ defmodule Membrane.RTMP.Server.ClientHandler do
        server: opts.server,
        buffers_demanded: 0,
        published?: false,
-       client_register_attempt_made?: false
+       client_register_attempt_made?: false,
+       lambda: opts.lambda
      }}
   end
 
@@ -102,7 +103,10 @@ defmodule Membrane.RTMP.Server.ClientHandler do
         %{publish_msg: %Membrane.RTMP.Messages.Publish{stream_key: stream_key}} =
           message_handler_state
 
-        send(state.server, {:register_client_in_queue, state.app, stream_key, self()})
+        if is_function(state.lambda) do
+          state.lambda.(self(), state.app, stream_key)
+        end
+
         %{state | client_register_attempt_made?: true}
       else
         state
@@ -148,8 +152,6 @@ defmodule Membrane.RTMP.Server.ClientHandler do
         %{state | handler_state: new_handler_state, app: connected_msg.app}
 
       {:published, publish_msg} ->
-        send(state.server, {:register_client, state.app, publish_msg.stream_key, self()})
-
         new_handler_state =
           state.handler.handle_stream_published(publish_msg, state.handler_state)
 
