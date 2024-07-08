@@ -200,7 +200,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   defp start_pipeline_with_builtin_rtmp_server(app, stream_key, use_ssl? \\ false) do
     options = [
       module: Membrane.RTMP.Source.WithBuiltinServerTestPipeline,
-      custom_args: %{app: app, stream_key: stream_key, port: @default_port, use_ssl?: use_ssl?, lambda: nil},
+      custom_args: %{app: app, stream_key: stream_key, port: @default_port, use_ssl?: use_ssl?, new_client_callback: nil},
       test_process: self()
     ]
 
@@ -222,7 +222,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
         },
         port: port,
         use_ssl?: use_ssl?,
-        lambda: nil
+        new_client_callback: nil
       )
 
     {:ok, assigned_port} = Membrane.RTMP.Server.get_port(server_pid)

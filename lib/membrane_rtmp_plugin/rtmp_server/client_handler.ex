@@ -40,7 +40,7 @@ defmodule Membrane.RTMP.Server.ClientHandler do
        buffers_demanded: 0,
        published?: false,
        client_register_attempt_made?: false,
-       lambda: opts.lambda
+       new_client_callback: opts.new_client_callback
      }}
   end
 
@@ -103,8 +103,8 @@ defmodule Membrane.RTMP.Server.ClientHandler do
         %{publish_msg: %Membrane.RTMP.Messages.Publish{stream_key: stream_key}} =
           message_handler_state
 
-        if is_function(state.lambda) do
-          state.lambda.(self(), state.app, stream_key)
+        if is_function(state.new_client_callback) do
+          state.new_client_callback.(self(), state.app, stream_key)
         end
 
         %{state | client_register_attempt_made?: true}

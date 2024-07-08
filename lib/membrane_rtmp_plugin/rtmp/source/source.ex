@@ -80,17 +80,23 @@ defmodule Membrane.RTMP.Source do
   @impl true
   def handle_setup(_ctx, %{mode: :builtin_server} = state) do
     {use_ssl?, port, app, stream_key} = parse_url(state.url)
+    IO.inspect("handle setup internal server")
+
+    parent_pid = self();
+    new_client_callback = fn client_ref, app, stream_key ->
+      send(parent_pid, {:client_ref, client_ref, app, stream_key})
+    end
 
     {:ok, server_pid} =
       Membrane.RTMP.Server.start_link(
         handler: %SourceClientHandler{controlling_process: self()},
         port: port,
         use_ssl?: use_ssl?,
-        lambda: nil
+        new_client_callback: new_client_callback
       )
 
     state = %{state | app: app, stream_key: stream_key, server: server_pid}
-    {[], state}
+    {[setup: :incomplete], state}
   end
 
   @impl true
@@ -156,11 +162,19 @@ defmodule Membrane.RTMP.Source do
     {[], state}
   end
 
+  # @impl true
+  # def handle_info({:client_connected, app, stream_key}, _ctx, %{mode: :builtin_server} = state) do
+  #   :ok = Membrane.RTMP.Server.subscribe_any(state.server)
+  #   state = %{state | app: app, stream_key: stream_key}
+  #   {[], state}
+  # end
+
   @impl true
-  def handle_info({:client_connected, app, stream_key}, _ctx, %{mode: :builtin_server} = state) do
-    :ok = Membrane.RTMP.Server.subscribe_any(state.server)
-    state = %{state | app: app, stream_key: stream_key}
-    {[], state}
+  def handle_info({:client_ref, client_ref, app, stream_key}, _ctx, %{mode: :builtin_server} = state)
+    when app == state.app and stream_key == state.stream_key do
+    IO.inspect(client_ref, label: "source.ex client ref")
+    IO.inspect("#{app} #{stream_key}")
+    {[setup: :complete], %{state | client_ref: client_ref}}
   end
 
   @impl true

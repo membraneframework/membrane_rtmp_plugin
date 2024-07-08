@@ -45,6 +45,8 @@ defmodule Pipeline do
   end
 end
 
+Logger.configure(level: :error)
+
 # Start a pipeline with `Membrane.RTMP.Source` that will spawn an RTMP server waiting for
 # the client connection on given URL
 {:ok, _supervisor, pipeline} = Membrane.Pipeline.start_link(Pipeline)

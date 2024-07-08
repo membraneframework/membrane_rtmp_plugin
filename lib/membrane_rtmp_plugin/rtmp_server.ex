@@ -22,7 +22,7 @@ defmodule Membrane.RTMP.Server do
           port: :inet.port_number(),
           use_ssl?: boolean(),
           name: atom() | nil,
-          lambda: function() | nil
+          new_client_callback: function() | nil
         ]
 
   @type server_identifier :: pid() | atom()
@@ -58,7 +58,7 @@ defmodule Membrane.RTMP.Server do
        port: nil,
        to_reply: [],
        use_ssl?: server_options.use_ssl?,
-       lambda: server_options.lambda
+       new_client_callback: server_options.new_client_callback
      }}
   end
 
