@@ -231,6 +231,8 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
         new_client_callback: new_client_callback
       )
 
+    {:ok, assigned_port} = Membrane.RTMP.Server.get_port(server_pid)
+
     send(parent, {:port, assigned_port})
 
     {:ok, client_ref} = receive do
@@ -240,7 +242,6 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
         5000 -> :timeout
       end
 
-    {:ok, assigned_port} = Membrane.RTMP.Server.get_port(server_pid)
 
     # send(parent, {:run_ffmpeg, assigned_port})
 
