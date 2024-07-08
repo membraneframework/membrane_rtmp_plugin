@@ -76,5 +76,4 @@ defmodule Membrane.RTMP.Server do
     Enum.each(state.to_reply, &GenServer.reply(&1, port))
     {:noreply, %{state | port: port, to_reply: []}}
   end
-
 end

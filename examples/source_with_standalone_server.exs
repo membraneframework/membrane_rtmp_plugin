@@ -69,9 +69,10 @@ end
 app = "app"
 stream_key = "stream_key"
 
-{:ok, client_ref} = receive do
-  {:client_ref, client_ref, ^app, ^stream_key} ->
-    {:ok, client_ref}
+{:ok, client_ref} =
+  receive do
+    {:client_ref, client_ref, ^app, ^stream_key} ->
+      {:ok, client_ref}
   after
     5000 -> :timeout
   end
