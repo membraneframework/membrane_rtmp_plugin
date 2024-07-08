@@ -79,7 +79,7 @@ defmodule Membrane.RTMP.Server.ClientHandler do
 
   @impl true
   def handle_info({:demand_data, how_many_buffers_demanded}, state) do
-    state = %{finish_handshake(state) | buffers_demanded: how_many_buffers_demanded}
+    state = finish_handshake(state) |> Map.replace!(:buffers_demanded, how_many_buffers_demanded)
     request_data(state)
     {:noreply, state}
   end
