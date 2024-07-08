@@ -75,7 +75,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     Testing.Pipeline.terminate(pipeline)
     # When sending stream to /app/stream_key that is not expected, RTMP Server won't finish ffmpegs RTMP hanshake (reject connection)
     # and ffmpeg process will return an error. This is expected behaviour.
-    assert :error = Task.await(ffmpeg_task)
+    assert :error = Task.await(ffmpeg_task, 10_000)
   end
 
   @tag :rtmps
