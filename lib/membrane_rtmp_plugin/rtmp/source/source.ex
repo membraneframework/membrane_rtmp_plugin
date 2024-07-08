@@ -162,13 +162,6 @@ defmodule Membrane.RTMP.Source do
     {[], state}
   end
 
-  # @impl true
-  # def handle_info({:client_connected, app, stream_key}, _ctx, %{mode: :builtin_server} = state) do
-  #   :ok = Membrane.RTMP.Server.subscribe_any(state.server)
-  #   state = %{state | app: app, stream_key: stream_key}
-  #   {[], state}
-  # end
-
   @impl true
   def handle_info({:client_ref, client_ref, app, stream_key}, _ctx, %{mode: :builtin_server} = state)
     when app == state.app and stream_key == state.stream_key do
@@ -178,12 +171,8 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_info(
-        {:client_ref, client_ref_pid, _app, _stream_key},
-        _ctx,
-        %{mode: :builtin_server} = state
-      ) do
-    {[redemand: :output], %{state | client_ref: client_ref_pid}}
+  def handle_info({:client_ref, _client_ref, _app, _stream_key}, _ctx, %{mode: :builtin_server} = state) do
+    {[], state}
   end
 
   @impl true

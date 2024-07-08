@@ -200,7 +200,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   defp start_pipeline_with_builtin_rtmp_server(app, stream_key, use_ssl? \\ false) do
     options = [
       module: Membrane.RTMP.Source.WithBuiltinServerTestPipeline,
-      custom_args: %{app: app, stream_key: stream_key, port: @default_port, use_ssl?: use_ssl?, new_client_callback: nil},
+      custom_args: %{app: app, stream_key: stream_key, port: @default_port, use_ssl?: use_ssl?},
       test_process: self()
     ]
 
@@ -215,6 +215,12 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
          port \\ 0,
          use_ssl? \\ false
        ) do
+    parent_process_pid = self()
+
+    new_client_callback = fn client_ref, app, stream_key ->
+      send(parent_process_pid, {:client_ref, client_ref, app, stream_key})
+    end
+
     {:ok, server_pid} =
       Membrane.RTMP.Server.start_link(
         handler: %Membrane.RTMP.Source.ClientHandler{
@@ -222,26 +228,25 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
         },
         port: port,
         use_ssl?: use_ssl?,
-        new_client_callback: nil
+        new_client_callback: new_client_callback
       )
-
-    {:ok, assigned_port} = Membrane.RTMP.Server.get_port(server_pid)
 
     send(parent, {:port, assigned_port})
 
-    :ok =
-      receive do
-        {:client_connected, ^app, ^stream_key} -> :ok
+    {:ok, client_ref} = receive do
+      {:client_ref, client_ref, ^app, ^stream_key} ->
+        {:ok, client_ref}
+      after
+        5000 -> :timeout
       end
 
-    :ok = Membrane.RTMP.Server.subscribe_any(server_pid)
+    {:ok, assigned_port} = Membrane.RTMP.Server.get_port(server_pid)
 
-    {:ok, client_reference} =
-      Membrane.RTMP.Server.await_client_ref(app, stream_key)
+    # send(parent, {:run_ffmpeg, assigned_port})
 
     options = [
       module: Membrane.RTMP.Source.WithExternalServerTestPipeline,
-      custom_args: %{client_ref: client_reference},
+      custom_args: %{client_ref: client_ref},
       test_process: parent
     ]
 
