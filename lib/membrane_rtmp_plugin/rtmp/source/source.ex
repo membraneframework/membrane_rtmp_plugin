@@ -11,6 +11,7 @@ defmodule Membrane.RTMP.Source do
   """
   use Membrane.Source
   require Membrane.Logger
+  require Logger
   alias __MODULE__.ClientHandler, as: SourceClientHandler
   alias Membrane.RTMP.Server.ClientHandler
 
@@ -174,10 +175,11 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_info(
-        {:client_ref, _client_ref, _app, _stream_key},
+        {:client_ref, _client_ref, app, stream_key},
         _ctx,
         %{mode: :builtin_server} = state
       ) do
+    Logger.warning("Unexpected client connected on /#{app}/#{stream_key}")
     {[], state}
   end
 

@@ -39,7 +39,7 @@ defmodule Membrane.RTMP.Server.ClientHandler do
        server: opts.server,
        buffers_demanded: 0,
        published?: false,
-       client_register_attempt_made?: false,
+       notified_about_client?: false,
        new_client_callback: opts.new_client_callback
      }}
   end
@@ -99,15 +99,17 @@ defmodule Membrane.RTMP.Server.ClientHandler do
       MessageHandler.handle_client_messages(messages, state.message_handler_state)
 
     state =
-      if message_handler_state.publish_msg != nil and not state.client_register_attempt_made? do
+      if message_handler_state.publish_msg != nil and not state.notified_about_client? do
         %{publish_msg: %Membrane.RTMP.Messages.Publish{stream_key: stream_key}} =
           message_handler_state
 
         if is_function(state.new_client_callback) do
           state.new_client_callback.(self(), state.app, stream_key)
+        else
+          raise "new_client_callback is not a function"
         end
 
-        %{state | client_register_attempt_made?: true}
+        %{state | notified_about_client?: true}
       else
         state
       end

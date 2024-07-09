@@ -45,8 +45,6 @@ defmodule Pipeline do
   end
 end
 
-Logger.configure(level: :error)
-
 # The client will connect on `rtmp://localhost:1935/app/stream_key`
 port = 1935
 
