@@ -74,16 +74,9 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     # Cleanup
     Testing.Pipeline.terminate(pipeline)
 
-    # When sending stream to /app/stream_key that is not expected, RTMP Server won't finish ffmpegs RTMP hanshake
-    # and ffmpeg process will freeze forever. This is expected behaviour - but probably should be handled better
-    ffmpeg_result =
-      try do
-        Task.await(ffmpeg_task, 10_000)
-      catch
-        :exit, _reason -> :timeout
-      end
-
-    assert ffmpeg_result == :timeout
+    # Error is expected because connection will be refused and thus ffmpeg fails
+    ffmpeg_result = Task.await(ffmpeg_task, 10_000)
+    assert ffmpeg_result == :error
   end
 
   @tag :rtmps
@@ -238,7 +231,8 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
         },
         port: port,
         use_ssl?: use_ssl?,
-        new_client_callback: new_client_callback
+        new_client_callback: new_client_callback,
+        client_timeout: 3_000
       )
 
     {:ok, assigned_port} = Membrane.RTMP.Server.get_port(server_pid)

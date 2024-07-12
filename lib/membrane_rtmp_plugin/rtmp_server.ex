@@ -1,12 +1,14 @@
 defmodule Membrane.RTMP.Server do
   @moduledoc """
-  A simple RTMP server, which handles each new incoming connection.
+  A simple RTMP server, which handles each new incoming connection. When a new client connects, the new_client_callback is invoked.
+  New connections remain in an incomplete RTMP handshake state until another process makes demand for dara data.
+  If no data is demanded within the client_timeout period, the connection is closed.
 
-  When new client connects to the server, it goes into :client_waiting_queue and its RTMP handshake will remanin unfinished.
-  Only when pipeline tries to pull data from client, its handshake will be finished, and client will be registered.
-
-  Also when new client connects, optional, annonymous function defined by user is triggered.
-  The lambda function is given PID of parent server, app and stream key.
+  Options:
+   - client_timeout: Time (ms) after which an unused connection is automatically closed.
+   - new_client_callback: An anonymous function called when a new client connects.
+      It receives the client reference, app and stream_key, allowing custom processing,
+      like sending the reference to another process.
   """
   use GenServer
 
@@ -23,7 +25,8 @@ defmodule Membrane.RTMP.Server do
           use_ssl?: boolean(),
           name: atom() | nil,
           new_client_callback:
-            (client_ref :: pid(), app :: String.t(), stream_key :: String.t() -> any()) | nil
+            (client_ref :: pid(), app :: String.t(), stream_key :: String.t() -> any()),
+          client_timeout: non_neg_integer()
         ]
 
   @type server_identifier :: pid() | atom()
@@ -58,8 +61,7 @@ defmodule Membrane.RTMP.Server do
        listener: pid,
        port: nil,
        to_reply: [],
-       use_ssl?: server_options.use_ssl?,
-       new_client_callback: server_options.new_client_callback
+       use_ssl?: server_options.use_ssl?
      }}
   end
 

@@ -40,7 +40,8 @@ defmodule Membrane.RTMP.Server.ClientHandler do
        buffers_demanded: 0,
        published?: false,
        notified_about_client?: false,
-       new_client_callback: opts.new_client_callback
+       new_client_callback: opts.new_client_callback,
+       client_timeout: opts.client_timeout
      }}
   end
 
@@ -85,6 +86,16 @@ defmodule Membrane.RTMP.Server.ClientHandler do
   end
 
   @impl true
+  def handle_info({:client_timeout, app, stream_key}, state) do
+    if not state.published? do
+      Logger.warning("No demand made for client /#{app}/#{stream_key}, terminating connection.")
+      :gen_tcp.close(state.socket)
+    end
+
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_info(other_msg, state) do
     handler_state = state.handler.handle_info(other_msg, state.handler_state)
 
@@ -107,6 +118,15 @@ defmodule Membrane.RTMP.Server.ClientHandler do
           state.new_client_callback.(self(), state.app, stream_key)
         else
           raise "new_client_callback is not a function"
+        end
+
+        with {:error, reason} <-
+               :timer.send_after(
+                 state.client_timeout,
+                 self(),
+                 {:client_timeout, state.app, stream_key}
+               ) do
+          raise "Client timeout timer failed: #{reason}"
         end
 
         %{state | notified_about_client?: true}

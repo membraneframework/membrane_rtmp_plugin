@@ -5,9 +5,10 @@ defmodule Membrane.RTMP.Source do
 
   The source can be used in the following two scenarios:
   * by providing the URL on which the client is expected to connect - note, that if the client doesn't
-  connect on this URL, the source won't complete its setup
-  * by spawning `Membrane.RTMP.Server`, subscribing for a given app and stream key on which the client
-  will connect, waiting for a client reference and passing the client reference to the `#{inspect(__MODULE__)}`.
+  connect on this URL, the source won't complete its setup. Note that all attepted connections to
+  other app stream_key than specified will be rejected.
+
+  * by spawning `Membrane.RTMP.Server`, receiving a client reference and passing it to the `#{inspect(__MODULE__)}`.
   """
   use Membrane.Source
   require Membrane.Logger
@@ -93,7 +94,8 @@ defmodule Membrane.RTMP.Source do
         handler: %SourceClientHandler{controlling_process: self()},
         port: port,
         use_ssl?: use_ssl?,
-        new_client_callback: new_client_callback
+        new_client_callback: new_client_callback,
+        client_timeout: 100
       )
 
     state = %{state | app: app, stream_key: stream_key, server: server_pid}
