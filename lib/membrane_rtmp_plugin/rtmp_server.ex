@@ -25,7 +25,8 @@ defmodule Membrane.RTMP.Server do
           use_ssl?: boolean(),
           name: atom() | nil,
           new_client_callback:
-            (client_ref :: pid(), app :: String.t(), stream_key :: String.t() -> any()),
+            (client_ref :: pid(), app :: String.t(), stream_key :: String.t() ->
+               any()),
           client_timeout: non_neg_integer()
         ]
 
