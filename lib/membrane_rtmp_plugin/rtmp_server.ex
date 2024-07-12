@@ -24,9 +24,10 @@ defmodule Membrane.RTMP.Server do
           port: :inet.port_number(),
           use_ssl?: boolean(),
           name: atom() | nil,
-          new_client_callback:
-            (client_ref :: pid(), app :: String.t(), stream_key :: String.t() ->
-               any()),
+          new_client_callback: (client_ref :: pid(),
+                                app :: String.t(),
+                                stream_key :: String.t() ->
+                                  any()),
           client_timeout: non_neg_integer()
         ]
 
