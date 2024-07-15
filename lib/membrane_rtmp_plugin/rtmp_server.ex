@@ -1,13 +1,13 @@
 defmodule Membrane.RTMP.Server do
   @moduledoc """
-  A simple RTMP server, which handles each new incoming connection. When a new client connects, the new_client_callback is invoked.
-  New connections remain in an incomplete RTMP handshake state until another process makes demand for dara data.
-  If no data is demanded within the client_timeout period, the connection is closed.
+  A simple RTMP server, which handles each new incoming connection. When a new client connects, the `new_client_callback` is invoked.
+  New connections remain in an incomplete RTMP handshake state, until another process makes demand for their data.
+  If no data is demanded within the client_timeout period, TCP socket is closed.
 
   Options:
-   - client_timeout: Time (ms) after which an unused connection is automatically closed.
+   - client_timeout: Time (ms) after which an unused client connection is automatically closed.
    - new_client_callback: An anonymous function called when a new client connects.
-      It receives the client reference, app and stream_key, allowing custom processing,
+      It receives the client reference, `app` and `stream_key`, allowing custom processing,
       like sending the reference to another process.
   """
   use GenServer

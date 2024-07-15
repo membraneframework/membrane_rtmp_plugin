@@ -120,14 +120,7 @@ defmodule Membrane.RTMP.Server.ClientHandler do
           raise "new_client_callback is not a function"
         end
 
-        with {:error, reason} <-
-               :timer.send_after(
-                 state.client_timeout,
-                 self(),
-                 {:client_timeout, state.app, stream_key}
-               ) do
-          raise "Client timeout timer failed: #{reason}"
-        end
+        Process.send_after(self(), {:client_timeout, state.app, stream_key}, state.client_timeout)
 
         %{state | notified_about_client?: true}
       else
