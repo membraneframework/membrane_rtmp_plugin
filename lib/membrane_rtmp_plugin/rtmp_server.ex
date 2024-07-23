@@ -8,7 +8,8 @@ defmodule Membrane.RTMP.Server do
    - client_timeout: Time (ms) after which an unused client connection is automatically closed.
    - new_client_callback: An anonymous function called when a new client connects.
       It receives the client reference, `app` and `stream_key`, allowing custom processing,
-      like sending the reference to another process.
+      like sending the reference to another process. If it's not provided, default implementation is used:
+      {:client_ref, client_ref, app, stream_key} message is sent to the process that invoked RTMP.Server.start_link().
   """
   use GenServer
 
@@ -24,10 +25,10 @@ defmodule Membrane.RTMP.Server do
           port: :inet.port_number(),
           use_ssl?: boolean(),
           name: atom() | nil,
-          new_client_callback: (client_ref :: pid(),
-                                app :: String.t(),
-                                stream_key :: String.t() ->
-                                  any()),
+          new_client_callback:
+            (client_ref :: pid(), app :: String.t(), stream_key :: String.t() ->
+               any())
+            | nil,
           client_timeout: non_neg_integer()
         ]
 
@@ -39,7 +40,22 @@ defmodule Membrane.RTMP.Server do
   @spec start_link(server_options :: t()) :: GenServer.on_start()
   def start_link(server_options) do
     gen_server_opts = if server_options[:name] == nil, do: [], else: [name: server_options[:name]]
+
     server_options = Enum.into(server_options, %{})
+
+    server_options =
+      if Map.get(server_options, :new_client_callback, nil) == nil do
+        parent_process_pid = self()
+
+        callback = fn client_ref, app, stream_key ->
+          send(parent_process_pid, {:client_ref, client_ref, app, stream_key})
+        end
+
+        Map.put(server_options, :new_client_callback, callback)
+      else
+        server_options
+      end
+
     GenServer.start_link(__MODULE__, server_options, gen_server_opts)
   end
 
