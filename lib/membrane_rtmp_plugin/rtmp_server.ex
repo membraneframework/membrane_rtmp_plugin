@@ -29,7 +29,7 @@ defmodule Membrane.RTMP.Server do
             (client_ref :: pid(), app :: String.t(), stream_key :: String.t() ->
                any())
             | nil,
-          client_timeout: non_neg_integer()
+          client_timeout: Membrane.Time.t()
         ]
 
   @type server_identifier :: pid() | atom()

@@ -5,7 +5,7 @@ defmodule Membrane.RTMP.Source do
 
   The source can be used in the following two scenarios:
   * by providing the URL on which the client is expected to connect - note, that if the client doesn't
-  connect on this URL, the source won't complete its setup. Note that all attepted connections to
+  connect on this URL, the source won't complete its setup. Note that all attempted connections to
   other `app` or `stream_key` than specified ones will be rejected.
 
   * by spawning `Membrane.RTMP.Server`, receiving a client reference and passing it to the `#{inspect(__MODULE__)}`.
