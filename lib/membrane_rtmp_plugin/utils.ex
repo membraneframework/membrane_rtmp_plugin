@@ -2,6 +2,10 @@ defmodule Membrane.RTMP.Utils do
   @moduledoc """
   Utility functions
   """
+
+  @doc """
+  Extracts ssl, port, app and stream_key from url.
+  """
   @spec parse_url(url :: String.t()) :: {boolean(), integer(), String.t(), String.t()}
   def parse_url(url) do
     uri = URI.parse(url)
