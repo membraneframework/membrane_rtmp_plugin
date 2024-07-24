@@ -37,18 +37,19 @@ defmodule Membrane.RTMP.MessageHandler do
           events: [event()],
           receiver_pid: pid() | nil,
           socket_retries: pos_integer(),
-          epoch: non_neg_integer()
+          epoch: non_neg_integer(),
+          publish_msg: Messages.Publish.t() | nil,
+          publish_header: Header.t() | nil
         }
 
   @spec init(opts :: %{socket: :gen_tcp.socket() | :ssl.socket(), use_ssl?: boolean()}) :: t()
   def init(opts) do
-    state = %{
+    %{
       socket: opts.socket,
       socket_module: if(opts.use_ssl?, do: :ssl, else: :gen_tcp),
       header_sent?: false,
       events: [],
       receiver_pid: nil,
-      #
       publish_msg: nil,
       publish_header: nil,
       # how many times the Source tries to get control of the socket
@@ -56,8 +57,6 @@ defmodule Membrane.RTMP.MessageHandler do
       # epoch required for performing a handshake with the pipeline
       epoch: 0
     }
-
-    state
   end
 
   @spec handle_client_messages(list(), map()) :: {map(), list()}
