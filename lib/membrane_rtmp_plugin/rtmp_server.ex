@@ -44,7 +44,7 @@ defmodule Membrane.RTMP.Server do
     server_options = Enum.into(server_options, %{})
 
     server_options =
-      if Map.get(server_options, :new_client_callback, nil) == nil do
+      if server_options[:new_client_callback] == nil do
         parent_process_pid = self()
 
         callback = fn client_ref, app, stream_key ->
