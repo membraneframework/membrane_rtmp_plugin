@@ -73,7 +73,10 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
 
     # Cleanup
     Testing.Pipeline.terminate(pipeline)
-    assert :ok = Task.await(ffmpeg_task)
+
+    # Error is expected because connection will be refused and thus ffmpeg fails
+    ffmpeg_result = Task.await(ffmpeg_task, 10_000)
+    assert ffmpeg_result == :error
   end
 
   @tag :rtmps
@@ -215,32 +218,38 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
          port \\ 0,
          use_ssl? \\ false
        ) do
+    parent_process_pid = self()
+
+    new_client_callback = fn client_ref, app, stream_key ->
+      send(parent_process_pid, {:client_ref, client_ref, app, stream_key})
+    end
+
     {:ok, server_pid} =
       Membrane.RTMP.Server.start_link(
         handler: %Membrane.RTMP.Source.ClientHandler{
           controlling_process: self()
         },
         port: port,
-        use_ssl?: use_ssl?
+        use_ssl?: use_ssl?,
+        new_client_callback: new_client_callback,
+        client_timeout: 3_000
       )
 
     {:ok, assigned_port} = Membrane.RTMP.Server.get_port(server_pid)
 
     send(parent, {:port, assigned_port})
 
-    :ok =
+    {:ok, client_ref} =
       receive do
-        {:client_connected, ^app, ^stream_key} -> :ok
+        {:client_ref, client_ref, ^app, ^stream_key} ->
+          {:ok, client_ref}
+      after
+        5000 -> :timeout
       end
-
-    :ok = Membrane.RTMP.Server.subscribe(server_pid, app, stream_key)
-
-    {:ok, client_reference} =
-      Membrane.RTMP.Server.await_subscription(app, stream_key)
 
     options = [
       module: Membrane.RTMP.Source.WithExternalServerTestPipeline,
-      custom_args: %{client_ref: client_reference},
+      custom_args: %{client_ref: client_ref},
       test_process: parent
     ]
 

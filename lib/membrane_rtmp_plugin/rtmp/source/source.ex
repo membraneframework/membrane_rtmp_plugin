@@ -5,14 +5,17 @@ defmodule Membrane.RTMP.Source do
 
   The source can be used in the following two scenarios:
   * by providing the URL on which the client is expected to connect - note, that if the client doesn't
-  connect on this URL, the source won't complete its setup
-  * by spawning `Membrane.RTMP.Server`, subscribing for a given app and stream key on which the client
-  will connect, waiting for a client reference and passing the client reference to the `#{inspect(__MODULE__)}`.
+  connect on this URL, the source won't complete its setup. Note that all attempted connections to
+  other `app` or `stream_key` than specified ones will be rejected.
+
+  * by spawning `Membrane.RTMP.Server`, receiving a client reference and passing it to the `#{inspect(__MODULE__)}`.
   """
   use Membrane.Source
   require Membrane.Logger
+  require Logger
   alias __MODULE__.ClientHandler, as: SourceClientHandler
   alias Membrane.RTMP.Server.ClientHandler
+  alias Membrane.RTMP.Utils
 
   def_output_pad :output,
     availability: :always,
@@ -79,17 +82,25 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_setup(_ctx, %{mode: :builtin_server} = state) do
-    {use_ssl?, port, app, stream_key} = parse_url(state.url)
+    {use_ssl?, port, app, stream_key} = Utils.parse_url(state.url)
+
+    parent_pid = self()
+
+    new_client_callback = fn client_ref, app, stream_key ->
+      send(parent_pid, {:client_ref, client_ref, app, stream_key})
+    end
 
     {:ok, server_pid} =
       Membrane.RTMP.Server.start_link(
         handler: %SourceClientHandler{controlling_process: self()},
         port: port,
-        use_ssl?: use_ssl?
+        use_ssl?: use_ssl?,
+        new_client_callback: new_client_callback,
+        client_timeout: 100
       )
 
     state = %{state | app: app, stream_key: stream_key, server: server_pid}
-    {[], state}
+    {[setup: :incomplete], state}
   end
 
   @impl true
@@ -156,19 +167,23 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_info({:client_connected, app, stream_key}, _ctx, %{mode: :builtin_server} = state) do
-    :ok = Membrane.RTMP.Server.subscribe(state.server, state.app, state.stream_key)
-    state = %{state | app: app, stream_key: stream_key}
-    {[], state}
+  def handle_info(
+        {:client_ref, client_ref, app, stream_key},
+        _ctx,
+        %{mode: :builtin_server} = state
+      )
+      when app == state.app and stream_key == state.stream_key do
+    {[setup: :complete], %{state | client_ref: client_ref}}
   end
 
   @impl true
   def handle_info(
-        {:client_ref, client_ref_pid, _app, _stream_key},
+        {:client_ref, _client_ref, app, stream_key},
         _ctx,
         %{mode: :builtin_server} = state
       ) do
-    {[redemand: :output], %{state | client_ref: client_ref_pid}}
+    Logger.warning("Unexpected client connected on /#{app}/#{stream_key}")
+    {[], state}
   end
 
   @impl true
@@ -188,24 +203,5 @@ defmodule Membrane.RTMP.Source do
   @impl true
   def handle_terminate_request(_ctx, state) do
     {[terminate: :normal], state}
-  end
-
-  defp parse_url(url) do
-    uri = URI.parse(url)
-    port = uri.port
-
-    {app, stream_key} =
-      case String.trim_leading(uri.path, "/") |> String.trim_trailing("/") |> String.split("/") do
-        [app, stream_key] -> {app, stream_key}
-        [app] -> {app, ""}
-      end
-
-    use_ssl? =
-      case uri.scheme do
-        "rtmp" -> false
-        "rtmps" -> true
-      end
-
-    {use_ssl?, port, app, stream_key}
   end
 end

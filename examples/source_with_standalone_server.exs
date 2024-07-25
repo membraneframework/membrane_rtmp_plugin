@@ -47,23 +47,36 @@ end
 
 # The client will connect on `rtmp://localhost:1935/app/stream_key`
 port = 1935
-app = "app"
-stream_key = "stream_key"
+
+# example lambda function that upon launching will send client reference back to parent process.
+parent_process_pid = self()
+
+new_client_callback = fn client_ref, app, stream_key ->
+  send(parent_process_pid, {:client_ref, client_ref, app, stream_key})
+end
 
 # Run the standalone server
 {:ok, server} =
   Membrane.RTMP.Server.start_link(
     handler: %Membrane.RTMP.Source.ClientHandler{controlling_process: self()},
     port: port,
-    use_ssl?: false
+    use_ssl?: false,
+    new_client_callback: new_client_callback,
+    client_timeout: 5_000
   )
 
-# Subscribe to receive client reference that connected to the
-# server with given app id and stream key
-:ok = Membrane.RTMP.Server.subscribe(server, app, stream_key)
+app = "app"
+stream_key = "stream_key"
 
-# Wait for the client reference
-{:ok, client_ref} = Membrane.RTMP.Server.await_subscription(app, stream_key)
+# Wait max 10s for client to connect on /app/stream_key
+{:ok, client_ref} =
+  receive do
+    {:client_ref, client_ref, ^app, ^stream_key} ->
+      {:ok, client_ref}
+  after
+    10_000 -> :timeout
+  end
+
 # Start the pipeline and provide it with the client_ref
 {:ok, _supervisor, pipeline} =
   Membrane.Pipeline.start_link(Pipeline, client_ref: client_ref)
