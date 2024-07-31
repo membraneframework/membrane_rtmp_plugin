@@ -8,10 +8,10 @@ defmodule Pipeline do
   @output_file "received.flv"
 
   @impl true
-  def handle_init(_ctx, _opts) do
+  def handle_init(_ctx, opts) do
     structure = [
       child(:source, %Membrane.RTMP.SourceBin{
-        url: "rtmp://127.0.0.1:1935/app/stream_key"
+        client_ref: opts[:client_ref]
       })
       |> via_out(:audio)
       |> child(:audio_parser, %Membrane.AAC.Parser{
@@ -45,9 +45,28 @@ defmodule Pipeline do
   end
 end
 
-# Start a pipeline with `Membrane.RTMP.Source` that will spawn an RTMP server waiting for
-# the client connection on given URL
-{:ok, _supervisor, pipeline} = Membrane.Pipeline.start_link(Pipeline)
+# The client will connect on `rtmp://localhost:1935/app/stream_key`
+port = 1935
+app = "app"
+stream_key = "stream_key"
+
+# Run the standalone server
+{:ok, server} =
+  Membrane.RTMP.Server.start_link(
+    handler: %Membrane.RTMP.Source.ClientHandler{controlling_process: self()},
+    port: port,
+    use_ssl?: false
+  )
+
+# Subscribe to receive client reference that connected to the
+# server with given app id and stream key
+:ok = Membrane.RTMP.Server.subscribe(server, app, stream_key)
+
+# Wait for the client reference
+{:ok, client_ref} = Membrane.RTMP.Server.await_subscription(app, stream_key)
+# Start the pipeline and provide it with the client_ref
+{:ok, _supervisor, pipeline} =
+  Membrane.Pipeline.start_link(Pipeline, client_ref: client_ref)
 
 # Wait for the pipeline to terminate itself
 ref = Process.monitor(pipeline)
@@ -56,3 +75,6 @@ ref = Process.monitor(pipeline)
   receive do
     {:DOWN, ^ref, _process, ^pipeline, :normal} -> :ok
   end
+
+# Terminate the server
+Process.exit(server, :normal)

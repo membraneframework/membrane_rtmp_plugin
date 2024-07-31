@@ -1,236 +1,211 @@
 defmodule Membrane.RTMP.Source do
   @moduledoc """
   Membrane Element for receiving an RTMP stream. Acts as a RTMP Server.
-
-  When initializing, the source sends `t:socket_control_needed_t/0` notification,
-  upon which it should be granted the control over the `socket` via `:gen_tcp.controlling_process/2`.
-
-  The Source allows for providing custom validator module, that verifies some of the RTMP messages.
-  The module has to implement the `Membrane.RTMP.MessageValidator` behaviour.
-  If the validation fails, the socket gets closed and the parent is notified with `t:stream_validation_failed_t/0`.
-
   This implementation is limited to only AAC and H264 streams.
+
+  The source can be used in the following two scenarios:
+  * by providing the URL on which the client is expected to connect - note, that if the client doesn't
+  connect on this URL, the source won't complete its setup
+  * by spawning `Membrane.RTMP.Server`, subscribing for a given app and stream key on which the client
+  will connect, waiting for a client reference and passing the client reference to the `#{inspect(__MODULE__)}`.
   """
   use Membrane.Source
-
   require Membrane.Logger
-
-  alias Membrane.RTMP.{Handshake, MessageHandler, MessageParser}
+  alias __MODULE__.ClientHandler, as: SourceClientHandler
+  alias Membrane.RTMP.Server.ClientHandler
 
   def_output_pad :output,
     availability: :always,
     accepted_format: Membrane.RemoteStream,
-    flow_control: :manual
+    flow_control: :manual,
+    demand_unit: :buffers
 
-  def_options socket: [
-                spec: :gen_tcp.socket() | :ssl.sslsocket(),
+  def_options client_ref: [
+                default: nil,
+                spec: pid(),
                 description: """
-                Socket on which the source will be receiving the RTMP or RTMPS stream.
-                The socket must be already connected to the RTMP client and be in non-active mode (`active` set to `false`).
-
-                In case of RTMPS the `use_ssl?` options must be set to true.
+                A pid of a process acting as a client reference.
+                Can be gained with the use of `Membrane.RTMP.Server`.
                 """
               ],
-              use_ssl?: [
-                spec: boolean(),
-                default: false,
+              url: [
+                default: nil,
+                spec: String.t(),
                 description: """
-                Tells whether the passed socket is a regular TCP socket or SSL one.
+                An URL on which the client is expected to connect, for example:
+                rtmp://127.0.0.1:1935/app/stream_key
                 """
-              ],
-              validator: [
-                spec: Membrane.RTMP.MessageValidator.t(),
-                description: """
-                A `Membrane.RTMP.MessageValidator` implementation, used for validating the stream. By default allows
-                every incoming stream.
-                """,
-                default: %Membrane.RTMP.MessageValidator.Default{}
               ]
 
-  @typedoc """
-  Notification sent when the RTMP Source element is initialized and it should be granted control over the socket using `:gen_tcp.controlling_process/2`.
-  """
-  @type socket_control_needed_t() :: {:socket_control_needed, :gen_tcp.socket(), pid()}
+  defguardp is_builtin_server(opts)
+            when not is_nil(opts.url) and is_nil(opts.client_ref)
 
-  @typedoc """
-  Same as `t:socket_control_needed_t/0` but for secured socket meant for RTMPS.
-  """
-  @type ssl_socket_control_needed_t() :: {:ssl_socket_control_needed, :ssl.sslsocket(), pid()}
-
-  @type validation_stage_t :: :publish | :release_stream | :set_data_frame
-
-  @typedoc """
-  Notification sent when the validator approves given validation stage.
-  """
-  @type stream_validation_success_t() ::
-          {:stream_validation_success, validation_stage_t(), result :: any()}
-
-  @typedoc """
-  Notification sent when the validator denies incoming RTMP stream.
-  """
-  @type stream_validation_failed_t() ::
-          {:stream_validation_failed, validation_stage_t(), reason :: any()}
-
-  @typedoc """
-  Notification sent when the socket has been closed but no media data has flown through it.
-
-  This notification is only sent when the `:output` pad never reaches `:start_of_stream`.
-  """
-  @type unexpected_socket_closed_t() :: :unexpected_socket_closed
+  defguardp is_external_server(opts)
+            when not is_nil(opts.client_ref) and
+                   is_nil(opts.url)
 
   @impl true
-  def handle_init(_ctx, %__MODULE__{} = opts) do
-    state =
-      opts
-      |> Map.from_struct()
-      |> Map.merge(%{
-        actions: [],
-        header_sent?: false,
-        message_parser: MessageParser.init(Handshake.init_server()),
-        receiver_pid: nil,
-        socket_ready?: false,
-        # how many times the Source tries to get control of the socket
-        socket_retries: 3,
-        # epoch required for performing a handshake with the pipeline
-        epoch: 0,
-        socket_module: if(opts.use_ssl?, do: :ssl, else: :gen_tcp)
-      })
+  def handle_init(_ctx, opts) when is_builtin_server(opts) do
+    state = %{
+      app: nil,
+      stream_key: nil,
+      server: nil,
+      url: opts.url,
+      mode: :builtin_server,
+      client_ref: nil,
+      use_ssl?: nil
+    }
 
-    notification_type =
-      if opts.use_ssl?, do: :ssl_socket_control_needed, else: :socket_control_needed
-
-    {[notify_parent: {notification_type, state.socket, self()}], state}
+    {[], state}
   end
 
   @impl true
-  def handle_playing(_ctx, state) do
-    target_pid = self()
+  def handle_init(_ctx, opts) when is_external_server(opts) do
+    state = %{
+      mode: :external_server,
+      client_ref: opts.client_ref
+    }
 
-    use_ssl? = state.use_ssl?
+    {[], state}
+  end
 
-    {:ok, receiver_process} =
-      Task.start_link(fn ->
-        if use_ssl? do
-          receive_ssl_loop(state.socket, target_pid)
-        else
-          receive_loop(state.socket, target_pid)
-        end
-      end)
+  @impl true
+  def handle_init(_ctx, opts) do
+    raise """
+    Improper options passed to the `#{__MODULE__}`:
+    #{inspect(opts)}
+    """
+  end
 
-    send(self(), :start_receiving)
+  @impl true
+  def handle_setup(_ctx, %{mode: :builtin_server} = state) do
+    {use_ssl?, port, app, stream_key} = parse_url(state.url)
 
+    {:ok, server_pid} =
+      Membrane.RTMP.Server.start_link(
+        handler: %SourceClientHandler{controlling_process: self()},
+        port: port,
+        use_ssl?: use_ssl?
+      )
+
+    state = %{state | app: app, stream_key: stream_key, server: server_pid}
+    {[], state}
+  end
+
+  @impl true
+  def handle_setup(_ctx, %{mode: :external_server} = state) do
+    {[], state}
+  end
+
+  @impl true
+  def handle_playing(_ctx, %{mode: :external_server} = state) do
     stream_format = [
       stream_format:
         {:output, %Membrane.RemoteStream{content_format: Membrane.FLV, type: :bytestream}}
     ]
 
-    {stream_format, %{state | receiver_pid: receiver_process}}
-  end
+    :ok = SourceClientHandler.request_for_data(state.client_ref)
 
-  defp receive_ssl_loop(socket, target) do
-    receive do
-      {:ssl, _port, packet} ->
-        send(target, {:socket, socket, packet})
-
-      {:ssl_closed, _port} ->
-        send(target, {:socket_closed, socket})
-
-      :terminate ->
-        exit(:normal)
-
-      _message ->
-        :noop
-    end
-
-    receive_ssl_loop(socket, target)
-  end
-
-  defp receive_loop(socket, target) do
-    receive do
-      {:tcp, _port, packet} ->
-        send(target, {:socket, socket, packet})
-
-      {:tcp_closed, _port} ->
-        send(target, {:socket_closed, socket})
-
-      :terminate ->
-        exit(:normal)
-
-      _message ->
-        :noop
-    end
-
-    receive_loop(socket, target)
+    {stream_format, state}
   end
 
   @impl true
-  def handle_demand(_pad, _size, _unit, _ctx, state) when state.socket_ready? do
-    if state.use_ssl? do
-      :ssl.setopts(state.socket, active: :once)
+  def handle_playing(_ctx, %{mode: :builtin_server} = state) do
+    stream_format = [
+      stream_format:
+        {:output, %Membrane.RemoteStream{content_format: Membrane.FLV, type: :bytestream}}
+    ]
+
+    {stream_format, state}
+  end
+
+  @impl true
+  def handle_demand(
+        :output,
+        _size,
+        :buffers,
+        _ctx,
+        %{client_ref: nil, mode: :builtin_server} = state
+      ) do
+    {[], state}
+  end
+
+  @impl true
+  def handle_demand(
+        :output,
+        size,
+        :buffers,
+        _ctx,
+        %{client_ref: client_ref, mode: :builtin_server} = state
+      ) do
+    :ok = ClientHandler.demand_data(client_ref, size)
+    :ok = SourceClientHandler.request_for_data(client_ref)
+    {[], state}
+  end
+
+  @impl true
+  def handle_demand(
+        :output,
+        size,
+        :buffers,
+        _ctx,
+        %{client_ref: client_ref, mode: :external_server} = state
+      ) do
+    :ok = ClientHandler.demand_data(client_ref, size)
+    {[], state}
+  end
+
+  @impl true
+  def handle_info({:client_connected, app, stream_key}, _ctx, %{mode: :builtin_server} = state) do
+    :ok = Membrane.RTMP.Server.subscribe(state.server, state.app, state.stream_key)
+    state = %{state | app: app, stream_key: stream_key}
+    {[], state}
+  end
+
+  @impl true
+  def handle_info(
+        {:client_ref, client_ref_pid, _app, _stream_key},
+        _ctx,
+        %{mode: :builtin_server} = state
+      ) do
+    {[redemand: :output], %{state | client_ref: client_ref_pid}}
+  end
+
+  @impl true
+  def handle_info({:data, data}, _ctx, state) do
+    {[buffer: {:output, %Membrane.Buffer{payload: data}}, redemand: :output], state}
+  end
+
+  @impl true
+  def handle_info(:end_of_stream, ctx, state) do
+    if ctx.pads[:output].end_of_stream? do
+      {[], state}
     else
-      :inet.setopts(state.socket, active: :once)
+      {[end_of_stream: :output], state}
     end
-
-    {[], state}
-  end
-
-  @impl true
-  def handle_demand(_pad, _size, _unit, _ctx, state) do
-    {[], state}
   end
 
   @impl true
   def handle_terminate_request(_ctx, state) do
-    send(state.receiver_pid, :terminate)
-    {[terminate: :normal], %{state | receiver_pid: nil}}
+    {[terminate: :normal], state}
   end
 
-  @impl true
-  def handle_info(:start_receiving, _ctx, %{socket_retries: 0} = state) do
-    Membrane.Logger.warning("Failed to take control of the socket")
-    {[], state}
-  end
+  defp parse_url(url) do
+    uri = URI.parse(url)
+    port = uri.port
 
-  def handle_info(:start_receiving, _ctx, %{socket_retries: retries} = state) do
-    module = if state.use_ssl?, do: :ssl, else: :gen_tcp
+    {app, stream_key} =
+      case String.trim_leading(uri.path, "/") |> String.trim_trailing("/") |> String.split("/") do
+        [app, stream_key] -> {app, stream_key}
+        [app] -> {app, ""}
+      end
 
-    case module.controlling_process(state.socket, state.receiver_pid) do
-      :ok ->
-        if state.use_ssl? do
-          :ok = :ssl.setopts(state.socket, active: :once)
-        else
-          :ok = :inet.setopts(state.socket, active: :once)
-        end
+    use_ssl? =
+      case uri.scheme do
+        "rtmp" -> false
+        "rtmps" -> true
+      end
 
-        {[], %{state | socket_ready?: true}}
-
-      {:error, :not_owner} ->
-        Process.send_after(self(), :start_receiving, 200)
-        {[], %{state | socket_retries: retries - 1}}
-    end
-  end
-
-  @impl true
-  def handle_info({:socket, socket, packet}, _ctx, %{socket: socket} = state) do
-    {messages, message_parser} =
-      MessageHandler.parse_packet_messages(packet, state.message_parser)
-
-    state = MessageHandler.handle_client_messages(messages, state)
-
-    {state.actions, %{state | actions: [], message_parser: message_parser}}
-  end
-
-  @impl true
-  def handle_info({:socket_closed, _socket}, ctx, state) do
-    cond do
-      ctx.pads.output.end_of_stream? -> {[], state}
-      ctx.pads.output.start_of_stream? -> {[end_of_stream: :output], state}
-      true -> {[notify_parent: :unexpected_socket_closed, end_of_stream: :output], state}
-    end
-  end
-
-  @impl true
-  def handle_info(_message, _ctx, state) do
-    {[], state}
+    {use_ssl?, port, app, stream_key}
   end
 end

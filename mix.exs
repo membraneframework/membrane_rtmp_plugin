@@ -1,7 +1,7 @@
 defmodule Membrane.RTMP.Mixfile do
   use Mix.Project
 
-  @version "0.23.3"
+  @version "0.23.4"
   @github_url "https://github.com/membraneframework/membrane_rtmp_plugin"
 
   def project do
@@ -39,7 +39,7 @@ defmodule Membrane.RTMP.Mixfile do
   defp deps do
     [
       {:membrane_core, "~> 1.0"},
-      {:unifex, "~> 1.1.0"},
+      {:unifex, "~> 1.2.0"},
       {:membrane_precompiled_dependency_provider, "~> 0.1.0"},
       {:membrane_h26x_plugin, "~> 0.10.0"},
       {:membrane_h264_format, "~> 0.6.1"},
