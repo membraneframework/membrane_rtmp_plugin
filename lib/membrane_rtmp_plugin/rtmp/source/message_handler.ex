@@ -37,24 +37,26 @@ defmodule Membrane.RTMP.MessageHandler do
           events: [event()],
           receiver_pid: pid() | nil,
           socket_retries: pos_integer(),
-          epoch: non_neg_integer()
+          epoch: non_neg_integer(),
+          publish_msg: Messages.Publish.t() | nil,
+          publish_header: Header.t() | nil
         }
 
   @spec init(opts :: %{socket: :gen_tcp.socket() | :ssl.socket(), use_ssl?: boolean()}) :: t()
   def init(opts) do
-    state = %{
+    %{
       socket: opts.socket,
       socket_module: if(opts.use_ssl?, do: :ssl, else: :gen_tcp),
       header_sent?: false,
       events: [],
       receiver_pid: nil,
+      publish_msg: nil,
+      publish_header: nil,
       # how many times the Source tries to get control of the socket
       socket_retries: 3,
       # epoch required for performing a handshake with the pipeline
       epoch: 0
     }
-
-    state
   end
 
   @spec handle_client_messages(list(), map()) :: {map(), list()}
@@ -70,6 +72,17 @@ defmodule Membrane.RTMP.MessageHandler do
     |> then(fn state ->
       {%{state | events: []}, Enum.reverse(state.events)}
     end)
+  end
+
+  @spec send_publish_success(map()) :: {map(), list()}
+  def send_publish_success(state) do
+    Responses.publish_success(state.publish_msg.stream_key)
+    |> send_rtmp_payload(state.socket,
+      chunk_stream_id: 3,
+      stream_id: state.publish_header.stream_id
+    )
+
+    {%{state | events: []}, [{:published, state.publish_msg} | state.events]}
   end
 
   # Expected flow of messages:
@@ -141,11 +154,10 @@ defmodule Membrane.RTMP.MessageHandler do
     %Messages.UserControl{event_type: @stream_begin_type, data: <<0, 0, 0, 1>>}
     |> send_rtmp_payload(state.socket, chunk_stream_id: 2)
 
-    Responses.publish_success(publish_msg.stream_key)
-    |> send_rtmp_payload(state.socket, chunk_stream_id: 3, stream_id: header.stream_id)
+    # at this point pause the unfinished handshake until pipeline demands data from this client
+    # (this mechanism prevents accepting streams with no listeners)
 
-    state = %{state | events: [{:published, publish_msg} | state.events]}
-    {:cont, state}
+    {:halt, %{state | publish_msg: publish_msg, publish_header: header}}
   end
 
   # A message containing stream metadata

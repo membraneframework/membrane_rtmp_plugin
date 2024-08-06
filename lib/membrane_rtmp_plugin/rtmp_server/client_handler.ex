@@ -38,7 +38,10 @@ defmodule Membrane.RTMP.Server.ClientHandler do
        stream_key: nil,
        server: opts.server,
        buffers_demanded: 0,
-       published?: false
+       published?: false,
+       notified_about_client?: false,
+       new_client_callback: opts.new_client_callback,
+       client_timeout: opts.client_timeout
      }}
   end
 
@@ -77,8 +80,18 @@ defmodule Membrane.RTMP.Server.ClientHandler do
 
   @impl true
   def handle_info({:demand_data, how_many_buffers_demanded}, state) do
-    state = %{state | buffers_demanded: how_many_buffers_demanded}
+    state = finish_handshake(state) |> Map.replace!(:buffers_demanded, how_many_buffers_demanded)
     request_data(state)
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:client_timeout, app, stream_key}, state) do
+    if not state.published? do
+      Logger.warning("No demand made for client /#{app}/#{stream_key}, terminating connection.")
+      :gen_tcp.close(state.socket)
+    end
+
     {:noreply, state}
   end
 
@@ -95,6 +108,24 @@ defmodule Membrane.RTMP.Server.ClientHandler do
 
     {message_handler_state, events} =
       MessageHandler.handle_client_messages(messages, state.message_handler_state)
+
+    state =
+      if message_handler_state.publish_msg != nil and not state.notified_about_client? do
+        %{publish_msg: %Membrane.RTMP.Messages.Publish{stream_key: stream_key}} =
+          message_handler_state
+
+        if is_function(state.new_client_callback) do
+          state.new_client_callback.(self(), state.app, stream_key)
+        else
+          raise "new_client_callback is not a function"
+        end
+
+        Process.send_after(self(), {:client_timeout, state.app, stream_key}, state.client_timeout)
+
+        %{state | notified_about_client?: true}
+      else
+        state
+      end
 
     state = Enum.reduce(events, state, &handle_event/2)
 
@@ -136,8 +167,6 @@ defmodule Membrane.RTMP.Server.ClientHandler do
         %{state | handler_state: new_handler_state, app: connected_msg.app}
 
       {:published, publish_msg} ->
-        send(state.server, {:register_client, state.app, publish_msg.stream_key, self()})
-
         new_handler_state =
           state.handler.handle_stream_published(publish_msg, state.handler_state)
 
@@ -159,4 +188,14 @@ defmodule Membrane.RTMP.Server.ClientHandler do
       end
     end
   end
+
+  defp finish_handshake(state) when not state.published? do
+    {message_handler_state, events} =
+      MessageHandler.send_publish_success(state.message_handler_state)
+
+    state = Enum.reduce(events, state, &handle_event/2)
+    %{state | message_handler_state: message_handler_state}
+  end
+
+  defp finish_handshake(state), do: state
 end
