@@ -8,12 +8,12 @@ defmodule Membrane.RTMP.Source do
   connect on this URL, the source won't complete its setup. Note that all attempted connections to
   other `app` or `stream_key` than specified ones will be rejected.
 
-  * by spawning `Membrane.RTMP.Server`, receiving a client reference and passing it to the `#{inspect(__MODULE__)}`.
+  * by spawning `Membrane.RTMPServer`, receiving a client reference and passing it to the `#{inspect(__MODULE__)}`.
   """
   use Membrane.Source
   require Membrane.Logger
   require Logger
-  alias Membrane.RTMP.Server.ClientHandler
+  alias Membrane.RTMPServer.ClientHandler
 
   def_output_pad :output,
     availability: :always,
@@ -26,7 +26,7 @@ defmodule Membrane.RTMP.Source do
                 spec: pid(),
                 description: """
                 A pid of a process acting as a client reference.
-                Can be gained with the use of `Membrane.RTMP.Server`.
+                Can be gained with the use of `Membrane.RTMPServer`.
                 """
               ],
               url: [
@@ -89,7 +89,7 @@ defmodule Membrane.RTMP.Source do
     end
 
     {:ok, server_pid} =
-      Membrane.RTMP.Server.start_link(
+      Membrane.RTMPServer.start_link(
         handler: %__MODULE__.ClientHandlerForSource{controlling_process: self()},
         port: port,
         use_ssl?: use_ssl?,

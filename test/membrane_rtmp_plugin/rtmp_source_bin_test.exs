@@ -225,7 +225,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     end
 
     {:ok, server_pid} =
-      Membrane.RTMP.Server.start_link(
+      Membrane.RTMPServer.start_link(
         handler: %Membrane.RTMP.Source.ClientHandlerForSource{
           controlling_process: self()
         },
@@ -235,7 +235,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
         client_timeout: 3_000
       )
 
-    {:ok, assigned_port} = Membrane.RTMP.Server.get_port(server_pid)
+    {:ok, assigned_port} = Membrane.RTMPServer.get_port(server_pid)
 
     send(parent, {:port, assigned_port})
 

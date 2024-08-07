@@ -1,4 +1,4 @@
-defmodule Membrane.RTMP.Server.ClientHandler do
+defmodule Membrane.RTMPServer.ClientHandler do
   @moduledoc false
 
   # Module responsible for maintaining the lifecycle of the

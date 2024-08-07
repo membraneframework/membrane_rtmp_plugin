@@ -1,4 +1,4 @@
-defmodule Membrane.RTMP.Server do
+defmodule Membrane.RTMPServer do
   @moduledoc """
   A simple RTMP server, which handles each new incoming connection. When a new client connects, the `handle_new_client` is invoked.
   New connections remain in an incomplete RTMP handshake state, until another process makes demand for their data.
@@ -9,13 +9,13 @@ defmodule Membrane.RTMP.Server do
    - handle_new_client: An anonymous function called when a new client connects.
       It receives the client reference, `app` and `stream_key`, allowing custom processing,
       like sending the reference to another process. If it's not provided, default implementation is used:
-      {:client_ref, client_ref, app, stream_key} message is sent to the process that invoked RTMP.Server.start_link().
+      {:client_ref, client_ref, app, stream_key} message is sent to the process that invoked RTMPServer.start_link().
   """
   use GenServer
 
   require Logger
 
-  alias Membrane.RTMP.Server.ClientHandler
+  alias Membrane.RTMPServer.ClientHandler
 
   @typedoc """
   Defines options for the RTMP server.
@@ -70,7 +70,7 @@ defmodule Membrane.RTMP.Server do
   @impl true
   def init(server_options) do
     pid =
-      Task.start_link(Membrane.RTMP.Server.Listener, :run, [
+      Task.start_link(Membrane.RTMPServer.Listener, :run, [
         Map.merge(server_options, %{server: self()})
       ])
 

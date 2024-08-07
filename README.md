@@ -83,7 +83,7 @@ When the script terminates, the `testsrc` content should be available in the `re
 
 ### RTMP receive with standalone RTMP server
 
-If you want to see how you could setup the `Membrane.RTMP.Server` on your own and use it
+If you want to see how you could setup the `Membrane.RTMPServer` on your own and use it
 with cooperation with the `Membane.RTMP.SourceBin`, take a look at [`examples/source_with_standalone_server.exs`](examples/source_with_standalone_server.exs)
 Run it with:
 
