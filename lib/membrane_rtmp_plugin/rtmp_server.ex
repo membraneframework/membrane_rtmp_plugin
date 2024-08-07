@@ -1,12 +1,12 @@
 defmodule Membrane.RTMP.Server do
   @moduledoc """
-  A simple RTMP server, which handles each new incoming connection. When a new client connects, the `new_client_callback` is invoked.
+  A simple RTMP server, which handles each new incoming connection. When a new client connects, the `handle_new_client` is invoked.
   New connections remain in an incomplete RTMP handshake state, until another process makes demand for their data.
   If no data is demanded within the client_timeout period, TCP socket is closed.
 
   Options:
    - client_timeout: Time (ms) after which an unused client connection is automatically closed.
-   - new_client_callback: An anonymous function called when a new client connects.
+   - handle_new_client: An anonymous function called when a new client connects.
       It receives the client reference, `app` and `stream_key`, allowing custom processing,
       like sending the reference to another process. If it's not provided, default implementation is used:
       {:client_ref, client_ref, app, stream_key} message is sent to the process that invoked RTMP.Server.start_link().
@@ -25,7 +25,7 @@ defmodule Membrane.RTMP.Server do
           port: :inet.port_number(),
           use_ssl?: boolean(),
           name: atom() | nil,
-          new_client_callback:
+          handle_new_client:
             (client_ref :: pid(), app :: String.t(), stream_key :: String.t() ->
                any())
             | nil,
@@ -44,14 +44,14 @@ defmodule Membrane.RTMP.Server do
     server_options = Enum.into(server_options, %{})
 
     server_options =
-      if server_options[:new_client_callback] == nil do
+      if server_options[:handle_new_client] == nil do
         parent_process_pid = self()
 
         callback = fn client_ref, app, stream_key ->
           send(parent_process_pid, {:client_ref, client_ref, app, stream_key})
         end
 
-        Map.put(server_options, :new_client_callback, callback)
+        Map.put(server_options, :handle_new_client, callback)
       else
         server_options
       end

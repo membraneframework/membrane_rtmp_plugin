@@ -86,7 +86,7 @@ defmodule Membrane.RTMP.Server.ClientHandler do
        buffers_demanded: 0,
        published?: false,
        notified_about_client?: false,
-       new_client_callback: opts.new_client_callback,
+       handle_new_client: opts.handle_new_client,
        client_timeout: opts.client_timeout
      }}
   end
@@ -160,10 +160,10 @@ defmodule Membrane.RTMP.Server.ClientHandler do
         %{publish_msg: %Membrane.RTMP.Messages.Publish{stream_key: stream_key}} =
           message_handler_state
 
-        if is_function(state.new_client_callback) do
-          state.new_client_callback.(self(), state.app, stream_key)
+        if is_function(state.handle_new_client) do
+          state.handle_new_client.(self(), state.app, stream_key)
         else
-          raise "new_client_callback is not a function"
+          raise "handle_new_client is not a function"
         end
 
         Process.send_after(self(), {:client_timeout, state.app, stream_key}, state.client_timeout)

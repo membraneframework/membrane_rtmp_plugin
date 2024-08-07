@@ -84,7 +84,7 @@ defmodule Membrane.RTMP.Source do
 
     parent_pid = self()
 
-    new_client_callback = fn client_ref, app, stream_key ->
+    handle_new_client = fn client_ref, app, stream_key ->
       send(parent_pid, {:client_ref, client_ref, app, stream_key})
     end
 
@@ -93,7 +93,7 @@ defmodule Membrane.RTMP.Source do
         handler: %__MODULE__.ClientHandlerForSource{controlling_process: self()},
         port: port,
         use_ssl?: use_ssl?,
-        new_client_callback: new_client_callback,
+        handle_new_client: handle_new_client,
         client_timeout: 100
       )
 
