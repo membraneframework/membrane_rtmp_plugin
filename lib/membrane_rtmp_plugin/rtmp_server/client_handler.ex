@@ -1,7 +1,10 @@
 defmodule Membrane.RTMPServer.ClientHandler do
-  @moduledoc false
+  @moduledoc """
+  A behaviour describing the actions that might be taken by the client
+  handler in response to different events.
+  """
 
-  # Module responsible for maintaining the lifecycle of the
+  # It also containts functions responsible for maintaining the lifecycle of the
   # client connection.
 
   use GenServer
