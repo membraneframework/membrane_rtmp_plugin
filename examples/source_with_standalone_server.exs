@@ -58,7 +58,7 @@ end
 # Run the standalone server
 {:ok, server} =
   Membrane.RTMP.Server.start_link(
-    handler: %Membrane.RTMP.Source.ClientHandler{controlling_process: self()},
+    handler: %Membrane.RTMP.Source.ClientHandlerForSource{controlling_process: self()},
     port: port,
     use_ssl?: false,
     new_client_callback: new_client_callback,

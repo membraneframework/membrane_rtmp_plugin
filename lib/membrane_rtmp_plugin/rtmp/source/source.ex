@@ -13,7 +13,6 @@ defmodule Membrane.RTMP.Source do
   use Membrane.Source
   require Membrane.Logger
   require Logger
-  alias __MODULE__.SourceClientHandler
   alias Membrane.RTMP.Server.ClientHandler
 
   def_output_pad :output,
@@ -91,7 +90,7 @@ defmodule Membrane.RTMP.Source do
 
     {:ok, server_pid} =
       Membrane.RTMP.Server.start_link(
-        handler: %SourceClientHandler{controlling_process: self()},
+        handler: %__MODULE__.ClientHandlerForSource{controlling_process: self()},
         port: port,
         use_ssl?: use_ssl?,
         new_client_callback: new_client_callback,
@@ -114,7 +113,7 @@ defmodule Membrane.RTMP.Source do
         {:output, %Membrane.RemoteStream{content_format: Membrane.FLV, type: :bytestream}}
     ]
 
-    :ok = SourceClientHandler.request_for_data(state.client_ref)
+    send(state.client_ref, {:send_me_data, self()})
 
     {stream_format, state}
   end
@@ -149,7 +148,7 @@ defmodule Membrane.RTMP.Source do
         %{client_ref: client_ref, mode: :builtin_server} = state
       ) do
     :ok = ClientHandler.demand_data(client_ref, size)
-    :ok = SourceClientHandler.request_for_data(client_ref)
+    send(client_ref, {:send_me_data, self()})
     {[], state}
   end
 
