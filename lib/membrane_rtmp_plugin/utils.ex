@@ -1,8 +1,4 @@
 defmodule Membrane.RTMP.Utils do
-  @moduledoc """
-  Utility functions
-  """
-
   @doc """
   Extracts ssl, port, app and stream_key from url.
   """
@@ -12,7 +8,10 @@ defmodule Membrane.RTMP.Utils do
     port = uri.port
 
     {app, stream_key} =
-      case String.trim_leading(uri.path, "/") |> String.trim_trailing("/") |> String.split("/") do
+      case (uri.path || "")
+           |> String.trim_leading("/")
+           |> String.trim_trailing("/")
+           |> String.split("/") do
         [app, stream_key] -> {app, stream_key}
         [app] -> {app, ""}
       end
