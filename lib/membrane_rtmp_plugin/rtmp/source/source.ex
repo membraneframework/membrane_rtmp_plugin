@@ -13,9 +13,8 @@ defmodule Membrane.RTMP.Source do
   use Membrane.Source
   require Membrane.Logger
   require Logger
-  alias __MODULE__.ClientHandler, as: SourceClientHandler
+  alias __MODULE__.SourceClientHandler
   alias Membrane.RTMP.Server.ClientHandler
-  alias Membrane.RTMP.Utils
 
   def_output_pad :output,
     availability: :always,
@@ -82,7 +81,7 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_setup(_ctx, %{mode: :builtin_server} = state) do
-    {use_ssl?, port, app, stream_key} = Utils.parse_url(state.url)
+    {use_ssl?, port, app, stream_key} = Membrane.RTMPServer.parse_url(state.url)
 
     parent_pid = self()
 

@@ -1,10 +1,10 @@
-defmodule Membrane.RTMP.Source.ClientHandler do
+defmodule Membrane.RTMP.Source.SourceClientHandler do
   @moduledoc """
   An implementation of `Membrane.RTMP.Server.ClienHandlerBehaviour` compatible with the
   `Membrane.RTMP.Source` element.
   """
 
-  @behaviour Membrane.RTMP.Server.ClientHandlerBehaviour
+  @behaviour Membrane.RTMP.Server.ClientHandler
 
   defstruct [:controlling_process]
 

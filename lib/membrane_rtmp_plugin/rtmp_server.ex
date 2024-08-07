@@ -15,13 +15,13 @@ defmodule Membrane.RTMP.Server do
 
   require Logger
 
-  alias Membrane.RTMP.Server.ClientHandlerBehaviour
+  alias Membrane.RTMP.Server.ClientHandler
 
   @typedoc """
   Defines options for the RTMP server.
   """
   @type t :: [
-          handler: ClientHandlerBehaviour.t(),
+          handler: ClientHandler.t(),
           port: :inet.port_number(),
           use_ssl?: boolean(),
           name: atom() | nil,
@@ -96,5 +96,31 @@ defmodule Membrane.RTMP.Server do
   def handle_info({:port, port}, state) do
     Enum.each(state.to_reply, &GenServer.reply(&1, port))
     {:noreply, %{state | port: port, to_reply: []}}
+  end
+
+  @doc """
+  Extracts ssl, port, app and stream_key from url.
+  """
+  @spec parse_url(url :: String.t()) :: {boolean(), integer(), String.t(), String.t()}
+  def parse_url(url) do
+    uri = URI.parse(url)
+    port = uri.port
+
+    {app, stream_key} =
+      case (uri.path || "")
+           |> String.trim_leading("/")
+           |> String.trim_trailing("/")
+           |> String.split("/") do
+        [app, stream_key] -> {app, stream_key}
+        [app] -> {app, ""}
+      end
+
+    use_ssl? =
+      case uri.scheme do
+        "rtmp" -> false
+        "rtmps" -> true
+      end
+
+    {use_ssl?, port, app, stream_key}
   end
 end
