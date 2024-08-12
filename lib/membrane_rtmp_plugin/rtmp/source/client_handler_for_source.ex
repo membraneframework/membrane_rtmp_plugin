@@ -1,4 +1,4 @@
-defmodule Membrane.RTMP.Source.ClientHandlerForSource do
+defmodule Membrane.RTMP.Source.ClientHandlerImpl do
   @moduledoc """
   An implementation of `Membrane.RTMPServer.ClienHandlerBehaviour` compatible with the
   `Membrane.RTMP.Source` element.

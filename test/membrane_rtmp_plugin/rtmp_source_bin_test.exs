@@ -226,7 +226,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
 
     {:ok, server_pid} =
       Membrane.RTMPServer.start_link(
-        handler: %Membrane.RTMP.Source.ClientHandlerForSource{
+        handler: %Membrane.RTMP.Source.ClientHandlerImpl{
           controlling_process: self()
         },
         port: port,

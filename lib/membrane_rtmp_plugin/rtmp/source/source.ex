@@ -90,7 +90,7 @@ defmodule Membrane.RTMP.Source do
 
     {:ok, server_pid} =
       Membrane.RTMPServer.start_link(
-        handler: %__MODULE__.ClientHandlerForSource{controlling_process: self()},
+        handler: %__MODULE__.ClientHandlerImpl{controlling_process: self()},
         port: port,
         use_ssl?: use_ssl?,
         handle_new_client: handle_new_client,
