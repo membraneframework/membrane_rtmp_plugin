@@ -51,17 +51,17 @@ port = 1935
 # example lambda function that upon launching will send client reference back to parent process.
 parent_process_pid = self()
 
-new_client_callback = fn client_ref, app, stream_key ->
+handle_new_client = fn client_ref, app, stream_key ->
   send(parent_process_pid, {:client_ref, client_ref, app, stream_key})
 end
 
 # Run the standalone server
 {:ok, server} =
-  Membrane.RTMP.Server.start_link(
-    handler: %Membrane.RTMP.Source.ClientHandler{controlling_process: self()},
+  Membrane.RTMPServer.start_link(
+    handler: %Membrane.RTMP.Source.ClientHandlerImpl{controlling_process: self()},
     port: port,
     use_ssl?: false,
-    new_client_callback: new_client_callback,
+    handle_new_client: handle_new_client,
     client_timeout: 5_000
   )
 

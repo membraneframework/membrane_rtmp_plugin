@@ -8,14 +8,12 @@ defmodule Membrane.RTMP.Source do
   connect on this URL, the source won't complete its setup. Note that all attempted connections to
   other `app` or `stream_key` than specified ones will be rejected.
 
-  * by spawning `Membrane.RTMP.Server`, receiving a client reference and passing it to the `#{inspect(__MODULE__)}`.
+  * by spawning `Membrane.RTMPServer`, receiving a client reference and passing it to the `#{inspect(__MODULE__)}`.
   """
   use Membrane.Source
   require Membrane.Logger
   require Logger
-  alias __MODULE__.ClientHandler, as: SourceClientHandler
-  alias Membrane.RTMP.Server.ClientHandler
-  alias Membrane.RTMP.Utils
+  alias Membrane.RTMPServer.ClientHandler
 
   def_output_pad :output,
     availability: :always,
@@ -28,7 +26,7 @@ defmodule Membrane.RTMP.Source do
                 spec: pid(),
                 description: """
                 A pid of a process acting as a client reference.
-                Can be gained with the use of `Membrane.RTMP.Server`.
+                Can be gained with the use of `Membrane.RTMPServer`.
                 """
               ],
               url: [
@@ -82,20 +80,20 @@ defmodule Membrane.RTMP.Source do
 
   @impl true
   def handle_setup(_ctx, %{mode: :builtin_server} = state) do
-    {use_ssl?, port, app, stream_key} = Utils.parse_url(state.url)
+    {use_ssl?, port, app, stream_key} = Membrane.RTMPServer.parse_url(state.url)
 
     parent_pid = self()
 
-    new_client_callback = fn client_ref, app, stream_key ->
+    handle_new_client = fn client_ref, app, stream_key ->
       send(parent_pid, {:client_ref, client_ref, app, stream_key})
     end
 
     {:ok, server_pid} =
-      Membrane.RTMP.Server.start_link(
-        handler: %SourceClientHandler{controlling_process: self()},
+      Membrane.RTMPServer.start_link(
+        handler: %__MODULE__.ClientHandlerImpl{controlling_process: self()},
         port: port,
         use_ssl?: use_ssl?,
-        new_client_callback: new_client_callback,
+        handle_new_client: handle_new_client,
         client_timeout: 100
       )
 
@@ -115,7 +113,7 @@ defmodule Membrane.RTMP.Source do
         {:output, %Membrane.RemoteStream{content_format: Membrane.FLV, type: :bytestream}}
     ]
 
-    :ok = SourceClientHandler.request_for_data(state.client_ref)
+    send(state.client_ref, {:send_me_data, self()})
 
     {stream_format, state}
   end
@@ -150,7 +148,7 @@ defmodule Membrane.RTMP.Source do
         %{client_ref: client_ref, mode: :builtin_server} = state
       ) do
     :ok = ClientHandler.demand_data(client_ref, size)
-    :ok = SourceClientHandler.request_for_data(client_ref)
+    send(client_ref, {:send_me_data, self()})
     {[], state}
   end
 

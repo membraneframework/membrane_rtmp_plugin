@@ -1,13 +1,62 @@
-defmodule Membrane.RTMP.Server.ClientHandler do
-  @moduledoc false
+defmodule Membrane.RTMPServer.ClientHandler do
+  @moduledoc """
+  A behaviour describing the actions that might be taken by the client
+  handler in response to different events.
+  """
 
-  # Module responsible for maintaining the lifecycle of the
+  # It also containts functions responsible for maintaining the lifecycle of the
   # client connection.
 
   use GenServer
 
   require Logger
   alias Membrane.RTMP.{Handshake, MessageHandler, MessageParser}
+
+  @typedoc """
+  Type representing the user defined state of the client handler.
+  """
+  @type t :: term()
+
+  @doc """
+  The callback invoked once the client handler is created.
+  It should return the initial state of the client handler.
+  """
+  @callback handle_init(any()) :: t()
+
+  @doc """
+  The callback invoked when the client sends the `Membrane.RTMP.Messages.Connect.t()`
+  message.
+  """
+  @callback handle_connected(connected_msg :: Membrane.RTMP.Messages.Connect.t(), state :: t()) ::
+              t()
+
+  @doc """
+  The callback invoked when the client sends the `Membrane.RTMP.Messages.Publish.t()`
+  message.
+  """
+  @callback handle_stream_published(
+              publish_msg :: Membrane.RTMP.Messages.Publish.t(),
+              state :: t()
+            ) :: t()
+
+  @doc """
+  The callback invoked when new piece of data is received from a given client.
+  """
+  @callback handle_data_available(payload :: binary(), state :: t()) :: t()
+
+  @doc """
+  The callback invoked when the client served by given client handler
+  stops sending data.
+  (for instance, when the remote client deletes the stream or
+  terminates the socket connection)
+  """
+  @callback handle_end_of_stream(state :: t()) :: t()
+
+  @doc """
+  The callback invoked when the client handler receives a message
+  that is not recognized as an internal message of the client handler.
+  """
+  @callback handle_info(msg :: term(), t()) :: t()
 
   @doc """
   Makes the client handler ask client for the desired number of buffers
@@ -40,7 +89,7 @@ defmodule Membrane.RTMP.Server.ClientHandler do
        buffers_demanded: 0,
        published?: false,
        notified_about_client?: false,
-       new_client_callback: opts.new_client_callback,
+       handle_new_client: opts.handle_new_client,
        client_timeout: opts.client_timeout
      }}
   end
@@ -114,10 +163,10 @@ defmodule Membrane.RTMP.Server.ClientHandler do
         %{publish_msg: %Membrane.RTMP.Messages.Publish{stream_key: stream_key}} =
           message_handler_state
 
-        if is_function(state.new_client_callback) do
-          state.new_client_callback.(self(), state.app, stream_key)
+        if is_function(state.handle_new_client) do
+          state.handle_new_client.(self(), state.app, stream_key)
         else
-          raise "new_client_callback is not a function"
+          raise "handle_new_client is not a function"
         end
 
         Process.send_after(self(), {:client_timeout, state.app, stream_key}, state.client_timeout)
