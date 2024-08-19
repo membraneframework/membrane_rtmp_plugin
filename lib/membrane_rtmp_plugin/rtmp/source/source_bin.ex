@@ -59,81 +59,37 @@ defmodule Membrane.RTMP.SourceBin do
   end
 
   @impl true
-  def handle_pad_added(Pad.ref(:audio, _ref) = pad, _ctx, state) do
-    spec =
-      if state.demuxer_audio_pad_ref != nil do
-        [
-          get_child(:demuxer)
-          |> via_out(state.demuxer_audio_pad_ref)
-          |> child(:audio_parser, %Membrane.AAC.Parser{
-            out_encapsulation: :none
-          })
-          |> bin_output(pad)
-        ]
-      else
-        [
-          child(:funnel_audio, Membrane.Funnel)
-          |> bin_output(pad)
-        ]
-      end
+  def handle_pad_added(Pad.ref(:audio, _ref) = pad, ctx, state) do
+    assert_pad_count!(:audio, ctx)
 
-    {[spec: spec], state}
+    spec =
+      child(:funnel_audio, Membrane.Funnel, get_if_exists: true)
+      |> bin_output(pad)
+
+    {actions, state} = maybe_link_audio_pad(state)
+
+    {[spec: spec] ++ actions, state}
   end
 
-  def handle_pad_added(Pad.ref(:video, _ref) = pad, _ctx, state) do
-    spec =
-      if state.demuxer_video_pad_ref != nil do
-        [
-          get_child(:demuxer)
-          |> via_out(state.demuxer_video_pad_ref)
-          |> child(:video_parser, Membrane.H264.Parser)
-          |> bin_output(pad)
-        ]
-      else
-        [
-          child(:funnel_video, Membrane.Funnel)
-          |> bin_output(pad)
-        ]
-      end
+  def handle_pad_added(Pad.ref(:video, _ref) = pad, ctx, state) do
+    assert_pad_count!(:video, ctx)
 
-    {[spec: spec], state}
+    spec =
+      child(:funnel_video, Membrane.Funnel, get_if_exists: true)
+      |> bin_output(pad)
+
+    {actions, state} = maybe_link_video_pad(state)
+
+    {[spec: spec] ++ actions, state}
   end
 
   @impl true
   def handle_child_notification({:new_stream, pad_ref, :AAC}, :demuxer, ctx, state) do
-    audio_pad_ref = get_pad(:audio, ctx)
-
-    if audio_pad_ref != nil do
-      {[
-         spec: [
-           get_child(:demuxer)
-           |> via_out(pad_ref)
-           |> child(:audio_parser, %Membrane.AAC.Parser{
-             out_encapsulation: :none
-           })
-           |> get_child(:funnel_audio)
-         ]
-       ], state}
-    else
-      {[], %{state | demuxer_audio_pad_ref: pad_ref}}
-    end
+    maybe_link_audio_pad(%{state | demuxer_audio_pad_ref: pad_ref})
   end
 
   def handle_child_notification({:new_stream, pad_ref, :H264}, :demuxer, ctx, state) do
-    video_pad_ref = get_pad(:video, ctx)
-
-    if video_pad_ref != nil do
-      {[
-         spec: [
-           get_child(:demuxer)
-           |> via_out(pad_ref)
-           |> child(:video_parser, Membrane.H264.Parser)
-           |> get_child(:funnel_video)
-         ]
-       ], state}
-    else
-      {[], %{state | demuxer_video_pad_ref: pad_ref}}
-    end
+    maybe_link_video_pad(%{state | demuxer_video_pad_ref: pad_ref})
   end
 
   def handle_child_notification(
@@ -180,9 +136,46 @@ defmodule Membrane.RTMP.SourceBin do
     :ssl.controlling_process(socket, source)
   end
 
-  defp get_pad(name, ctx) do
-    ctx.pads
-    |> Map.keys()
-    |> Enum.find(fn pad_ref -> Pad.name_by_ref(pad_ref) == name end)
+  defp maybe_link_audio_pad(state) when state.demuxer_audio_pad_ref != nil do
+    {[
+       spec:
+         get_child(:demuxer)
+         |> via_out(state.demuxer_audio_pad_ref)
+         |> child(:audio_parser, %Membrane.AAC.Parser{
+           out_encapsulation: :none
+         })
+         |> child(:funnel_audio, Membrane.Funnel, get_if_exists: true)
+     ], state}
+  end
+
+  defp maybe_link_audio_pad(state) do
+    {[], state}
+  end
+
+  defp maybe_link_video_pad(state) when state.demuxer_video_pad_ref != nil do
+    {[
+       spec:
+         get_child(:demuxer)
+         |> via_out(state.demuxer_video_pad_ref)
+         |> child(:video_parser, Membrane.H264.Parser)
+         |> child(:funnel_video, Membrane.Funnel, get_if_exists: true)
+     ], state}
+  end
+
+  defp maybe_link_video_pad(state) do
+    {[], state}
+  end
+
+  defp assert_pad_count!(name, ctx) do
+    count =
+      ctx.pads
+      |> Map.keys()
+      |> Enum.count(fn pad_ref -> Pad.name_by_ref(pad_ref) == name end)
+
+    if count > 1 do
+      raise("Linking more than one #{name} output pad to #{__MODULE__} is not allowed")
+    end
+
+    :ok
   end
 end
