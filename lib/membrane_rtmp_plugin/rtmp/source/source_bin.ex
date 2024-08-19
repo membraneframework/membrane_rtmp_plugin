@@ -83,11 +83,11 @@ defmodule Membrane.RTMP.SourceBin do
   end
 
   @impl true
-  def handle_child_notification({:new_stream, pad_ref, :AAC}, :demuxer, ctx, state) do
+  def handle_child_notification({:new_stream, pad_ref, :AAC}, :demuxer, _ctx, state) do
     maybe_link_audio_pad(%{state | demuxer_audio_pad_ref: pad_ref})
   end
 
-  def handle_child_notification({:new_stream, pad_ref, :H264}, :demuxer, ctx, state) do
+  def handle_child_notification({:new_stream, pad_ref, :H264}, :demuxer, _ctx, state) do
     maybe_link_video_pad(%{state | demuxer_video_pad_ref: pad_ref})
   end
 
