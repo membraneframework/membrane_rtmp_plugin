@@ -1,11 +1,11 @@
-defmodule Membrane.RTMP.Server.Listener do
+defmodule Membrane.RTMPServer.Listener do
   @moduledoc false
 
   # Module responsible for maintaining the listening socket.
 
   use Task
   require Logger
-  alias Membrane.RTMP.Server.ClientHandler
+  alias Membrane.RTMPServer.ClientHandler
 
   @spec run(
           options :: %{
@@ -53,7 +53,7 @@ defmodule Membrane.RTMP.Server.Listener do
         use_ssl?: options.use_ssl?,
         handler: options.handler,
         server: options.server,
-        new_client_callback: options.new_client_callback,
+        handle_new_client: options.handle_new_client,
         client_timeout: options.client_timeout
       )
 

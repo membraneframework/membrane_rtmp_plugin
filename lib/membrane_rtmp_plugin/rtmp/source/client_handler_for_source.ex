@@ -1,10 +1,10 @@
-defmodule Membrane.RTMP.Source.ClientHandler do
+defmodule Membrane.RTMP.Source.ClientHandlerImpl do
   @moduledoc """
-  An implementation of `Membrane.RTMP.Server.ClienHandlerBehaviour` compatible with the
+  An implementation of `Membrane.RTMPServer.ClienHandlerBehaviour` compatible with the
   `Membrane.RTMP.Source` element.
   """
 
-  @behaviour Membrane.RTMP.Server.ClientHandlerBehaviour
+  @behaviour Membrane.RTMPServer.ClientHandler
 
   defstruct [:controlling_process]
 
@@ -65,12 +65,6 @@ defmodule Membrane.RTMP.Source.ClientHandler do
 
   defp send_eos(pid) do
     send(pid, :end_of_stream)
-    :ok
-  end
-
-  @spec request_for_data(pid()) :: :ok
-  def request_for_data(client_reference) do
-    send(client_reference, {:send_me_data, self()})
     :ok
   end
 end

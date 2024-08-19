@@ -8,7 +8,7 @@ defmodule Membrane.RTMP.SourceBin do
   The bin can be used in the following two scenarios:
   * by providing the URL on which the client is expected to connect - note, that if the client doesn't
   connect on this URL, the bin won't complete its setup
-  * by spawning `Membrane.RTMP.Server`, receiving client reference after client connects on a given `app` and `stream_key`
+  * by spawning `Membrane.RTMPServer`, receiving client reference after client connects on a given `app` and `stream_key`
   and passing the client reference to the `#{inspect(__MODULE__)}`.
   """
   use Membrane.Bin
@@ -28,7 +28,7 @@ defmodule Membrane.RTMP.SourceBin do
                 spec: pid(),
                 description: """
                 A pid of a process acting as a client reference.
-                Can be gained with the use of `Membrane.RTMP.Server`.
+                Can be gained with the use of `Membrane.RTMPServer`.
                 """
               ],
               url: [
