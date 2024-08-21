@@ -172,7 +172,7 @@ defmodule Membrane.RTMP.SourceBin do
       |> Enum.count(fn pad_ref -> Pad.name_by_ref(pad_ref) == name end)
 
     if count > 1 do
-      raise("Linking more than one #{name} output pad to #{__MODULE__} is not allowed")
+      raise("Linking more than one #{name} output pad to #{inspect(__MODULE__)} is not allowed")
     end
 
     :ok
