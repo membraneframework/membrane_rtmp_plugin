@@ -8,7 +8,7 @@ defmodule Membrane.RTMPServer do
    - client_timeout: Time (ms) after which an unused client connection is automatically closed.
    - handle_new_client: An anonymous function called when a new client connects.
       It receives the client reference, `app` and `stream_key`, allowing custom processing,
-      like sending the reference to another process. The function should return a `` struct
+      like sending the reference to another process. The function should return a `t:#{inspect(__MODULE__)}.client_behaviour_spec/0`
       which defines how the client should behave.
   """
   use GenServer
@@ -26,9 +26,17 @@ defmodule Membrane.RTMPServer do
           name: atom() | nil,
           handle_new_client:
             (client_ref :: pid(), app :: String.t(), stream_key :: String.t() ->
-               ClientHandler.t()),
+               client_behaviour_spec()),
           client_timeout: Membrane.Time.t()
         ]
+
+  @typedoc """
+  A type representing how a client handler should behave.
+  If just a tuple is passed, the second element of that tuple is used as
+  an input argument of the `c:#{inspect(ClientHandler)}.handle_init/1`. Otherwise, an empty
+  map is passed to the `c:#{inspect(ClientHandler)}.handle_init/1`.
+  """
+  @type client_behaviour_spec :: ClientHandler.t() | {ClientHandler.t(), opts :: any()}
 
   @type server_identifier :: pid() | atom()
 

@@ -53,7 +53,7 @@ parent_process_pid = self()
 
 handle_new_client = fn client_ref, app, stream_key ->
   send(parent_process_pid, {:client_ref, client_ref, app, stream_key})
-  %Membrane.RTMP.Source.ClientHandlerImpl{}
+  Membrane.RTMP.Source.ClientHandlerImpl
 end
 
 # Run the standalone server

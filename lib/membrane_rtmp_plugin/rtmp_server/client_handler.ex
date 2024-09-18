@@ -13,9 +13,9 @@ defmodule Membrane.RTMPServer.ClientHandler do
   alias Membrane.RTMP.{Handshake, MessageHandler, MessageParser}
 
   @typedoc """
-  A type representing a struct which module implements `#{inspect(__MODULE__)}` behaviour.
+  A type representing a module which implements `#{inspect(__MODULE__)}` behaviour.
   """
-  @type t :: struct()
+  @type t :: module()
 
   @typedoc """
   Type representing the user defined state of the client handler.
@@ -150,21 +150,23 @@ defmodule Membrane.RTMPServer.ClientHandler do
         %{publish_msg: %Membrane.RTMP.Messages.Publish{stream_key: stream_key}} =
           message_handler_state
 
-        handler =
-          if is_function(state.handle_new_client) do
-            state.handle_new_client.(self(), state.app, stream_key)
-          else
-            raise "handle_new_client is not a function"
+        if not is_function(state.handle_new_client) do
+          raise "handle_new_client is not a function"
+        end
+
+        {handler_module, opts} =
+          case state.handle_new_client.(self(), state.app, stream_key) do
+            {handler_module, opts} -> {handler_module, opts}
+            handler_module -> {handler_module, %{}}
           end
 
-        %handler_module{} = handler
         Process.send_after(self(), {:client_timeout, state.app, stream_key}, state.client_timeout)
 
         %{
           state
           | notified_about_client?: true,
             handler: handler_module,
-            handler_state: handler_module.handle_init(handler)
+            handler_state: handler_module.handle_init(opts)
         }
       else
         state

@@ -86,7 +86,7 @@ defmodule Membrane.RTMP.Source do
 
     handle_new_client = fn client_ref, app, stream_key ->
       send(parent_pid, {:client_ref, client_ref, app, stream_key})
-      %__MODULE__.ClientHandlerImpl{}
+      __MODULE__.ClientHandlerImpl
     end
 
     {:ok, server_pid} =

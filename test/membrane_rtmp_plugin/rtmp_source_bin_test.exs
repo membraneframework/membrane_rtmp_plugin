@@ -222,7 +222,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
 
     handle_new_client = fn client_ref, app, stream_key ->
       send(parent_process_pid, {:client_ref, client_ref, app, stream_key})
-      %Membrane.RTMP.Source.ClientHandlerImpl{}
+      Membrane.RTMP.Source.ClientHandlerImpl
     end
 
     {:ok, server_pid} =
