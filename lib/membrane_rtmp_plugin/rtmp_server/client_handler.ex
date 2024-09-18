@@ -24,22 +24,6 @@ defmodule Membrane.RTMPServer.ClientHandler do
   @callback handle_init(any()) :: t()
 
   @doc """
-  The callback invoked when the client sends the `Membrane.RTMP.Messages.Connect.t()`
-  message.
-  """
-  @callback handle_connected(connected_msg :: Membrane.RTMP.Messages.Connect.t(), state :: t()) ::
-              t()
-
-  @doc """
-  The callback invoked when the client sends the `Membrane.RTMP.Messages.Publish.t()`
-  message.
-  """
-  @callback handle_stream_published(
-              publish_msg :: Membrane.RTMP.Messages.Publish.t(),
-              state :: t()
-            ) :: t()
-
-  @doc """
   The callback invoked when new piece of data is received from a given client.
   """
   @callback handle_data_available(payload :: binary(), state :: t()) :: t()
@@ -73,16 +57,14 @@ defmodule Membrane.RTMPServer.ClientHandler do
     message_parser_state = Handshake.init_server() |> MessageParser.init()
     message_handler_state = MessageHandler.init(%{socket: opts.socket, use_ssl?: opts.use_ssl?})
 
-    %handler_module{} = opts.handler
-
     {:ok,
      %{
        socket: opts.socket,
        use_ssl?: opts.use_ssl?,
        message_parser_state: message_parser_state,
        message_handler_state: message_handler_state,
-       handler: handler_module,
-       handler_state: handler_module.handle_init(opts.handler),
+       handler: nil,
+       handler_state: nil,
        app: nil,
        stream_key: nil,
        server: opts.server,
@@ -163,15 +145,22 @@ defmodule Membrane.RTMPServer.ClientHandler do
         %{publish_msg: %Membrane.RTMP.Messages.Publish{stream_key: stream_key}} =
           message_handler_state
 
-        if is_function(state.handle_new_client) do
-          state.handle_new_client.(self(), state.app, stream_key)
-        else
-          raise "handle_new_client is not a function"
-        end
+        handler =
+          if is_function(state.handle_new_client) do
+            state.handle_new_client.(self(), state.app, stream_key)
+          else
+            raise "handle_new_client is not a function"
+          end
 
+        %handler_module{} = handler
         Process.send_after(self(), {:client_timeout, state.app, stream_key}, state.client_timeout)
 
-        %{state | notified_about_client?: true}
+        %{
+          state
+          | notified_about_client?: true,
+            handler: handler_module,
+            handler_state: handler_module.handle_init(handler)
+        }
       else
         state
       end
@@ -210,19 +199,12 @@ defmodule Membrane.RTMPServer.ClientHandler do
         }
 
       {:connected, connected_msg} ->
-        new_handler_state =
-          state.handler.handle_connected(connected_msg, state.handler_state)
-
-        %{state | handler_state: new_handler_state, app: connected_msg.app}
+        %{state | app: connected_msg.app}
 
       {:published, publish_msg} ->
-        new_handler_state =
-          state.handler.handle_stream_published(publish_msg, state.handler_state)
-
         %{
           state
-          | handler_state: new_handler_state,
-            stream_key: publish_msg.stream_key,
+          | stream_key: publish_msg.stream_key,
             published?: true
         }
     end

@@ -86,11 +86,11 @@ defmodule Membrane.RTMP.Source do
 
     handle_new_client = fn client_ref, app, stream_key ->
       send(parent_pid, {:client_ref, client_ref, app, stream_key})
+      %__MODULE__.ClientHandlerImpl{}
     end
 
     {:ok, server_pid} =
       Membrane.RTMPServer.start_link(
-        handler: %__MODULE__.ClientHandlerImpl{controlling_process: self()},
         port: port,
         use_ssl?: use_ssl?,
         handle_new_client: handle_new_client,

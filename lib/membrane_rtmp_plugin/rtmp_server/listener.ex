@@ -51,7 +51,6 @@ defmodule Membrane.RTMPServer.Listener do
       GenServer.start_link(ClientHandler,
         socket: client,
         use_ssl?: options.use_ssl?,
-        handler: options.handler,
         server: options.server,
         handle_new_client: options.handle_new_client,
         client_timeout: options.client_timeout

@@ -6,27 +6,14 @@ defmodule Membrane.RTMP.Source.ClientHandlerImpl do
 
   @behaviour Membrane.RTMPServer.ClientHandler
 
-  defstruct [:controlling_process]
+  defstruct []
 
   @impl true
-  def handle_init(opts) do
+  def handle_init(_opts) do
     %{
       source_pid: nil,
-      buffered: [],
-      app: nil,
-      stream_key: nil,
-      controlling_process: opts.controlling_process
+      buffered: []
     }
-  end
-
-  @impl true
-  def handle_connected(connected_msg, state) do
-    %{state | app: connected_msg.app}
-  end
-
-  @impl true
-  def handle_stream_published(publish_msg, state) do
-    %{state | stream_key: publish_msg.stream_key}
   end
 
   @impl true
