@@ -26,7 +26,7 @@ defmodule Membrane.RTMPServer do
           name: atom() | nil,
           handle_new_client:
             (client_ref :: pid(), app :: String.t(), stream_key :: String.t() ->
-               client_behaviour_spec()),
+                        client_behaviour_spec()),
           client_timeout: Membrane.Time.t()
         ]
 
