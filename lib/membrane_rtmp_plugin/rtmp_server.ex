@@ -8,8 +8,8 @@ defmodule Membrane.RTMPServer do
    - client_timeout: Time (ms) after which an unused client connection is automatically closed.
    - handle_new_client: An anonymous function called when a new client connects.
       It receives the client reference, `app` and `stream_key`, allowing custom processing,
-      like sending the reference to another process. If it's not provided, default implementation is used:
-      {:client_ref, client_ref, app, stream_key} message is sent to the process that invoked RTMPServer.start_link().
+      like sending the reference to another process. The function should return a `` struct
+      which defines how the client should behave.
   """
   use GenServer
 
@@ -21,14 +21,12 @@ defmodule Membrane.RTMPServer do
   Defines options for the RTMP server.
   """
   @type t :: [
-          handler: ClientHandler.t(),
           port: :inet.port_number(),
           use_ssl?: boolean(),
           name: atom() | nil,
           handle_new_client:
             (client_ref :: pid(), app :: String.t(), stream_key :: String.t() ->
-               any())
-            | nil,
+               ClientHandler.t()),
           client_timeout: Membrane.Time.t()
         ]
 
@@ -42,19 +40,6 @@ defmodule Membrane.RTMPServer do
     gen_server_opts = if server_options[:name] == nil, do: [], else: [name: server_options[:name]]
 
     server_options = Enum.into(server_options, %{})
-
-    server_options =
-      if server_options[:handle_new_client] == nil do
-        parent_process_pid = self()
-
-        callback = fn client_ref, app, stream_key ->
-          send(parent_process_pid, {:client_ref, client_ref, app, stream_key})
-        end
-
-        Map.put(server_options, :handle_new_client, callback)
-      else
-        server_options
-      end
 
     GenServer.start_link(__MODULE__, server_options, gen_server_opts)
   end

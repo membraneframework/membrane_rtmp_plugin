@@ -13,20 +13,25 @@ defmodule Membrane.RTMPServer.ClientHandler do
   alias Membrane.RTMP.{Handshake, MessageHandler, MessageParser}
 
   @typedoc """
+  A type representing a struct which module implements `#{inspect(__MODULE__)}` behaviour.
+  """
+  @type t :: struct()
+
+  @typedoc """
   Type representing the user defined state of the client handler.
   """
-  @type t :: term()
+  @type state :: any()
 
   @doc """
   The callback invoked once the client handler is created.
   It should return the initial state of the client handler.
   """
-  @callback handle_init(any()) :: t()
+  @callback handle_init(any()) :: state()
 
   @doc """
   The callback invoked when new piece of data is received from a given client.
   """
-  @callback handle_data_available(payload :: binary(), state :: t()) :: t()
+  @callback handle_data_available(payload :: binary(), state :: state()) :: state()
 
   @doc """
   The callback invoked when the client served by given client handler
@@ -34,13 +39,13 @@ defmodule Membrane.RTMPServer.ClientHandler do
   (for instance, when the remote client deletes the stream or
   terminates the socket connection)
   """
-  @callback handle_end_of_stream(state :: t()) :: t()
+  @callback handle_end_of_stream(state :: state()) :: state()
 
   @doc """
   The callback invoked when the client handler receives a message
   that is not recognized as an internal message of the client handler.
   """
-  @callback handle_info(msg :: term(), t()) :: t()
+  @callback handle_info(msg :: term(), state()) :: state()
 
   @doc """
   Makes the client handler ask client for the desired number of buffers
