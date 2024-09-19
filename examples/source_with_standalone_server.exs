@@ -53,16 +53,14 @@ parent_process_pid = self()
 
 handle_new_client = fn client_ref, app, stream_key ->
   send(parent_process_pid, {:client_ref, client_ref, app, stream_key})
+  Membrane.RTMP.Source.ClientHandlerImpl
 end
 
 # Run the standalone server
 {:ok, server} =
   Membrane.RTMPServer.start_link(
-    handler: %Membrane.RTMP.Source.ClientHandlerImpl{controlling_process: self()},
     port: port,
-    use_ssl?: false,
-    handle_new_client: handle_new_client,
-    client_timeout: 5_000
+    handle_new_client: handle_new_client
   )
 
 app = "app"

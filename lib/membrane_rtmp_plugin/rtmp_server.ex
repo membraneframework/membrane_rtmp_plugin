@@ -5,11 +5,14 @@ defmodule Membrane.RTMPServer do
   If no data is demanded within the client_timeout period, TCP socket is closed.
 
   Options:
-   - client_timeout: Time (ms) after which an unused client connection is automatically closed.
-   - handle_new_client: An anonymous function called when a new client connects.
+  - handle_new_client: An anonymous function called when a new client connects.
       It receives the client reference, `app` and `stream_key`, allowing custom processing,
-      like sending the reference to another process. If it's not provided, default implementation is used:
-      {:client_ref, client_ref, app, stream_key} message is sent to the process that invoked RTMPServer.start_link().
+      like sending the reference to another process. The function should return a `t:#{inspect(__MODULE__)}.client_behaviour_spec/0`
+      which defines how the client should behave.
+  - port: Port on which RTMP server will listen. Defaults to 1935.
+  - use_ssl?: If true, SSL socket (for RTMPS) will be used. Othwerwise, TCP socket (for RTMP) will be used. Defaults to false.
+  - client_timeout: Time after which an unused client connection is automatically closed. Defaults to 5 seconds.
+  - name: If not nil, value of this field will be used as a name under which the server's process will be registered. Defaults to nil.
   """
   use GenServer
 
@@ -21,16 +24,28 @@ defmodule Membrane.RTMPServer do
   Defines options for the RTMP server.
   """
   @type t :: [
-          handler: ClientHandler.t(),
           port: :inet.port_number(),
           use_ssl?: boolean(),
           name: atom() | nil,
-          handle_new_client:
-            (client_ref :: pid(), app :: String.t(), stream_key :: String.t() ->
-               any())
-            | nil,
+          handle_new_client: (client_ref :: pid(), app :: String.t(), stream_key :: String.t() ->
+                                client_behaviour_spec()),
           client_timeout: Membrane.Time.t()
         ]
+
+  @default_options %{
+    port: 1935,
+    use_ssl?: false,
+    name: nil,
+    client_timeout: Membrane.Time.seconds(5)
+  }
+
+  @typedoc """
+  A type representing how a client handler should behave.
+  If just a tuple is passed, the second element of that tuple is used as
+  an input argument of the `c:#{inspect(ClientHandler)}.handle_init/1`. Otherwise, an empty
+  map is passed to the `c:#{inspect(ClientHandler)}.handle_init/1`.
+  """
+  @type client_behaviour_spec :: ClientHandler.t() | {ClientHandler.t(), opts :: any()}
 
   @type server_identifier :: pid() | atom()
 
@@ -40,23 +55,10 @@ defmodule Membrane.RTMPServer do
   @spec start_link(server_options :: t()) :: GenServer.on_start()
   def start_link(server_options) do
     gen_server_opts = if server_options[:name] == nil, do: [], else: [name: server_options[:name]]
+    server_options_map = Enum.into(server_options, %{})
+    server_options_map = Map.merge(@default_options, server_options_map)
 
-    server_options = Enum.into(server_options, %{})
-
-    server_options =
-      if server_options[:handle_new_client] == nil do
-        parent_process_pid = self()
-
-        callback = fn client_ref, app, stream_key ->
-          send(parent_process_pid, {:client_ref, client_ref, app, stream_key})
-        end
-
-        Map.put(server_options, :handle_new_client, callback)
-      else
-        server_options
-      end
-
-    GenServer.start_link(__MODULE__, server_options, gen_server_opts)
+    GenServer.start_link(__MODULE__, server_options_map, gen_server_opts)
   end
 
   @doc """
