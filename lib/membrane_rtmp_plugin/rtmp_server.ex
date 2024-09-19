@@ -5,7 +5,7 @@ defmodule Membrane.RTMPServer do
   If no data is demanded within the client_timeout period, TCP socket is closed.
 
   Options:
-   - handle_new_client: An anonymous function called when a new client connects.
+  - handle_new_client: An anonymous function called when a new client connects.
       It receives the client reference, `app` and `stream_key`, allowing custom processing,
       like sending the reference to another process. The function should return a `t:#{inspect(__MODULE__)}.client_behaviour_spec/0`
       which defines how the client should behave.
