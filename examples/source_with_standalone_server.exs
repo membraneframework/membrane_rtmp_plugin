@@ -60,9 +60,7 @@ end
 {:ok, server} =
   Membrane.RTMPServer.start_link(
     port: port,
-    use_ssl?: false,
-    handle_new_client: handle_new_client,
-    client_timeout: 5_000
+    handle_new_client: handle_new_client
   )
 
 app = "app"

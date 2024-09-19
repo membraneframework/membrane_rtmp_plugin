@@ -230,7 +230,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
         port: port,
         use_ssl?: use_ssl?,
         handle_new_client: handle_new_client,
-        client_timeout: 3_000
+        client_timeout: Membrane.Time.seconds(3)
       )
 
     {:ok, assigned_port} = Membrane.RTMPServer.get_port(server_pid)

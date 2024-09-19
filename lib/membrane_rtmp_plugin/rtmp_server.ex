@@ -5,11 +5,14 @@ defmodule Membrane.RTMPServer do
   If no data is demanded within the client_timeout period, TCP socket is closed.
 
   Options:
-   - client_timeout: Time (ms) after which an unused client connection is automatically closed.
    - handle_new_client: An anonymous function called when a new client connects.
       It receives the client reference, `app` and `stream_key`, allowing custom processing,
       like sending the reference to another process. The function should return a `t:#{inspect(__MODULE__)}.client_behaviour_spec/0`
       which defines how the client should behave.
+  - port: Port on which RTMP server will listen. Defaults to 1935.
+  - use_ssl?: If true, SSL socket (for RTMPS) will be used. Othwerwise, TCP socket (for RTMP) will be used. Defaults to false.
+  - client_timeout: Time after which an unused client connection is automatically closed. Defaults to 5 seconds.
+  - name: If not nil, value of this field will be used as a name under which the server's process will be registered. Defaults to nil.
   """
   use GenServer
 
@@ -24,10 +27,18 @@ defmodule Membrane.RTMPServer do
           port: :inet.port_number(),
           use_ssl?: boolean(),
           name: atom() | nil,
-          handle_new_client: (client_ref :: pid(), app :: String.t(), stream_key :: String.t() ->
-                                client_behaviour_spec()),
+          handle_new_client:
+            (client_ref :: pid(), app :: String.t(), stream_key :: String.t() ->
+               client_behaviour_spec()),
           client_timeout: Membrane.Time.t()
         ]
+
+  @default_options %{
+    port: 1935,
+    use_ssl?: false,
+    name: nil,
+    client_timeout: Membrane.Time.seconds(5)
+  }
 
   @typedoc """
   A type representing how a client handler should behave.
@@ -45,10 +56,10 @@ defmodule Membrane.RTMPServer do
   @spec start_link(server_options :: t()) :: GenServer.on_start()
   def start_link(server_options) do
     gen_server_opts = if server_options[:name] == nil, do: [], else: [name: server_options[:name]]
+    server_options_map = Enum.into(server_options, %{})
+    server_options_map = Map.merge(@default_options, server_options_map)
 
-    server_options = Enum.into(server_options, %{})
-
-    GenServer.start_link(__MODULE__, server_options, gen_server_opts)
+    GenServer.start_link(__MODULE__, server_options_map, gen_server_opts)
   end
 
   @doc """

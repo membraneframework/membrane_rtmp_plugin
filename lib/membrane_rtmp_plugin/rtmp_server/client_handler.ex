@@ -160,7 +160,11 @@ defmodule Membrane.RTMPServer.ClientHandler do
             handler_module -> {handler_module, %{}}
           end
 
-        Process.send_after(self(), {:client_timeout, state.app, stream_key}, state.client_timeout)
+        Process.send_after(
+          self(),
+          {:client_timeout, state.app, stream_key},
+          Membrane.Time.as_milliseconds(state.client_timeout, :round)
+        )
 
         %{
           state
