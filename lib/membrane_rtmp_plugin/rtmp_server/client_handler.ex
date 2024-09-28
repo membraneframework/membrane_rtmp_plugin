@@ -161,10 +161,11 @@ defmodule Membrane.RTMPServer.ClientHandler do
           raise "handle_new_client is not a function"
         end
 
-        {handler_module, opts} =
+        {handler_module, opts, pid} =
           case state.handle_new_client.(self(), state.app, stream_key) do
-            {handler_module, opts} -> {handler_module, opts}
-            handler_module -> {handler_module, %{}}
+            {handler_module, opts, pid} when is_pid(pid) -> {handler_module, opts, pid}
+            {handler_module, opts} -> {handler_module, opts, nil}
+            handler_module -> {handler_module, %{}, nil}
           end
 
         Process.send_after(
@@ -177,10 +178,14 @@ defmodule Membrane.RTMPServer.ClientHandler do
           state
           | notified_about_client?: true,
             handler: handler_module,
-            handler_state: handler_module.handle_init(opts)
+            handler_state: handler_module.handle_init(opts),
+            message_handler_state: %{message_handler_state | receiver_pid: pid}
         }
       else
-        state
+        %{
+          state
+          | message_handler_state: message_handler_state
+        }
       end
 
     state = Enum.reduce(events, state, &handle_event/2)
@@ -190,8 +195,7 @@ defmodule Membrane.RTMPServer.ClientHandler do
     {:noreply,
      %{
        state
-       | message_parser_state: message_parser_state,
-         message_handler_state: message_handler_state
+       | message_parser_state: message_parser_state
      }}
   end
 

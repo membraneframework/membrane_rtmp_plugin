@@ -200,6 +200,53 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     assert :ok = Task.await(ffmpeg_task)
   end
 
+  test "Messages are sent to receiver_pid" do
+    self = self()
+
+    pipeline_startup_task =
+      Task.async(fn ->
+        start_pipeline_with_external_rtmp_server(@app, @stream_key, self, 0, false, self)
+      end)
+
+    port =
+      receive do
+        {:port, port} -> port
+      end
+
+    ffmpeg_task =
+      Task.async(fn ->
+        "rtmp://localhost:#{port}/#{@app}/#{@stream_key}" |> start_ffmpeg()
+      end)
+
+    pipeline = Task.await(pipeline_startup_task)
+
+    assert_receive(%Membrane.RTMP.Messages.SetDataFrame{})
+
+    assert_buffers(%{
+      pipeline: pipeline,
+      sink: :video_sink,
+      stream_length: @stream_length_ms,
+      buffers_expected: div(@stream_length_ms, @video_frame_duration_ms)
+    })
+
+    assert_buffers(%{
+      pipeline: pipeline,
+      sink: :audio_sink,
+      stream_length: @stream_length_ms,
+      buffers_expected: div(@stream_length_ms, @audio_frame_duration_ms)
+    })
+
+    assert_end_of_stream(pipeline, :audio_sink, :input)
+    assert_end_of_stream(pipeline, :video_sink, :input)
+
+    assert_received(%Membrane.RTMP.Messages.Anonymous{})
+    assert_received(%Membrane.RTMP.Messages.DeleteStream{})
+
+    # Cleanup
+    Testing.Pipeline.terminate(pipeline)
+    assert :ok = Task.await(ffmpeg_task)
+  end
+
   defp start_pipeline_with_builtin_rtmp_server(app, stream_key, use_ssl? \\ false) do
     options = [
       module: Membrane.RTMP.Source.WithBuiltinServerTestPipeline,
@@ -216,13 +263,19 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
          stream_key,
          parent,
          port \\ 0,
-         use_ssl? \\ false
+         use_ssl? \\ false,
+         receiver_pid \\ nil
        ) do
     parent_process_pid = self()
 
     handle_new_client = fn client_ref, app, stream_key ->
       send(parent_process_pid, {:client_ref, client_ref, app, stream_key})
-      Membrane.RTMP.Source.ClientHandlerImpl
+
+      if receiver_pid do
+        {Membrane.RTMP.Source.ClientHandlerImpl, %{}, receiver_pid}
+      else
+        Membrane.RTMP.Source.ClientHandlerImpl
+      end
     end
 
     {:ok, server_pid} =

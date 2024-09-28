@@ -161,20 +161,23 @@ defmodule Membrane.RTMP.MessageHandler do
   end
 
   # A message containing stream metadata
-  defp do_handle_client_message(%Messages.SetDataFrame{} = _data_frame, _header, state) do
+  defp do_handle_client_message(%Messages.SetDataFrame{} = set_data_frame, _header, state) do
+    if pid = state.receiver_pid, do: send(pid, set_data_frame)
     {:cont, state}
   end
 
-  defp do_handle_client_message(%Messages.OnMetaData{} = _on_meta_data, _header, state) do
+  defp do_handle_client_message(%Messages.OnMetaData{} = on_meta_data, _header, state) do
+    if pid = state.receiver_pid, do: send(pid, on_meta_data)
     {:cont, state}
   end
 
   # According to ffmpeg's documentation, this command should prepare the server to receive media streams
   # We are simply acknowledging the message
-  defp do_handle_client_message(%Messages.FCPublish{}, _header, state) do
+  defp do_handle_client_message(%Messages.FCPublish{} = fc_publish, _header, state) do
     %Messages.Anonymous{name: "onFCPublish", properties: []}
     |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
 
+    if pid = state.receiver_pid, do: send(pid, fc_publish)
     {:cont, state}
   end
 
@@ -186,14 +189,16 @@ defmodule Membrane.RTMP.MessageHandler do
     |> Responses.default_result([:null, stream_id])
     |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
 
+    if pid = state.receiver_pid, do: send(pid, create_stream)
     {:cont, state}
   end
 
   # we ignore acknowledgement messages, but they're rarely used anyways
-  defp do_handle_client_message(%module{}, _header, state)
+  defp do_handle_client_message(%module{} = msg, _header, state)
        when module in [Messages.Acknowledgement, Messages.WindowAcknowledgement] do
     Logger.debug("#{inspect(module)} received, ignoring as acknowledgements are not implemented")
 
+    if pid = state.receiver_pid, do: send(pid, msg)
     {:cont, state}
   end
 
@@ -214,10 +219,12 @@ defmodule Membrane.RTMP.MessageHandler do
   defp do_handle_client_message(%Messages.UserControl{} = msg, _header, state) do
     Logger.warning("Received unsupported user control message of type #{inspect(msg.event_type)}")
 
+    if pid = state.receiver_pid, do: send(pid, msg)
     {:cont, state}
   end
 
-  defp do_handle_client_message(%Messages.DeleteStream{}, _header, state) do
+  defp do_handle_client_message(%Messages.DeleteStream{} = delete_stream, _header, state) do
+    if pid = state.receiver_pid, do: send(pid, delete_stream)
     {:halt, %{state | events: [:delete_stream | state.events]}}
   end
 
@@ -234,6 +241,7 @@ defmodule Membrane.RTMP.MessageHandler do
 
   defp do_handle_client_message(%Messages.Anonymous{} = message, _header, state) do
     Logger.debug("Unknown message: #{inspect(message)}")
+    if pid = state.receiver_pid, do: send(pid, message)
 
     {:cont, state}
   end

@@ -45,7 +45,13 @@ defmodule Membrane.RTMPServer do
   an input argument of the `c:#{inspect(ClientHandler)}.handle_init/1`. Otherwise, an empty
   map is passed to the `c:#{inspect(ClientHandler)}.handle_init/1`.
   """
-  @type client_behaviour_spec :: ClientHandler.t() | {ClientHandler.t(), opts :: any()}
+
+  @type receiver_pid :: pid() | nil
+
+  @type client_behaviour_spec ::
+          ClientHandler.t()
+          | {ClientHandler.t(), opts :: any()}
+          | {ClientHandler.t(), opts :: any(), receiver_pid}
 
   @type server_identifier :: pid() | atom()
 
