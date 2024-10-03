@@ -40,18 +40,19 @@ defmodule Membrane.RTMP.Source.ClientHandlerImpl do
   end
 
   @impl true
-  def handle_end_of_stream(state) do
-    if state.source_pid != nil, do: send_eos(state.source_pid)
+  def handle_connection_closed(state) do
+    if state.source_pid != nil, do: send(state.source_pid, :connection_closed)
+    state
+  end
+
+  @impl true
+  def handle_delete_stream(state) do
+    if state.source_pid != nil, do: send(state.source_pid, :delete_stream)
     state
   end
 
   defp send_data(pid, payload) do
     send(pid, {:data, payload})
-    :ok
-  end
-
-  defp send_eos(pid) do
-    send(pid, :end_of_stream)
     :ok
   end
 end
