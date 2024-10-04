@@ -42,7 +42,7 @@ defmodule Membrane.RTMPServer.ClientHandler do
   Callback invoked when the socket connection is terminated. In normal
   conditions, `handle_delete_stream` is called before this one. If delete_stream
   is not called and connection_closed is, it might just mean that the
-  connection was lost.
+  connection was lost (for instance when TCP socket is closed unexpectedly).
 
   It is up to the users to determined how to handle it in their case.
   """
