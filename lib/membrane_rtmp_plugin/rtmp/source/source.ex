@@ -190,12 +190,16 @@ defmodule Membrane.RTMP.Source do
   end
 
   @impl true
-  def handle_info(:end_of_stream, ctx, state) do
+  def handle_info(:connection_closed, ctx, state) do
     if ctx.pads[:output].end_of_stream? do
       {[], state}
     else
       {[end_of_stream: :output], state}
     end
+  end
+
+  def handle_info(:delete_stream, _ctx, state) do
+    {[notify_parent: :stream_deleted], state}
   end
 
   @impl true

@@ -28,7 +28,7 @@ defmodule Membrane.RTMP.MessageHandler do
           {:set_chunk_size_required, non_neg_integer()}
           | {:connected, Membrane.RTMP.Messages.Connect.t()}
           | {:published, Membrane.RTMP.Messages.Publish.t()}
-          | :end_of_stream
+          | :delete_stream
           | {:data_available, binary()}
   @type t() :: %{
           socket: :gen_tcp.socket() | :ssl.socket(),
@@ -218,7 +218,7 @@ defmodule Membrane.RTMP.MessageHandler do
   end
 
   defp do_handle_client_message(%Messages.DeleteStream{}, _header, state) do
-    {:halt, %{state | events: [:end_of_stream | state.events]}}
+    {:halt, %{state | events: [:delete_stream | state.events]}}
   end
 
   # Check bandwidth message
