@@ -34,12 +34,19 @@ defmodule Membrane.RTMPServer.ClientHandler do
   @callback handle_data_available(payload :: binary(), state :: state()) :: state()
 
   @doc """
-  The callback invoked when the client served by given client handler
-  stops sending data.
-  (for instance, when the remote client deletes the stream or
-  terminates the socket connection)
+  Callback invoked when the RMTP stream is finished.
   """
-  @callback handle_end_of_stream(state :: state()) :: state()
+  @callback handle_delete_stream(state :: state()) :: state()
+
+  @doc """
+  Callback invoked when the socket connection is terminated. In normal
+  conditions, `handle_delete_stream` is called before this one. If delete_stream
+  is not called and connection_closed is, it might just mean that the
+  connection was lost (for instance when TCP socket is closed unexpectedly).
+
+  It is up to the users to determined how to handle it in their case.
+  """
+  @callback handle_connection_closed(state :: state()) :: state()
 
   @doc """
   The callback invoked when the client handler receives a message
@@ -89,7 +96,7 @@ defmodule Membrane.RTMPServer.ClientHandler do
   @impl true
   def handle_info({:tcp_closed, socket}, %{use_ssl?: false} = state)
       when state.socket == socket do
-    events = [:end_of_stream]
+    events = [:connection_closed]
     state = Enum.reduce(events, state, &handle_event/2)
 
     {:noreply, state}
@@ -102,7 +109,7 @@ defmodule Membrane.RTMPServer.ClientHandler do
 
   @impl true
   def handle_info({:ssl_closed, socket}, %{use_ssl?: true} = state) when state.socket == socket do
-    events = [:end_of_stream]
+    events = [:connection_closed]
     state = Enum.reduce(events, state, &handle_event/2)
 
     {:noreply, state}
@@ -191,8 +198,12 @@ defmodule Membrane.RTMPServer.ClientHandler do
   defp handle_event(event, state) do
     # call callbacks
     case event do
-      :end_of_stream ->
-        new_handler_state = state.handler.handle_end_of_stream(state.handler_state)
+      :connection_closed ->
+        new_handler_state = state.handler.handle_connection_closed(state.handler_state)
+        %{state | handler_state: new_handler_state}
+
+      :delete_stream ->
+        new_handler_state = state.handler.handle_delete_stream(state.handler_state)
         %{state | handler_state: new_handler_state}
 
       {:set_chunk_size_required, chunk_size} ->
