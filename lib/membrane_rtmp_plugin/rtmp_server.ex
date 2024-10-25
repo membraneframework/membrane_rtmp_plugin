@@ -27,9 +27,8 @@ defmodule Membrane.RTMPServer do
           port: :inet.port_number(),
           use_ssl?: boolean(),
           name: atom() | nil,
-          handle_new_client:
-            (client_ref :: pid(), app :: String.t(), stream_key :: String.t() ->
-               client_behaviour_spec()),
+          handle_new_client: (client_ref :: pid(), app :: String.t(), stream_key :: String.t() ->
+                                client_behaviour_spec()),
           client_timeout: Membrane.Time.t()
         ]
 
