@@ -193,8 +193,7 @@ defmodule Membrane.RTMPServer.ClientHandler do
     state = Enum.reduce(events, state, &handle_event/2)
 
     state =
-      if state.handler &&
-           state.handler_state &&
+      if state.notified_about_client? &&
            Kernel.function_exported?(state.handler, :handle_rtmp_message, 2) do
         new_handler_state =
           Enum.reduce(messages, state.handler_state, fn
