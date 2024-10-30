@@ -10,7 +10,7 @@ defmodule Membrane.RTMPServer.ClientHandler do
   use GenServer
 
   require Logger
-  alias Membrane.RTMP.{Handshake, MessageHandler, MessageParser}
+  alias Membrane.RTMP.{Handshake, MessageHandler, MessageParser, Messages}
 
   @typedoc """
   A type representing a module which implements `#{inspect(__MODULE__)}` behaviour.
@@ -49,9 +49,16 @@ defmodule Membrane.RTMPServer.ClientHandler do
   @callback handle_connection_closed(state :: state()) :: state()
 
   @doc """
-  The optional callback invoked when the client handler receives a RTMP message.
+  The optional callback invoked when the client handler receives RTMP message with
+  metadata information (just like a resolution or a framerate of a video stream).
+  The following messages are considered the ones that contain metadata:
+  1) OnMetaData
+  2) SetDataFrame
   """
-  @callback handle_rtmp_message(msg :: term(), state()) :: state()
+  @callback handle_metadata(
+              {:metadata_message, Messages.OnMetaData.t() | Messages.SetDataFrame.t()},
+              state()
+            ) :: state()
 
   @doc """
   The callback invoked when the client handler receives a message
@@ -59,7 +66,11 @@ defmodule Membrane.RTMPServer.ClientHandler do
   """
   @callback handle_info(msg :: term(), state()) :: state()
 
-  @optional_callbacks handle_rtmp_message: 2
+  @optional_callbacks handle_metadata: 2
+
+  defguardp is_metadata_message(message)
+            when is_struct(message, Messages.OnMetaData) or
+                   is_struct(message, Messages.SetDataFrame)
 
   @doc """
   Makes the client handler ask client for the desired number of buffers
@@ -194,16 +205,14 @@ defmodule Membrane.RTMPServer.ClientHandler do
 
     state =
       if state.notified_about_client? &&
-           Kernel.function_exported?(state.handler, :handle_rtmp_message, 2) do
+           Kernel.function_exported?(state.handler, :handle_metadata, 2) do
         new_handler_state =
           Enum.reduce(messages, state.handler_state, fn
-            {%Membrane.RTMP.Header{}, message}, handler_state when is_map(message) ->
-              state.handler.handle_rtmp_message(message, handler_state)
+            {%Membrane.RTMP.Header{}, message}, handler_state
+            when is_metadata_message(message) ->
+              state.handler.handle_metadata({:metadata_message, message}, handler_state)
 
-            message, handler_state when is_map(message) ->
-              state.handler.handle_rtmp_message(message, handler_state)
-
-            _message, handler_state ->
+            _other, handler_state ->
               handler_state
           end)
 
