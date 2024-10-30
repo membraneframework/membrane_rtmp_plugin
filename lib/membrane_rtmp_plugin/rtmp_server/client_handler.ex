@@ -10,7 +10,7 @@ defmodule Membrane.RTMPServer.ClientHandler do
   use GenServer
 
   require Logger
-  alias Membrane.RTMP.{Handshake, MessageHandler, MessageParser}
+  alias Membrane.RTMP.{Handshake, MessageHandler, MessageParser, Messages}
 
   @typedoc """
   A type representing a module which implements `#{inspect(__MODULE__)}` behaviour.
@@ -49,10 +49,28 @@ defmodule Membrane.RTMPServer.ClientHandler do
   @callback handle_connection_closed(state :: state()) :: state()
 
   @doc """
+  The optional callback invoked when the client handler receives RTMP message with
+  metadata information (just like a resolution or a framerate of a video stream).
+  The following messages are considered the ones that contain metadata:
+  1) OnMetaData
+  2) SetDataFrame
+  """
+  @callback handle_metadata(
+              {:metadata_message, Messages.OnMetaData.t() | Messages.SetDataFrame.t()},
+              state()
+            ) :: state()
+
+  @doc """
   The callback invoked when the client handler receives a message
   that is not recognized as an internal message of the client handler.
   """
   @callback handle_info(msg :: term(), state()) :: state()
+
+  @optional_callbacks handle_metadata: 2
+
+  defguardp is_metadata_message(message)
+            when is_struct(message, Messages.OnMetaData) or
+                   is_struct(message, Messages.SetDataFrame)
 
   @doc """
   Makes the client handler ask client for the desired number of buffers
@@ -184,6 +202,24 @@ defmodule Membrane.RTMPServer.ClientHandler do
       end
 
     state = Enum.reduce(events, state, &handle_event/2)
+
+    state =
+      if state.notified_about_client? &&
+           Kernel.function_exported?(state.handler, :handle_metadata, 2) do
+        new_handler_state =
+          Enum.reduce(messages, state.handler_state, fn
+            {%Membrane.RTMP.Header{}, message}, handler_state
+            when is_metadata_message(message) ->
+              state.handler.handle_metadata({:metadata_message, message}, handler_state)
+
+            _other, handler_state ->
+              handler_state
+          end)
+
+        %{state | handler_state: new_handler_state}
+      else
+        state
+      end
 
     request_data(state)
 
