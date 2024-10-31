@@ -53,9 +53,11 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     assert_end_of_stream(pipeline, :audio_sink, :input)
     assert_end_of_stream(pipeline, :video_sink, :input)
 
+    assert :ok = Task.await(ffmpeg_task)
+    assert_pipeline_notified(pipeline, :src, :stream_deleted)
+
     # Cleanup
     Testing.Pipeline.terminate(pipeline)
-    assert :ok = Task.await(ffmpeg_task)
   end
 
   test "SourceBin doesn't output anything if the client tries to connect to different app or stream key" do
