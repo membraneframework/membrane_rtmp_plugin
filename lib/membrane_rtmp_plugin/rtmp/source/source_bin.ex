@@ -13,9 +13,8 @@ defmodule Membrane.RTMP.SourceBin do
   """
   use Membrane.Bin
 
-  alias Membrane.{AAC, H264, RTMP}
-
   require Membrane.Logger
+  alias Membrane.{AAC, H264, RTMP}
 
   def_output_pad :video,
     accepted_format: H264,
