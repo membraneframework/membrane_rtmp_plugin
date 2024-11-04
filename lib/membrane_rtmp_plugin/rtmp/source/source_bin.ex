@@ -13,6 +13,7 @@ defmodule Membrane.RTMP.SourceBin do
   """
   use Membrane.Bin
 
+  require Membrane.Logger
   alias Membrane.{AAC, H264, RTMP}
 
   def_output_pad :video,
@@ -113,6 +114,18 @@ defmodule Membrane.RTMP.SourceBin do
 
   def handle_child_notification(:unexpected_socket_closed, :src, _ctx, state) do
     {[notify_parent: :unexpected_socket_close], state}
+  end
+
+  def handle_child_notification(:stream_deleted, :src, _ctx, state) do
+    {[notify_parent: :stream_deleted], state}
+  end
+
+  def handle_child_notification(notification, child, _ctx, state) do
+    Membrane.Logger.warning(
+      "Received unrecognized child notification from: #{inspect(child)}: #{inspect(notification)}"
+    )
+
+    {[], state}
   end
 
   @doc """
