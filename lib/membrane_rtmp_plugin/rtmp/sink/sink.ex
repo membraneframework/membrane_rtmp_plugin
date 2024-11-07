@@ -198,21 +198,26 @@ defmodule Membrane.RTMP.Sink do
 
   @impl true
   def handle_end_of_stream(Pad.ref(type, 0), _ctx, state) do
-    if state.forward_mode? do
-      Native.finalize_stream(state.native)
-      {[], state}
-    else
-      # The interleave logic does not work if either one of the inputs does not
-      # produce buffers. From this point on we act as a "forward" filter.
-      other_pad =
-        case type do
-          :audio -> :video
-          :video -> :audio
-        end
-        |> then(&Pad.ref(&1, 0))
+    cond do
+      state.forward_mode? ->
+        Native.finalize_stream(state.native)
+        {[], state}
 
-      state = flush_frame_buffer(state)
-      {[demand: other_pad], %{state | forward_mode?: true}}
+      state.ready? ->
+        # The interleave logic does not work if either one of the inputs does not
+        # produce buffers. From this point on we act as a "forward" filter.
+        other_pad =
+          case type do
+            :audio -> :video
+            :video -> :audio
+          end
+          |> then(&Pad.ref(&1, 0))
+
+        state = flush_frame_buffer(state)
+        {[demand: other_pad], %{state | forward_mode?: true}}
+
+      true ->
+        {[], state}
     end
   end
 

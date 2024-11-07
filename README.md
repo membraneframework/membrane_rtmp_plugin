@@ -14,7 +14,7 @@ The package can be installed by adding `membrane_rtmp_plugin` to your list of de
 ```elixir
 def deps do
   [
-	  {:membrane_rtmp_plugin, "~> 0.27.2"}
+	  {:membrane_rtmp_plugin, "~> 0.27.3"}
   ]
 end
 ```
