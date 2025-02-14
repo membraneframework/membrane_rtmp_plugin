@@ -48,7 +48,6 @@ defmodule Membrane.RTMP.SourceBin do
                 """
               ]
 
-
   @impl true
   def handle_init(_ctx, %__MODULE__{} = opts) do
     spec =
