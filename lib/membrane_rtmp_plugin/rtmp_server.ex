@@ -11,7 +11,7 @@ defmodule Membrane.RTMPServer do
       which defines how the client should behave.
   - port: Port on which RTMP server will listen. Defaults to 1935.
   - use_ssl?: If true, SSL socket (for RTMPS) will be used. Othwerwise, TCP socket (for RTMP) will be used. Defaults to false.
-  - client_timeout: Time after which an unused client connection is automatically closed. Defaults to 5 seconds.
+  - client_timeout: Time after which an unused client connection is automatically closed, expressed in `Membrane.Time.t()` units. Defaults to 5 seconds.
   - name: If not nil, value of this field will be used as a name under which the server's process will be registered. Defaults to nil.
   """
   use GenServer

@@ -41,7 +41,7 @@ defmodule Membrane.RTMP.Source do
                 default: Membrane.Time.seconds(5),
                 spec: Membrane.Time.t(),
                 description: """
-                Time after which an unused client connection is automatically closed. Defaults to 5 seconds.
+                Time after which an unused client connection is automatically closed, expressed in `Membrane.Time.t()` units. Defaults to 5 seconds.
                 """
               ]
 
