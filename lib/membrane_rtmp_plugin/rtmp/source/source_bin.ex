@@ -39,14 +39,23 @@ defmodule Membrane.RTMP.SourceBin do
                 An URL on which the client is expected to connect, for example:
                 rtmp://127.0.0.1:1935/app/stream_key
                 """
+              ],
+              client_timeout: [
+                default: Membrane.Time.seconds(5),
+                spec: Membrane.Time.t(),
+                description: """
+                Time after which an unused client connection is automatically closed. Defaults to 5 seconds.
+                """
               ]
+
 
   @impl true
   def handle_init(_ctx, %__MODULE__{} = opts) do
     spec =
       child(:src, %RTMP.Source{
         client_ref: opts.client_ref,
-        url: opts.url
+        url: opts.url,
+        client_timeout: opts.client_timeout
       })
       |> child(:demuxer, Membrane.FLV.Demuxer)
 
