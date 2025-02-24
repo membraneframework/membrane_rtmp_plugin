@@ -36,6 +36,13 @@ defmodule Membrane.RTMP.Source do
                 An URL on which the client is expected to connect, for example:
                 rtmp://127.0.0.1:1935/app/stream_key
                 """
+              ],
+              client_timeout: [
+                default: Membrane.Time.seconds(5),
+                spec: Membrane.Time.t(),
+                description: """
+                Time after which an unused client connection is automatically closed, expressed in `Membrane.Time.t()` units. Defaults to 5 seconds.
+                """
               ]
 
   defguardp is_builtin_server(opts)
@@ -54,7 +61,8 @@ defmodule Membrane.RTMP.Source do
       url: opts.url,
       mode: :builtin_server,
       client_ref: nil,
-      use_ssl?: nil
+      use_ssl?: nil,
+      client_timeout: opts.client_timeout
     }
 
     {[], state}
@@ -94,7 +102,7 @@ defmodule Membrane.RTMP.Source do
         port: port,
         use_ssl?: use_ssl?,
         handle_new_client: handle_new_client,
-        client_timeout: Membrane.Time.milliseconds(100)
+        client_timeout: state.client_timeout
       )
 
     state = %{state | app: app, stream_key: stream_key, server: server_pid}
