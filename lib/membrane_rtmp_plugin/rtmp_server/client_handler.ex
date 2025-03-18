@@ -235,8 +235,14 @@ defmodule Membrane.RTMPServer.ClientHandler do
     # call callbacks
     case event do
       :connection_closed ->
-        new_handler_state = state.handler.handle_connection_closed(state.handler_state)
-        %{state | handler_state: new_handler_state}
+        case state.handler do
+          nil ->
+            state
+
+          _ ->
+            new_handler_state = state.handler.handle_connection_closed(state.handler_state)
+            %{state | handler_state: new_handler_state}
+        end
 
       :delete_stream ->
         new_handler_state = state.handler.handle_delete_stream(state.handler_state)
