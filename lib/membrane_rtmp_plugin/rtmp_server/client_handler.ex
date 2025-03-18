@@ -239,8 +239,8 @@ defmodule Membrane.RTMPServer.ClientHandler do
           nil ->
             state
 
-          _ ->
-            new_handler_state = state.handler.handle_connection_closed(state.handler_state)
+          handler ->
+            new_handler_state = handler.handle_connection_closed(state.handler_state)
             %{state | handler_state: new_handler_state}
         end
 
