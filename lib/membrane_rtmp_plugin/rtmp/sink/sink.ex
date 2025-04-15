@@ -98,7 +98,8 @@ defmodule Membrane.RTMP.Sink do
         # Always on if a single track is connected
         forward_mode?: single_track?,
         video_base_dts: nil,
-        reset_timestampts: options.reset_timestamps
+        reset_timestampts: options.reset_timestamps,
+        connected?: false
       })
 
     {[], state}
@@ -113,7 +114,6 @@ defmodule Membrane.RTMP.Sink do
 
     state
     |> Map.put(:native, native)
-    |> try_connect()
     |> then(&{[], &1})
   end
 
@@ -138,6 +138,7 @@ defmodule Membrane.RTMP.Sink do
         _ctx,
         state
       ) do
+    state = if not state.connected?, do: try_connect(state) |> Map.put(:connected?, true), else: state
     case Native.init_video_stream(state.native, width, height, dcr) do
       {:ok, ready?, native} ->
         Membrane.Logger.debug("Correctly initialized video stream.")
@@ -154,6 +155,7 @@ defmodule Membrane.RTMP.Sink do
 
   @impl true
   def handle_stream_format(Pad.ref(:audio, 0), %Membrane.AAC{} = stream_format, _ctx, state) do
+    state = if not state.connected?, do: try_connect(state) |> Map.put(:connected?, true), else: state
     profile = AAC.profile_to_aot_id(stream_format.profile)
     sr_index = AAC.sample_rate_to_sampling_frequency_id(stream_format.sample_rate)
     channel_configuration = AAC.channels_to_channel_config_id(stream_format.channels)
