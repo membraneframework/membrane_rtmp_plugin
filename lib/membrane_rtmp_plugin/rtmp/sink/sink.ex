@@ -136,13 +136,13 @@ defmodule Membrane.RTMP.Sink do
   @impl true
   def handle_start_of_stream(_input, _ctx, state) do
     state = if (not state.connected? and state.audio_sf != nil and state.video_sf != nil) do
-      try_connect(state) |> Map.put(:connected?, true)
+      state = try_connect(state) |> Map.put(:connected?, true)
+      {video_actions, state} = do_handle_stream_format(state.video_sf, state)
+      {audio_actions, state} = do_handle_stream_format(state.audio_sf, state)
+      {video_actions++audio_actions, state}
     else
-     state
+     {[], state}
     end
-    {video_actions, state} = do_handle_stream_format(state.video_sf, state)
-    {audio_actions, state} = do_handle_stream_format(state.audio_sf, state)
-    {video_actions++audio_actions, state}
   end
 
   @impl true
