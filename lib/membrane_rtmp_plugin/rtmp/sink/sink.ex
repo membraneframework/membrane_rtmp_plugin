@@ -132,13 +132,32 @@ defmodule Membrane.RTMP.Sink do
   end
 
   @impl true
+  def handle_start_of_stream(:input, _ctx, state) do
+    state = if not state.connected?, do: try_connect(state) |> Map.put(:connected?, true), else: state
+    {video_actions, state} = do_handle_stream_format(state.video_sf, state)
+    {audio_actions, state} = do_handle_stream_format(state.audio_sf, state)
+    {video_actions++audio_actions, state}
+  end
+
+  @impl true
   def handle_stream_format(
         Pad.ref(:video, 0),
-        %H264{width: width, height: height, stream_structure: {_avc, dcr}},
+        %H264{width: width, height: height, stream_structure: {_avc, dcr}} = stream_format,
         _ctx,
         state
       ) do
-    state = if not state.connected?, do: try_connect(state) |> Map.put(:connected?, true), else: state
+    state = Map.put(state, :video_sf, stream_format)
+    {[], state}
+  end
+
+  @impl true
+  def handle_stream_format(Pad.ref(:audio, 0), %Membrane.AAC{} = stream_format, _ctx, state) do
+    state = Map.put(state, :audio_sf, stream_format)
+    {[], state}
+  end
+
+  def do_handle_stream_format(%H264{width: width, height: height, stream_structure: {_avc, dcr}}, state) do
+    # state = if not state.connected?, do: try_connect(state) |> Map.put(:connected?, true), else: state
     case Native.init_video_stream(state.native, width, height, dcr) do
       {:ok, ready?, native} ->
         Membrane.Logger.debug("Correctly initialized video stream.")
@@ -153,9 +172,8 @@ defmodule Membrane.RTMP.Sink do
     end
   end
 
-  @impl true
-  def handle_stream_format(Pad.ref(:audio, 0), %Membrane.AAC{} = stream_format, _ctx, state) do
-    state = if not state.connected?, do: try_connect(state) |> Map.put(:connected?, true), else: state
+  def do_handle_stream_format(stream_format, state) do
+    # state = if not state.connected?, do: try_connect(state) |> Map.put(:connected?, true), else: state
     profile = AAC.profile_to_aot_id(stream_format.profile)
     sr_index = AAC.sample_rate_to_sampling_frequency_id(stream_format.sample_rate)
     channel_configuration = AAC.channels_to_channel_config_id(stream_format.channels)
