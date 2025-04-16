@@ -135,7 +135,7 @@ defmodule Membrane.RTMP.Sink do
 
   @impl true
   def handle_start_of_stream(_input, _ctx, state) do
-    state = if (not state.connected? and state.audio_sf != nil and state.video_sf != nil) do
+    if (not state.connected? and state.audio_sf != nil and state.video_sf != nil) do
       state = try_connect(state) |> Map.put(:connected?, true)
       {video_actions, state} = do_handle_stream_format(state.video_sf, state)
       {audio_actions, state} = do_handle_stream_format(state.audio_sf, state)
@@ -148,7 +148,7 @@ defmodule Membrane.RTMP.Sink do
   @impl true
   def handle_stream_format(
         Pad.ref(:video, 0),
-        %H264{width: width, height: height, stream_structure: {_avc, dcr}} = stream_format,
+        %H264{} = stream_format,
         _ctx,
         state
       ) do
