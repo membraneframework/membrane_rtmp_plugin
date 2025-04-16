@@ -49,7 +49,7 @@ defmodule Membrane.RTMP.Mixfile do
       {:membrane_funnel_plugin, "~> 0.9.0"},
       # testing
       {:membrane_hackney_plugin, "~> 0.11.0", only: :test},
-      {:ffmpex, "~> 0.10.0", only: :test},
+      {:ffmpex, "~> 0.11.0", only: :test},
       {:membrane_stream_plugin, "~> 0.4.0", only: :test},
       # development
       {:ex_doc, "~> 0.28", only: :dev, runtime: false},
@@ -72,10 +72,8 @@ defmodule Membrane.RTMP.Mixfile do
   end
 
   # for Mac M1 it is necessary to include rambo compiler (used by :ffmpex)
-  if Mix.env() == :test do
-    def maybe_add_rambo(), do: [:rambo]
-  else
-    def maybe_add_rambo(), do: []
+  def maybe_add_rambo() do
+    if Mix.env() == :test, do: [:rambo], else: []
   end
 
   defp package do
