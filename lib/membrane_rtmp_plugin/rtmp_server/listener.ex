@@ -5,14 +5,15 @@ defmodule Membrane.RTMPServer.Listener do
 
   use Task
   require Logger
-  alias Membrane.RTMPServer.ClientHandler
+  alias Membrane.RTMPServer.{ClientHandler, Config}
 
   @spec run(
           options :: %{
             use_ssl?: boolean(),
             socket_module: :gen_tcp | :ssl,
             server: pid(),
-            port: non_neg_integer()
+            port: non_neg_integer(),
+            ssl_options: keyword()
           }
         ) :: no_return()
   def run(options) do
@@ -20,22 +21,48 @@ defmodule Membrane.RTMPServer.Listener do
 
     listen_options =
       if options.use_ssl? do
-        certfile = System.get_env("CERT_PATH")
-        keyfile = System.get_env("CERT_KEY_PATH")
+        ssl_opts = Config.get_ssl_listen_options(Map.get(options, :ssl_options, []), true)
 
-        [
-          :binary,
-          packet: :raw,
-          active: false,
-          certfile: certfile,
-          keyfile: keyfile
-        ]
+        Logger.debug("SSL options for listen: #{inspect(ssl_opts)}")
+
+        # SSL listen requires at least certfile and keyfile
+        unless ssl_opts[:certfile] && ssl_opts[:keyfile] do
+          raise ArgumentError, """
+          SSL is enabled but certificate files are not configured.
+          Please configure SSL certificate files via:
+
+          1. Application config:
+             config :membrane_rtmp_plugin, :ssl,
+               certfile: "/path/to/cert.pem",
+               keyfile: "/path/to/key.pem"
+
+          2. Environment variables:
+             RTMP_SSL_CERTFILE="/path/to/cert.pem"
+             RTMP_SSL_KEYFILE="/path/to/key.pem"
+
+          3. Runtime options:
+             ssl_options: [
+               certfile: "/path/to/cert.pem",
+               keyfile: "/path/to/key.pem"
+             ]
+          """
+        end
+
+        # Additional validation for certificate files
+        if ssl_opts[:certfile] && !File.exists?(ssl_opts[:certfile]) do
+          raise ArgumentError, "SSL certificate file does not exist: #{ssl_opts[:certfile]}"
+        end
+
+        if ssl_opts[:keyfile] && !File.exists?(ssl_opts[:keyfile]) do
+          raise ArgumentError, "SSL key file does not exist: #{ssl_opts[:keyfile]}"
+        end
+
+        basic_opts = Config.get_listen_options()
+        combined = basic_opts ++ ssl_opts
+        Logger.debug("Combined listen options: #{inspect(combined)}")
+        combined
       else
-        [
-          :binary,
-          packet: :raw,
-          active: false
-        ]
+        Config.get_listen_options()
       end
 
     {:ok, socket} = options.socket_module.listen(options.port, listen_options)
@@ -53,8 +80,6 @@ defmodule Membrane.RTMPServer.Listener do
 
     send(options.server, {:port, port})
 
-    # send(options.server, {:port, :inet.port(socket)}) |> dbg()
-
     accept_loop(socket, options)
   end
 
@@ -69,13 +94,17 @@ defmodule Membrane.RTMPServer.Listener do
           {:ok, client} = :ssl.transport_accept(socket)
           Logger.debug("SSL transport accept successful, starting handshake...")
 
-          # Start with very basic SSL options
-          ssl_opts = [
-            verify: :verify_none,
-            fail_if_no_peer_cert: false
-          ]
+          ssl_handshake_opts =
+            Config.get_ssl_handshake_options(Map.get(options, :ssl_options, []), false)
 
-          case :ssl.handshake(client, ssl_opts, 10000) do
+          ssl_handshake_opts =
+            ssl_handshake_opts
+            |> Keyword.put(:verify, :verify_none)
+            |> Keyword.put(:fail_if_no_peer_cert, false)
+
+          Logger.debug("SSL handshake options: #{inspect(ssl_handshake_opts)}")
+
+          case :ssl.handshake(client, ssl_handshake_opts, 10_000) do
             {:ok, ssl_socket} ->
               Logger.info("SSL handshake successful")
               ssl_socket
@@ -90,8 +119,6 @@ defmodule Membrane.RTMPServer.Listener do
               accept_loop(socket, options)
           end
       end
-
-    client |> dbg()
 
     {:ok, client_reference} =
       GenServer.start_link(ClientHandler,

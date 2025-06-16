@@ -10,9 +10,40 @@ defmodule Membrane.RTMPServer do
       like sending the reference to another process. The function should return a `t:#{inspect(__MODULE__)}.client_behaviour_spec/0`
       which defines how the client should behave.
   - port: Port on which RTMP server will listen. Defaults to 1935.
-  - use_ssl?: If true, SSL socket (for RTMPS) will be used. Othwerwise, TCP socket (for RTMP) will be used. Defaults to false.
+  - use_ssl?: If true, SSL socket (for RTMPS) will be used. Otherwise, TCP socket (for RTMP) will be used. Defaults to false.
+  - ssl_options: Additional SSL options to override the configured ones. See `Membrane.RTMPServer.Config` for details.
   - client_timeout: Time after which an unused client connection is automatically closed, expressed in `Membrane.Time.t()` units. Defaults to 5 seconds.
   - name: If not nil, value of this field will be used as a name under which the server's process will be registered. Defaults to nil.
+
+  ## SSL Configuration
+
+  SSL options can be configured at the application level or passed as runtime options.
+
+  ### Application Configuration
+
+      config :membrane_rtmp_plugin, :ssl,
+        certfile: "/path/to/cert.pem",
+        keyfile: "/path/to/key.pem",
+        verify: :verify_none,
+        fail_if_no_peer_cert: false,
+        versions: [:"tlsv1.2", :"tlsv1.3"]
+
+  ### Environment Variables (fallback)
+
+  - `RTMP_SSL_CERTFILE` or `CERT_PATH` - Path to certificate file
+  - `RTMP_SSL_KEYFILE` or `CERT_KEY_PATH` - Path to private key file
+
+  ### Runtime Options
+
+      Membrane.RTMPServer.start_link(
+        port: 1935,
+        use_ssl?: true,
+        ssl_options: [
+          certfile: "/path/to/cert.pem",
+          keyfile: "/path/to/key.pem"
+        ],
+        handle_new_client: &my_handler/3
+      )
   """
   use GenServer
 
@@ -26,15 +57,18 @@ defmodule Membrane.RTMPServer do
   @type t :: [
           port: :inet.port_number(),
           use_ssl?: boolean(),
+          ssl_options: keyword(),
           name: atom() | nil,
-          handle_new_client: (client_ref :: pid(), app :: String.t(), stream_key :: String.t() ->
-                                client_behaviour_spec()),
+          handle_new_client:
+            (client_ref :: pid(), app :: String.t(), stream_key :: String.t() ->
+               client_behaviour_spec()),
           client_timeout: Membrane.Time.t()
         ]
 
   @default_options %{
     port: 1935,
     use_ssl?: false,
+    ssl_options: [],
     name: nil,
     client_timeout: Membrane.Time.seconds(5)
   }
