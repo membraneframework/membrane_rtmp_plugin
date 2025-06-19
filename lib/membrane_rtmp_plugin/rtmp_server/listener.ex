@@ -25,38 +25,6 @@ defmodule Membrane.RTMPServer.Listener do
 
         Logger.debug("SSL options for listen: #{inspect(ssl_opts)}")
 
-        # SSL listen requires at least certfile and keyfile
-        unless ssl_opts[:certfile] && ssl_opts[:keyfile] do
-          raise ArgumentError, """
-          SSL is enabled but certificate files are not configured.
-          Please configure SSL certificate files via:
-
-          1. Application config:
-             config :membrane_rtmp_plugin, :ssl,
-               certfile: "/path/to/cert.pem",
-               keyfile: "/path/to/key.pem"
-
-          2. Environment variables:
-             RTMP_SSL_CERTFILE="/path/to/cert.pem"
-             RTMP_SSL_KEYFILE="/path/to/key.pem"
-
-          3. Runtime options:
-             ssl_options: [
-               certfile: "/path/to/cert.pem",
-               keyfile: "/path/to/key.pem"
-             ]
-          """
-        end
-
-        # Additional validation for certificate files
-        if ssl_opts[:certfile] && !File.exists?(ssl_opts[:certfile]) do
-          raise ArgumentError, "SSL certificate file does not exist: #{ssl_opts[:certfile]}"
-        end
-
-        if ssl_opts[:keyfile] && !File.exists?(ssl_opts[:keyfile]) do
-          raise ArgumentError, "SSL key file does not exist: #{ssl_opts[:keyfile]}"
-        end
-
         basic_opts = Config.get_listen_options()
         combined = basic_opts ++ ssl_opts
         Logger.debug("Combined listen options: #{inspect(combined)}")

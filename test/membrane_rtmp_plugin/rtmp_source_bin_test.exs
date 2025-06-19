@@ -233,7 +233,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
         client_timeout: Membrane.Time.seconds(3)
       )
 
-    {:ok, assigned_port} = Membrane.RTMPServer.get_port(server_pid)
+    assigned_port = Membrane.RTMPServer.get_port(server_pid)
 
     send(parent, {:port, assigned_port})
 

@@ -78,26 +78,15 @@ defmodule Membrane.RTMPServer.Config do
   @spec get_ssl_listen_options(runtime_opts :: ssl_options(), validate_files :: boolean()) ::
           ssl_options()
   def get_ssl_listen_options(runtime_opts \\ [], validate_files \\ true) do
-    all_opts = get_ssl_options(runtime_opts, validate_files)
-
-    # Only include options that are known to work with :ssl.listen/2
-    # Based on Erlang/OTP ssl documentation
-    ssl_listen_opts =
-      all_opts
-      |> Keyword.take([
-        :certfile,
-        :keyfile,
-        :cacertfile,
-        :password,
-        :versions
-      ])
-
-    # Ensure we have the minimum required options
-    if ssl_listen_opts == [] do
-      []
-    else
-      ssl_listen_opts
-    end
+    runtime_opts
+    |> get_ssl_options(validate_files)
+    |> Keyword.take([
+      :certfile,
+      :keyfile,
+      :cacertfile,
+      :password,
+      :versions
+    ])
   end
 
   @doc """
@@ -141,9 +130,9 @@ defmodule Membrane.RTMPServer.Config do
   """
   @spec validate_ssl_options(ssl_options(), validate_files :: boolean()) :: ssl_options()
   def validate_ssl_options(opts, validate_files \\ true) do
-    opts = validate_certificate_files(opts, validate_files)
-    opts = validate_ssl_configuration(opts)
     opts
+    |> validate_certificate_files(validate_files)
+    |> validate_ssl_configuration()
   end
 
   @doc """
@@ -171,7 +160,6 @@ defmodule Membrane.RTMPServer.Config do
 
   # Private functions
 
-  @spec get_default_ssl_options() :: ssl_options()
   defp get_default_ssl_options() do
     [
       verify: :verify_none,
@@ -185,19 +173,16 @@ defmodule Membrane.RTMPServer.Config do
     ]
   end
 
-  @spec get_app_config_ssl_options() :: ssl_options()
   defp get_app_config_ssl_options() do
     Application.get_env(:membrane_rtmp_plugin, :ssl, [])
   end
 
-  @spec process_certificate_paths(ssl_options()) :: ssl_options()
   defp process_certificate_paths(opts) do
     opts
     |> expand_certificate_paths()
     |> resolve_relative_paths()
   end
 
-  @spec expand_certificate_paths(ssl_options()) :: ssl_options()
   defp expand_certificate_paths(opts) do
     opts
     |> maybe_expand_path(:certfile)
@@ -206,7 +191,6 @@ defmodule Membrane.RTMPServer.Config do
     |> maybe_expand_path(:certchain)
   end
 
-  @spec maybe_expand_path(ssl_options(), atom()) :: ssl_options()
   defp maybe_expand_path(opts, key) do
     case opts[key] do
       nil -> opts
@@ -215,7 +199,6 @@ defmodule Membrane.RTMPServer.Config do
     end
   end
 
-  @spec resolve_relative_paths(ssl_options()) :: ssl_options()
   defp resolve_relative_paths(opts) do
     # If certificate files are specified with relative paths,
     # try to resolve them relative to the app's priv directory
@@ -228,7 +211,6 @@ defmodule Membrane.RTMPServer.Config do
     |> maybe_resolve_relative_to_priv(:certchain, priv_dir)
   end
 
-  @spec maybe_resolve_relative_to_priv(ssl_options(), atom(), String.t()) :: ssl_options()
   defp maybe_resolve_relative_to_priv(opts, key, priv_dir) do
     case opts[key] do
       nil ->
@@ -242,8 +224,6 @@ defmodule Membrane.RTMPServer.Config do
     end
   end
 
-  @spec resolve_path_relative_to_priv(ssl_options(), atom(), String.t(), String.t()) ::
-          ssl_options()
   defp resolve_path_relative_to_priv(opts, key, path, priv_dir) do
     if Path.absname(path) == path do
       # Already absolute
@@ -260,62 +240,49 @@ defmodule Membrane.RTMPServer.Config do
     end
   end
 
-  @spec validate_certificate_files(ssl_options(), boolean()) :: ssl_options()
-  defp validate_certificate_files(opts, validate_files) do
+  defp validate_certificate_files(opts, true) do
     case {opts[:certfile], opts[:keyfile]} do
-      {nil, nil} ->
-        opts
-
-      {certfile, keyfile} when is_binary(certfile) and is_binary(keyfile) ->
-        validate_cert_and_key_files(opts, validate_files, certfile, keyfile)
-
       {certfile, nil} when is_binary(certfile) ->
-        validate_single_cert_file(
-          validate_files,
-          "SSL certificate file provided but key file is missing"
-        )
+        validate_single_cert_file("SSL certificate file provided but key file is missing")
 
         opts
 
       {nil, keyfile} when is_binary(keyfile) ->
-        validate_single_cert_file(
-          validate_files,
-          "SSL key file provided but certificate file is missing"
-        )
+        validate_single_cert_file("SSL key file provided but certificate file is missing")
 
         opts
+
+      {certfile, keyfile} ->
+        validate_cert_and_key_files(opts, certfile, keyfile)
     end
   end
 
-  @spec validate_cert_and_key_files(ssl_options(), boolean(), String.t(), String.t()) ::
-          ssl_options()
-  defp validate_cert_and_key_files(opts, validate_files, certfile, keyfile) do
-    if validate_files do
-      validate_file_exists(certfile, "SSL certificate")
-      validate_file_exists(keyfile, "SSL key")
-      validate_additional_cert_files(opts)
-    end
+  defp validate_certificate_files(opts, false) do
+    opts
+  end
+
+  defp validate_cert_and_key_files(opts, certfile, keyfile) do
+    validate_file_exists(certfile, "SSL certificate")
+    validate_file_exists(keyfile, "SSL key")
+    validate_additional_cert_files(opts)
 
     opts
   end
 
-  @spec validate_additional_cert_files(ssl_options()) :: :ok
   defp validate_additional_cert_files(opts) do
     if opts[:cacertfile], do: validate_file_exists(opts[:cacertfile], "SSL CA certificate")
     if opts[:certchain], do: validate_file_exists(opts[:certchain], "SSL certificate chain")
     :ok
   end
 
-  @spec validate_single_cert_file(boolean(), String.t()) :: :ok
-  defp validate_single_cert_file(validate_files, error_message) do
-    if validate_files do
-      raise ArgumentError, error_message
-    end
-
-    :ok
+  defp validate_single_cert_file(error_message) do
+    raise ArgumentError, error_message
   end
 
-  @spec validate_file_exists(String.t(), String.t()) :: :ok
+  defp validate_file_exists(nil, file_type) do
+    raise ArgumentError, "#{file_type} file is not configured"
+  end
+
   defp validate_file_exists(file_path, file_type) do
     unless File.exists?(file_path) do
       raise ArgumentError, "#{file_type} file does not exist: #{file_path}"
@@ -324,7 +291,6 @@ defmodule Membrane.RTMPServer.Config do
     :ok
   end
 
-  @spec validate_ssl_configuration(ssl_options()) :: ssl_options()
   defp validate_ssl_configuration(opts) do
     # Validate TLS versions
     if versions = opts[:versions] do
@@ -344,17 +310,6 @@ defmodule Membrane.RTMPServer.Config do
         raise ArgumentError,
               "Invalid verify option: #{inspect(verify)}. " <>
                 "Must be :verify_none or :verify_peer"
-      end
-    end
-
-    # Validate log level
-    if log_level = opts[:log_level] do
-      valid_levels = [:none, :error, :warning, :notice, :info, :debug, :all]
-
-      unless log_level in valid_levels do
-        raise ArgumentError,
-              "Invalid SSL log level: #{inspect(log_level)}. " <>
-                "Valid levels are: #{inspect(valid_levels)}"
       end
     end
 

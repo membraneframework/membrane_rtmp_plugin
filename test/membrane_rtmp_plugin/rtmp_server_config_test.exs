@@ -103,11 +103,12 @@ defmodule Membrane.RTMPServer.ConfigTest do
       end
     end
 
-    test "allows empty options" do
+    test "doesn't allow options without certificate file" do
       options = []
-      validated = Config.validate_ssl_options(options)
 
-      assert validated == []
+      assert_raise ArgumentError, ~r/SSL certificate file is not configured/, fn ->
+        Config.validate_ssl_options(options)
+      end
     end
   end
 
@@ -166,14 +167,6 @@ defmodule Membrane.RTMPServer.ConfigTest do
       options = [verify: :invalid_verify]
 
       assert_raise ArgumentError, ~r/Invalid verify option/, fn ->
-        Config.validate_ssl_options(options, false)
-      end
-    end
-
-    test "validates log level" do
-      options = [log_level: :invalid_level]
-
-      assert_raise ArgumentError, ~r/Invalid SSL log level/, fn ->
         Config.validate_ssl_options(options, false)
       end
     end
