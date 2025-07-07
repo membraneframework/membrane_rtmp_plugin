@@ -109,10 +109,6 @@ defmodule Membrane.RTMPServer.Listener do
               Logger.info("SSL handshake successful")
               ssl_socket
 
-            :ok ->
-              Logger.info("SSL handshake successful (ok)")
-              client
-
             {:error, reason} ->
               Logger.error("SSL handshake failed: #{inspect(reason)}")
               :ssl.close(client)
