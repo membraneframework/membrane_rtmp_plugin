@@ -11,7 +11,7 @@ defmodule Membrane.RTMPServer do
       which defines how the client should behave.
   - port: Port on which RTMP server will listen. Defaults to 1935.
   - use_ssl?: If true, SSL socket (for RTMPS) will be used. Otherwise, TCP socket (for RTMP) will be used. Defaults to false.
-  - ssl_options: Additional SSL options to override the configured ones. See `Membrane.RTMPServer.Config` for details.
+  - ssl_options: SSL options to configure the SSL socket.
   - client_timeout: Time after which an unused client connection is automatically closed, expressed in `Membrane.Time.t()` units. Defaults to 5 seconds.
   - name: If not nil, value of this field will be used as a name under which the server's process will be registered. Defaults to nil.
 
@@ -27,11 +27,6 @@ defmodule Membrane.RTMPServer do
         verify: :verify_none,
         fail_if_no_peer_cert: false,
         versions: [:"tlsv1.2", :"tlsv1.3"]
-
-  ### Environment Variables (fallback)
-
-  - `RTMP_SSL_CERTFILE` or `CERT_PATH` - Path to certificate file
-  - `RTMP_SSL_KEYFILE` or `CERT_KEY_PATH` - Path to private key file
 
   ### Runtime Options
 
@@ -57,7 +52,7 @@ defmodule Membrane.RTMPServer do
   @type t :: [
           port: :inet.port_number(),
           use_ssl?: boolean(),
-          ssl_options: keyword(),
+          ssl_options: keyword() | nil,
           name: atom() | nil,
           handle_new_client:
             (client_ref :: pid(), app :: String.t(), stream_key :: String.t() ->
@@ -68,7 +63,7 @@ defmodule Membrane.RTMPServer do
   @default_options %{
     port: 1935,
     use_ssl?: false,
-    ssl_options: [],
+    ssl_options: nil,
     name: nil,
     client_timeout: Membrane.Time.seconds(5)
   }
@@ -91,6 +86,15 @@ defmodule Membrane.RTMPServer do
     gen_server_opts = if server_options[:name] == nil, do: [], else: [name: server_options[:name]]
     server_options_map = Enum.into(server_options, %{})
     server_options_map = Map.merge(@default_options, server_options_map)
+
+    ssl_options_map =
+      if is_nil(server_options[:ssl_options]) do
+        %{ssl_options: Application.get_env(:membrane_rtmp_plugin, :ssl, [])}
+      else
+        %{ssl_options: server_options[:ssl_options]}
+      end
+
+    server_options_map = Map.merge(server_options_map, ssl_options_map)
 
     GenServer.start_link(__MODULE__, server_options_map, gen_server_opts)
   end

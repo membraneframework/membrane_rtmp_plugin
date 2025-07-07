@@ -1,1 +1,1 @@
-ExUnit.start(capture_log: true, exclude: [:rtmps])
+ExUnit.start(capture_log: true, exclude: [])

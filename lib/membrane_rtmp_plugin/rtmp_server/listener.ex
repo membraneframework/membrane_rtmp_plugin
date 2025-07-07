@@ -5,7 +5,35 @@ defmodule Membrane.RTMPServer.Listener do
 
   use Task
   require Logger
-  alias Membrane.RTMPServer.{ClientHandler, Config}
+  alias Membrane.RTMPServer.ClientHandler
+
+  @listen_opts [
+    :binary,
+    packet: :raw,
+    active: false,
+    reuseaddr: true
+  ]
+
+  @ssl_handshake_opts [
+    :certfile,
+    :keyfile,
+    :cacertfile,
+    :password,
+    :versions
+  ]
+
+  @ssl_listen_opts [
+    :verify,
+    :fail_if_no_peer_cert,
+    :versions,
+    :ciphers,
+    :honor_cipher_order,
+    :secure_renegotiate,
+    :reuse_sessions,
+    :cacertfile,
+    :depth,
+    :log_level
+  ]
 
   @spec run(
           options :: %{
@@ -21,16 +49,18 @@ defmodule Membrane.RTMPServer.Listener do
 
     listen_options =
       if options.use_ssl? do
-        ssl_opts = Config.get_ssl_listen_options(Map.get(options, :ssl_options, []), true)
+        ssl_opts =
+          options
+          |> Map.get(:ssl_options, [])
+          |> Keyword.take(@ssl_listen_opts)
 
         Logger.debug("SSL options for listen: #{inspect(ssl_opts)}")
 
-        basic_opts = Config.get_listen_options()
-        combined = basic_opts ++ ssl_opts
+        combined = @listen_opts ++ ssl_opts
         Logger.debug("Combined listen options: #{inspect(combined)}")
         combined
       else
-        Config.get_listen_options()
+        @listen_opts
       end
 
     {:ok, socket} = options.socket_module.listen(options.port, listen_options)
@@ -63,7 +93,9 @@ defmodule Membrane.RTMPServer.Listener do
           Logger.debug("SSL transport accept successful, starting handshake...")
 
           ssl_handshake_opts =
-            Config.get_ssl_handshake_options(Map.get(options, :ssl_options, []), false)
+            options
+            |> Map.get(:ssl_options, [])
+            |> Keyword.take(@ssl_handshake_opts)
 
           ssl_handshake_opts =
             ssl_handshake_opts

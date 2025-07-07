@@ -79,13 +79,45 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     assert ffmpeg_result == :error
   end
 
+  @tag :tmp_dir
   @tag :rtmps
-  test "SourceBin allows for RTMPS connection" do
+  test "SourceBin allows for RTMPS connection", %{tmp_dir: tmp_dir} do
     self = self()
+
+    # Create dummy certificate files
+    cert_path = Path.join(tmp_dir, "cert.pem")
+    key_path = Path.join(tmp_dir, "key.pem")
+
+    # Create minimal valid certificate content for testing
+    File.write!(cert_path, """
+    -----BEGIN CERTIFICATE-----
+    MIICdTCCAd4CCQDKn4iM3Jm8ZzANBgkqhkiG9w0BAQsFADCBgTELMAkGA1UEBhMC
+    VVMxCzAJBgNVBAgMAlRYMQ8wDQYDVQQHDAZBdXN0aW4xEjAQBgNVBAoMCVRlc3Qg
+    Q29ycDELMAkGA1UECwwCSVQxDDAKBgNVBAMMA3d3dzElMCMGCSqGSIb3DQEJARYW
+    dGVzdEBleGFtcGxlLmNvbQ==
+    -----END CERTIFICATE-----
+    """)
+
+    File.write!(key_path, """
+    -----BEGIN PRIVATE KEY-----
+    MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQC5w9Y+7Y+7Y+7Y
+    +7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+
+    7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+
+    -----END PRIVATE KEY-----
+    """)
+
+    # Test SSL listen options separately
+    ssl_config = [
+      certfile: cert_path,
+      keyfile: key_path,
+      verify: :verify_none,
+      fail_if_no_peer_cert: false,
+      versions: [:"tlsv1.2", :"tlsv1.3"]
+    ]
 
     pipeline_startup_task =
       Task.async(fn ->
-        start_pipeline_with_external_rtmp_server(@app, @stream_key, self, 0, true)
+        start_pipeline_with_external_rtmp_server(@app, @stream_key, self, 0, true, ssl_config)
       end)
 
     port =
@@ -216,7 +248,8 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
          stream_key,
          parent,
          port \\ 0,
-         use_ssl? \\ false
+         use_ssl? \\ false,
+         ssl_options \\ []
        ) do
     parent_process_pid = self()
 
@@ -229,6 +262,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
       Membrane.RTMPServer.start_link(
         port: port,
         use_ssl?: use_ssl?,
+        ssl_options: ssl_options,
         handle_new_client: handle_new_client,
         client_timeout: Membrane.Time.seconds(3)
       )
