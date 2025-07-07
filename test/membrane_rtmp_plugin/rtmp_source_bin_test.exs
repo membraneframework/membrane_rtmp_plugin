@@ -84,27 +84,9 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   test "SourceBin allows for RTMPS connection", %{tmp_dir: tmp_dir} do
     self = self()
 
-    # Create dummy certificate files
-    cert_path = Path.join(tmp_dir, "cert.pem")
-    key_path = Path.join(tmp_dir, "key.pem")
-
-    # Create minimal valid certificate content for testing
-    File.write!(cert_path, """
-    -----BEGIN CERTIFICATE-----
-    MIICdTCCAd4CCQDKn4iM3Jm8ZzANBgkqhkiG9w0BAQsFADCBgTELMAkGA1UEBhMC
-    VVMxCzAJBgNVBAgMAlRYMQ8wDQYDVQQHDAZBdXN0aW4xEjAQBgNVBAoMCVRlc3Qg
-    Q29ycDELMAkGA1UECwwCSVQxDDAKBgNVBAMMA3d3dzElMCMGCSqGSIb3DQEJARYW
-    dGVzdEBleGFtcGxlLmNvbQ==
-    -----END CERTIFICATE-----
-    """)
-
-    File.write!(key_path, """
-    -----BEGIN PRIVATE KEY-----
-    MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQC5w9Y+7Y+7Y+7Y
-    +7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+
-    7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+7Y+
-    -----END PRIVATE KEY-----
-    """)
+    cert_path = Path.join(tmp_dir, "test_cert.pem")
+    key_path = Path.join(tmp_dir, "test_key.pem")
+    generate_test_certificates(cert_path, key_path)
 
     # Test SSL listen options separately
     ssl_config = [
@@ -360,5 +342,30 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     state
     |> Map.merge(%{stream_length: stream_length, last_dts: -1, buffers: 0})
     |> assert_buffers()
+  end
+
+  defp generate_test_certificates(cert_path, key_path) do
+    {_, 0} =
+      System.cmd("openssl", [
+        "genrsa",
+        "-out",
+        key_path,
+        "2048"
+      ])
+
+    {_, 0} =
+      System.cmd("openssl", [
+        "req",
+        "-new",
+        "-x509",
+        "-key",
+        key_path,
+        "-out",
+        cert_path,
+        "-days",
+        "1",
+        "-subj",
+        "/C=US/ST=Test/L=Test/O=Test/CN=localhost"
+      ])
   end
 end
