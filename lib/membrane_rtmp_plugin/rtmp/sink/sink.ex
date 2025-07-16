@@ -55,10 +55,18 @@ defmodule Membrane.RTMP.Sink do
               ],
               reset_timestamps: [
                 spec: boolean(),
-                default: true,
+                default: false,
                 description: """
                 If enabled, this feature adjusts the timing of outgoing FLV packets so that they begin from zero.
                 Leaves it untouched otherwise.
+                """
+              ],
+              connect_in_advance: [
+                spec: boolean(),
+                default: true,
+                description: """
+                If enabled, the Sink will connect to the server during the element setup.
+                Otherwise, the connection will be made when stream data is already available in the element.
                 """
               ]
 
@@ -105,21 +113,39 @@ defmodule Membrane.RTMP.Sink do
   end
 
   @impl true
+  def handle_setup(_ctx, %{connect_in_advance: true} = state) do
+    initialize_native(state)
+  end
+
+  @impl true
   def handle_setup(_ctx, state) do
-    audio? = :audio in state.tracks
-    video? = :video in state.tracks
-
-    {:ok, native} = Native.create(state.rtmp_url, audio?, video?)
-
-    state
-    |> Map.put(:native, native)
-    |> try_connect()
-    |> then(&{[], &1})
+    {[], state}
   end
 
   @impl true
   def handle_playing(_ctx, state) do
     {build_demand(state), state}
+  end
+
+  @impl true
+  def handle_start_of_stream(_pad, ctx, %{connect_in_advance: false} = state) do
+    all_pads_connected? =
+      Enum.all?(state.tracks, fn track ->
+        Enum.any?(ctx.pads, fn
+          {Pad.ref(^track, _ref), pad} ->
+            pad.start_of_stream?
+
+          _other ->
+            false
+        end)
+      end)
+
+    if all_pads_connected?, do: initialize_native(state), else: {[], state}
+  end
+
+  @impl true
+  def handle_start_of_stream(_pad, _ctx, state) do
+    {[], state}
   end
 
   @impl true
@@ -347,5 +373,17 @@ defmodule Membrane.RTMP.Sink do
   defp correct_timings(dts, pts, state) do
     {base_dts, state} = Bunch.Map.get_updated!(state, :video_base_dts, &(&1 || dts))
     {{dts - base_dts, pts - base_dts}, state}
+  end
+
+  defp initialize_native(state) do
+    audio? = :audio in state.tracks
+    video? = :video in state.tracks
+
+    {:ok, native} = Native.create(state.rtmp_url, audio?, video?)
+
+    state
+    |> Map.put(:native, native)
+    |> try_connect()
+    |> then(&{[], &1})
   end
 end
