@@ -79,13 +79,27 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     assert ffmpeg_result == :error
   end
 
+  @tag :tmp_dir
   @tag :rtmps
-  test "SourceBin allows for RTMPS connection" do
+  test "SourceBin allows for RTMPS connection", %{tmp_dir: tmp_dir} do
     self = self()
+
+    cert_path = Path.join(tmp_dir, "test_cert.pem")
+    key_path = Path.join(tmp_dir, "test_key.pem")
+    generate_test_certificates(cert_path, key_path)
+
+    # Test SSL listen options separately
+    ssl_config = [
+      certfile: cert_path,
+      keyfile: key_path,
+      verify: :verify_none,
+      fail_if_no_peer_cert: false,
+      versions: [:"tlsv1.2", :"tlsv1.3"]
+    ]
 
     pipeline_startup_task =
       Task.async(fn ->
-        start_pipeline_with_external_rtmp_server(@app, @stream_key, self, 0, true)
+        start_pipeline_with_external_rtmp_server(@app, @stream_key, self, 0, true, ssl_config)
       end)
 
     port =
@@ -216,7 +230,8 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
          stream_key,
          parent,
          port \\ 0,
-         use_ssl? \\ false
+         use_ssl? \\ false,
+         ssl_options \\ []
        ) do
     parent_process_pid = self()
 
@@ -229,11 +244,12 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
       Membrane.RTMPServer.start_link(
         port: port,
         use_ssl?: use_ssl?,
+        ssl_options: ssl_options,
         handle_new_client: handle_new_client,
         client_timeout: Membrane.Time.seconds(3)
       )
 
-    {:ok, assigned_port} = Membrane.RTMPServer.get_port(server_pid)
+    assigned_port = Membrane.RTMPServer.get_port(server_pid)
 
     send(parent, {:port, assigned_port})
 
@@ -326,5 +342,30 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     state
     |> Map.merge(%{stream_length: stream_length, last_dts: -1, buffers: 0})
     |> assert_buffers()
+  end
+
+  defp generate_test_certificates(cert_path, key_path) do
+    {_, 0} =
+      System.cmd("openssl", [
+        "genrsa",
+        "-out",
+        key_path,
+        "2048"
+      ])
+
+    {_, 0} =
+      System.cmd("openssl", [
+        "req",
+        "-new",
+        "-x509",
+        "-key",
+        key_path,
+        "-out",
+        cert_path,
+        "-days",
+        "1",
+        "-subj",
+        "/C=US/ST=Test/L=Test/O=Test/CN=localhost"
+      ])
   end
 end
