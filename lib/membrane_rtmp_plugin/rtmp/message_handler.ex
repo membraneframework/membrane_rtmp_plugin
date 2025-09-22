@@ -171,8 +171,8 @@ defmodule Membrane.RTMP.MessageHandler do
 
   # According to ffmpeg's documentation, this command should prepare the server to receive media streams
   # We are simply acknowledging the message
-  defp do_handle_client_message(%Messages.FCPublish{}, _header, state) do
-    %Messages.Anonymous{name: "onFCPublish", properties: []}
+  defp do_handle_client_message(%Messages.FCPublish{} = fc_publish, _header, state) do
+    %Messages.Anonymous{name: "onFCPublish", tx_id: fc_publish.tx_id, properties: []}
     |> send_rtmp_payload(state.socket, chunk_stream_id: 3)
 
     {:cont, state}
