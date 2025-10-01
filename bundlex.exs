@@ -16,8 +16,10 @@ defmodule Membrane.RTMP.BundlexProject do
         preprocessor: Unifex,
         os_deps: [
           ffmpeg: [
-            {:precompiled, Membrane.PrecompiledDependencyProvider.get_dependency_url(:ffmpeg),
-             ["libavformat", "libavutil"]},
+            {:precompiled,
+             Membrane.PrecompiledDependencyProvider.get_dependency_url(:ffmpeg,
+               version: "6.0.1"
+             ), ["libavformat", "libavutil"]},
             {:pkg_config, ["libavformat", "libavutil"]}
           ]
         ]
