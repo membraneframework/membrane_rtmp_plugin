@@ -345,7 +345,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
   end
 
   defp generate_test_certificates(cert_path, key_path) do
-    {_, 0} =
+    {_result, 0} =
       System.cmd("openssl", [
         "genrsa",
         "-out",
@@ -353,7 +353,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
         "2048"
       ])
 
-    {_, 0} =
+    {_result, 0} =
       System.cmd("openssl", [
         "req",
         "-new",

@@ -293,7 +293,7 @@ defmodule Membrane.RTMP.Sink do
     pads_with_buffer =
       frame_buffer
       |> Enum.filter(fn {_pad, buffer} -> buffer != nil end)
-      |> Enum.sort(fn {_, left}, {_, right} ->
+      |> Enum.sort(fn {_left_pad, left}, {_right_pad, right} ->
         Buffer.get_dts_or_pts(left) <= Buffer.get_dts_or_pts(right)
       end)
 
