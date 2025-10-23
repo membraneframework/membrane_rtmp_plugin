@@ -205,21 +205,35 @@ defmodule Membrane.RTMP.MessageParser do
       <<chunk::binary-size(bytes_to_read), rest::binary>> ->
         new_acc = <<acc::binary, chunk::binary>>
 
-        if byte_size(new_acc) == header.body_size do
-          # Complete message body assembled
-          {new_acc, rest}
-        else
-          # Need more chunks - parse next Type 3 header
-          # Note: We don't update previous_headers because Type 3 headers are just
-          # continuation markers within the same message. The original message header
-          # in previous_headers is what all Type 3 headers should reference.
-          case Header.deserialize(rest, previous_headers) do
-            {%Header{}, rest_after_header} ->
-              read_chunked_body(rest_after_header, header, chunk_size, previous_headers, new_acc)
+        cond do
+          byte_size(new_acc) == header.body_size ->
+            # Complete message body assembled
+            {new_acc, rest}
 
-            {:error, :need_more_data} = error ->
-              error
-          end
+          rest == <<>> ->
+            # Need more data but buffer is empty
+            {:error, :need_more_data}
+
+          true ->
+            # Need more chunks - parse next header
+            # Note: We don't update previous_headers because Type 3 headers are just
+            # continuation markers within the same message. The original message header
+            # in previous_headers is what all Type 3 headers should reference.
+            case Header.deserialize(rest, previous_headers) do
+              {%Header{chunk_stream_id: parsed_chunk_stream_id}, rest_after_header} ->
+                # Check if the parsed header belongs to the current message
+                if parsed_chunk_stream_id == header.chunk_stream_id do
+                  # It's a continuation of our message (Type 3), keep reading
+                  read_chunked_body(rest_after_header, header, chunk_size, previous_headers, new_acc)
+                else
+                  # It's a header for a different stream (interleaved messages)
+                  # The current message is incomplete, we need to wait for more data
+                  {:error, :need_more_data}
+                end
+
+              {:error, :need_more_data} = error ->
+                error
+            end
         end
 
       _ ->
