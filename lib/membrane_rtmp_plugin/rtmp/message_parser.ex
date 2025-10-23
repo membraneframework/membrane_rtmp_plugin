@@ -178,17 +178,19 @@ defmodule Membrane.RTMP.MessageParser do
 
   defp read_frame(packet, previous_headers, chunk_size) do
     case Header.deserialize(packet, previous_headers) do
-      {%Header{chunk_stream_id: chunk_stream_id} = header, rest} ->
-        # Add the current header to previous_headers so Type 3 headers can reference it
-        updated_previous_headers = Map.put(previous_headers, chunk_stream_id, header)
+      {%Header{} = header, rest} ->
+        chunked_body_size = calculate_chunked_body_size(header, chunk_size)
 
-        case read_chunked_body(rest, header, chunk_size, updated_previous_headers) do
-          {:error, :need_more_data} = error ->
-            error
+        case rest do
+          <<body::binary-size(chunked_body_size), rest::binary>> ->
+            combined_body = combine_body_chunks(body, chunk_size, header)
 
-          {body, rest} ->
-            message = Message.deserialize_message(header.type_id, body)
+            message = Message.deserialize_message(header.type_id, combined_body)
+
             {header, message, rest}
+
+          _rest ->
+            {:error, :need_more_data}
         end
 
       {:error, :need_more_data} = error ->
@@ -196,48 +198,65 @@ defmodule Membrane.RTMP.MessageParser do
     end
   end
 
-  defp read_chunked_body(data, header, chunk_size, previous_headers, acc \\ <<>>) do
-    bytes_read = byte_size(acc)
-    bytes_remaining = header.body_size - bytes_read
-    bytes_to_read = min(bytes_remaining, chunk_size)
+  defp calculate_chunked_body_size(%Header{body_size: body_size, chunk_stream_id: chunk_stream_id} = header, chunk_size) do
+    if body_size > chunk_size do
+      # If a message's body is greater than the chunk size, then after every
+      # chunk_size bytes there is a Type 3 chunk header that needs to be stripped.
+      num_continuation_chunks = div(body_size - 1, chunk_size)
 
-    case data do
-      <<chunk::binary-size(bytes_to_read), rest::binary>> ->
-        new_acc = <<acc::binary, chunk::binary>>
+      # Calculate the size of each Type 3 header based on chunk_stream_id
+      type3_header_size = chunk_basic_header_size(chunk_stream_id)
 
-        cond do
-          byte_size(new_acc) == header.body_size ->
-            # Complete message body assembled
-            {new_acc, rest}
+      # If the initial header contains an extended timestamp, then every
+      # following Type 3 chunk will also contain the extended timestamp (4 bytes)
+      timestamps_to_strip = if header.extended_timestamp?, do: num_continuation_chunks * 4, else: 0
 
-          rest == <<>> ->
-            # Need more data but buffer is empty
-            {:error, :need_more_data}
+      body_size + (num_continuation_chunks * type3_header_size) + timestamps_to_strip
+    else
+      body_size
+    end
+  end
 
-          true ->
-            # Need more chunks - parse next header
-            # Note: We don't update previous_headers because Type 3 headers are just
-            # continuation markers within the same message. The original message header
-            # in previous_headers is what all Type 3 headers should reference.
-            case Header.deserialize(rest, previous_headers) do
-              {%Header{chunk_stream_id: parsed_chunk_stream_id}, rest_after_header} ->
-                # Check if the parsed header belongs to the current message
-                if parsed_chunk_stream_id == header.chunk_stream_id do
-                  # It's a continuation of our message (Type 3), keep reading
-                  read_chunked_body(rest_after_header, header, chunk_size, previous_headers, new_acc)
-                else
-                  # It's a header for a different stream (interleaved messages)
-                  # The current message is incomplete, we need to wait for more data
-                  {:error, :need_more_data}
-                end
+  # Calculate the size of a chunk basic header (Type 3) based on chunk_stream_id
+  defp chunk_basic_header_size(chunk_stream_id) when chunk_stream_id >= 2 and chunk_stream_id <= 63, do: 1
+  defp chunk_basic_header_size(chunk_stream_id) when chunk_stream_id >= 64 and chunk_stream_id <= 319, do: 2
+  defp chunk_basic_header_size(chunk_stream_id) when chunk_stream_id >= 320 and chunk_stream_id <= 65599, do: 3
 
-              {:error, :need_more_data} = error ->
-                error
-            end
-        end
+  # Combine body chunks by stripping out Type 3 headers
+  # Messages larger than chunk_size are split into chunks separated by Type 3 headers
+  defp combine_body_chunks(body, chunk_size, header) do
+    if byte_size(body) <= chunk_size do
+      body
+    else
+      do_combine_body_chunks(body, chunk_size, header, [])
+    end
+  end
 
-      _ ->
-        {:error, :need_more_data}
+  defp do_combine_body_chunks(body, chunk_size, header, acc) do
+    # Get the Type 3 header size for this chunk stream
+    type3_header_size = chunk_basic_header_size(header.chunk_stream_id)
+
+    # If extended timestamp, add 4 bytes
+    separator_size = if header.extended_timestamp?, do: type3_header_size + 4, else: type3_header_size
+
+    case body do
+      <<chunk::binary-size(chunk_size), separator::binary-size(separator_size), rest::binary>> ->
+        # Validate it's a Type 3 header (optional but safe)
+        <<0b11::2, _::bitstring>> = separator
+
+        # Continue with next chunk
+        do_combine_body_chunks(rest, chunk_size, header, [acc, chunk])
+
+      <<_chunk::binary-size(chunk_size), header_type::2, _rest::bitstring>> ->
+        Membrane.Logger.warning(
+          "Unexpected header type when combining body chunks: #{header_type}"
+        )
+
+        IO.iodata_to_binary([acc, body])
+
+      body ->
+        # Last chunk (smaller than chunk_size)
+        IO.iodata_to_binary([acc, body])
     end
   end
 
