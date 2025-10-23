@@ -178,19 +178,17 @@ defmodule Membrane.RTMP.MessageParser do
 
   defp read_frame(packet, previous_headers, chunk_size) do
     case Header.deserialize(packet, previous_headers) do
-      {%Header{} = header, rest} ->
-        chunked_body_size = calculate_chunked_body_size(header, chunk_size)
+      {%Header{chunk_stream_id: chunk_stream_id} = header, rest} ->
+        # Add the current header to previous_headers so Type 3 headers can reference it
+        updated_previous_headers = Map.put(previous_headers, chunk_stream_id, header)
 
-        case rest do
-          <<body::binary-size(chunked_body_size), rest::binary>> ->
-            combined_body = combine_body_chunks(body, chunk_size, header)
+        case read_chunked_body(rest, header, chunk_size, updated_previous_headers) do
+          {:error, :need_more_data} = error ->
+            error
 
-            message = Message.deserialize_message(header.type_id, combined_body)
-
+          {body, rest} ->
+            message = Message.deserialize_message(header.type_id, body)
             {header, message, rest}
-
-          _rest ->
-            {:error, :need_more_data}
         end
 
       {:error, :need_more_data} = error ->
@@ -198,54 +196,34 @@ defmodule Membrane.RTMP.MessageParser do
     end
   end
 
-  defp calculate_chunked_body_size(%Header{body_size: body_size} = header, chunk_size) do
-    if body_size > chunk_size do
-      # if a message's body is greater than the chunk size then
-      # after every chunk_size's bytes there is a 0x03 one byte header that
-      # needs to be stripped and is not counted into the body_size
-      headers_to_strip = div(body_size - 1, chunk_size)
+  defp read_chunked_body(data, header, chunk_size, previous_headers, acc \\ <<>>) do
+    bytes_read = byte_size(acc)
+    bytes_remaining = header.body_size - bytes_read
+    bytes_to_read = min(bytes_remaining, chunk_size)
 
-      # if the initial header contains a extended timestamp then
-      # every following chunk will contain the timestamp
-      timestamps_to_strip = if header.extended_timestamp?, do: headers_to_strip * 4, else: 0
+    case data do
+      <<chunk::binary-size(bytes_to_read), rest::binary>> ->
+        new_acc = <<acc::binary, chunk::binary>>
 
-      body_size + headers_to_strip + timestamps_to_strip
-    else
-      body_size
-    end
-  end
+        if byte_size(new_acc) == header.body_size do
+          # Complete message body assembled
+          {new_acc, rest}
+        else
+          # Need more chunks - parse next Type 3 header
+          # Note: We don't update previous_headers because Type 3 headers are just
+          # continuation markers within the same message. The original message header
+          # in previous_headers is what all Type 3 headers should reference.
+          case Header.deserialize(rest, previous_headers) do
+            {%Header{}, rest_after_header} ->
+              read_chunked_body(rest_after_header, header, chunk_size, previous_headers, new_acc)
 
-  # message's size can exceed the defined chunk size
-  # in this case the message gets divided into
-  # a sequence of smaller packets separated by the a header type 3 byte
-  # (the first 2 bits has to be 0b11)
-  defp combine_body_chunks(body, chunk_size, header) do
-    if byte_size(body) <= chunk_size do
-      body
-    else
-      do_combine_body_chunks(body, chunk_size, header, [])
-    end
-  end
+            {:error, :need_more_data} = error ->
+              error
+          end
+        end
 
-  defp do_combine_body_chunks(body, chunk_size, header, acc) do
-    case body do
-      <<body::binary-size(chunk_size), 0b11::2, _chunk_stream_id::6, timestamp::32, rest::binary>>
-      when header.extended_timestamp? and timestamp == header.timestamp ->
-        do_combine_body_chunks(rest, chunk_size, header, [acc, body])
-
-      # cut out the header byte (staring with 0b11)
-      <<body::binary-size(chunk_size), 0b11::2, _chunk_stream_id::6, rest::binary>> ->
-        do_combine_body_chunks(rest, chunk_size, header, [acc, body])
-
-      <<_body::binary-size(chunk_size), header_type::2, _chunk_stream_id::6, _rest::binary>> ->
-        Membrane.Logger.warning(
-          "Unexpected header type when combining body chunks: #{header_type}"
-        )
-
-        IO.iodata_to_binary([acc, body])
-
-      body ->
-        IO.iodata_to_binary([acc, body])
+      _ ->
+        {:error, :need_more_data}
     end
   end
 
