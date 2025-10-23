@@ -111,7 +111,7 @@ defmodule Membrane.RTMP.HeaderTest do
 
     test "deserialize header with 3-byte chunk stream ID format (ID 65599)" do
       # Maximum chunk stream ID supported by 3-byte format
-      chunk_stream_id = 65599
+      chunk_stream_id = 65_599
       timestamp = 4000
       body_size = 2048
       type_id = 9
@@ -290,7 +290,7 @@ defmodule Membrane.RTMP.HeaderTest do
         # Minimum 3-byte
         320,
         # Maximum 3-byte
-        65599
+        65_599
       ]
 
       for chunk_stream_id <- test_ids do

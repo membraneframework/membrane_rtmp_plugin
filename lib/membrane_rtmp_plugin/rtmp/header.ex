@@ -216,7 +216,7 @@ defmodule Membrane.RTMP.Header do
   end
 
   def serialize(%__MODULE__{chunk_stream_id: chunk_stream_id} = header)
-      when chunk_stream_id >= 320 and chunk_stream_id <= 65599 do
+      when chunk_stream_id >= 320 and chunk_stream_id <= 65_599 do
     # 3-byte format: fmt (2 bits) + marker 1 (6 bits) + low byte (8 bits) + high byte (8 bits)
     %{
       timestamp: timestamp,
