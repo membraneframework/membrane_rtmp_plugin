@@ -311,48 +311,6 @@ defmodule Membrane.RTMP.HeaderTest do
     end
   end
 
-  describe "serialize_chunk_basic_header/2" do
-    test "creates Type 3 header with 1-byte chunk stream ID" do
-      chunk_stream_id = 10
-      header = Header.serialize_chunk_basic_header(3, chunk_stream_id)
-
-      # Should be 1 byte: fmt (2 bits) + id (6 bits)
-      assert byte_size(header) == 1
-      assert header == <<0b11::2, chunk_stream_id::6>>
-    end
-
-    test "creates Type 3 header with 2-byte chunk stream ID" do
-      chunk_stream_id = 150
-      header = Header.serialize_chunk_basic_header(3, chunk_stream_id)
-
-      # Should be 2 bytes: fmt (2 bits) + 0 (6 bits) + (id-64) (8 bits)
-      assert byte_size(header) == 2
-      assert header == <<0b11::2, 0::6, chunk_stream_id - 64::8>>
-    end
-
-    test "creates Type 3 header with 3-byte chunk stream ID" do
-      chunk_stream_id = 1000
-      header = Header.serialize_chunk_basic_header(3, chunk_stream_id)
-
-      # Should be 3 bytes: fmt (2 bits) + 1 (6 bits) + low (8 bits) + high (8 bits)
-      assert byte_size(header) == 3
-
-      id_minus_64 = chunk_stream_id - 64
-      low_byte = rem(id_minus_64, 256)
-      high_byte = div(id_minus_64, 256)
-
-      assert header == <<0b11::2, 1::6, low_byte::8, high_byte::8>>
-    end
-
-    test "creates Type 0 header with extended chunk stream ID" do
-      chunk_stream_id = 200
-      header = Header.serialize_chunk_basic_header(0, chunk_stream_id)
-
-      assert byte_size(header) == 2
-      assert header == <<0b00::2, 0::6, chunk_stream_id - 64::8>>
-    end
-  end
-
   describe "Standard Chunk Stream ID encoding (existing behavior)" do
     test "deserialize header with standard 6-bit chunk stream ID" do
       # This test should pass with current implementation

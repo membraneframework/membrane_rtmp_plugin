@@ -102,8 +102,5 @@ defmodule Membrane.RTMP.Message do
   end
 
   @compile {:inline, chunk_separator: 1}
-  defp chunk_separator(chunk_stream_id) do
-    # Use Type 3 header (fmt=3) for chunk separators
-    Membrane.RTMP.Header.serialize_chunk_basic_header(3, chunk_stream_id)
-  end
+  defp chunk_separator(chunk_stream_id), do: <<0b11::2, chunk_stream_id::6>>
 end

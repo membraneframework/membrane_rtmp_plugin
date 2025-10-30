@@ -77,30 +77,19 @@ defmodule Membrane.RTMP.Header do
     )
   end
 
-  @doc """
-  Deserializes chunk stream ID from binary.
-
-  Handles all three formats:
-  - 1-byte format: IDs 2-63 encoded directly in 6 bits
-  - 2-byte format: IDs 64-319 with marker 0 + (id-64) in 8 bits
-  - 3-byte format: IDs 320-65599 with marker 1 + low byte + high byte
-
-  Returns tuple of {chunk_stream_id, remaining_binary}
-  """
-  @spec deserialize_chunk_stream_id(binary()) :: {integer(), binary()}
-  def deserialize_chunk_stream_id(<<0::6, stream_id::8, rest::binary>>) do
+  defp deserialize_chunk_stream_id(<<0::6, stream_id::8, rest::binary>>) do
     # 2 byte format
     {stream_id + 64, rest}
   end
 
-  def deserialize_chunk_stream_id(
-        <<1::6, stream_id_part_2::8, stream_id_part_3::8, rest::binary>>
-      ) do
+  defp deserialize_chunk_stream_id(
+         <<1::6, stream_id_part_2::8, stream_id_part_3::8, rest::binary>>
+       ) do
     # 3 byte format
     {stream_id_part_3 * 256 + stream_id_part_2 + 64, rest}
   end
 
-  def deserialize_chunk_stream_id(<<stream_id::6, rest::binary>>) do
+  defp deserialize_chunk_stream_id(<<stream_id::6, rest::binary>>) do
     # 1 byte format
     {stream_id, rest}
   end
@@ -196,34 +185,6 @@ defmodule Membrane.RTMP.Header do
 
   defp deserialize_message_header(_basic_header, _data, _prev_header),
     do: {:error, :need_more_data}
-
-  @doc """
-  Serializes a chunk basic header (format type + chunk stream ID).
-
-  Used for creating chunk headers, including Type 3 headers between message chunks.
-  The fmt parameter should be 0-3 corresponding to header types 0-3.
-  """
-  @spec serialize_chunk_basic_header(0..3, integer()) :: binary()
-  def serialize_chunk_basic_header(fmt, chunk_stream_id)
-      when fmt in 0..3 and chunk_stream_id >= 2 and chunk_stream_id <= 63 do
-    # 1-byte format: fmt (2 bits) + chunk_stream_id (6 bits)
-    <<fmt::2, chunk_stream_id::6>>
-  end
-
-  def serialize_chunk_basic_header(fmt, chunk_stream_id)
-      when fmt in 0..3 and chunk_stream_id >= 64 and chunk_stream_id <= 319 do
-    # 2-byte format: fmt (2 bits) + marker 0 (6 bits) + (id - 64) (8 bits)
-    <<fmt::2, 0::6, chunk_stream_id - 64::8>>
-  end
-
-  def serialize_chunk_basic_header(fmt, chunk_stream_id)
-      when fmt in 0..3 and chunk_stream_id >= 320 and chunk_stream_id <= 65599 do
-    # 3-byte format: fmt (2 bits) + marker 1 (6 bits) + low byte (8 bits) + high byte (8 bits)
-    id_minus_64 = chunk_stream_id - 64
-    low_byte = rem(id_minus_64, 256)
-    high_byte = div(id_minus_64, 256)
-    <<fmt::2, 1::6, low_byte::8, high_byte::8>>
-  end
 
   @spec serialize(t()) :: binary()
   def serialize(%__MODULE__{chunk_stream_id: chunk_stream_id} = header)
