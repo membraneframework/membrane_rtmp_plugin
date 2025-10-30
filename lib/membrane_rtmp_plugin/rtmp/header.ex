@@ -120,18 +120,24 @@ defmodule Membrane.RTMP.Header do
          <<timestamp_delta::24, body_size::24, type_id::8, rest::binary>>,
          previous_headers
        ) do
-    with {timestamp_delta, extended_timestamp?, rest} <- extract_timestamp(rest, timestamp_delta) do
-      header = %__MODULE__{
-        chunk_stream_id: chunk_stream_id,
-        timestamp: previous_headers[chunk_stream_id].timestamp + timestamp_delta,
-        timestamp_delta: timestamp_delta,
-        extended_timestamp?: extended_timestamp?,
-        body_size: body_size,
-        type_id: type_id,
-        stream_id: previous_headers[chunk_stream_id].stream_id
-      }
+    previous_header = previous_headers[chunk_stream_id]
 
-      {header, rest}
+    if previous_header == nil do
+      {:error, {:missing_previous_header, chunk_stream_id, :type_1}}
+    else
+      with {timestamp_delta, extended_timestamp?, rest} <- extract_timestamp(rest, timestamp_delta) do
+        header = %__MODULE__{
+          chunk_stream_id: chunk_stream_id,
+          timestamp: previous_header.timestamp + timestamp_delta,
+          timestamp_delta: timestamp_delta,
+          extended_timestamp?: extended_timestamp?,
+          body_size: body_size,
+          type_id: type_id,
+          stream_id: previous_header.stream_id
+        }
+
+        {header, rest}
+      end
     end
   end
 
@@ -140,18 +146,24 @@ defmodule Membrane.RTMP.Header do
          <<timestamp_delta::24, rest::binary>>,
          previous_headers
        ) do
-    with {timestamp_delta, extended_timestamp?, rest} <- extract_timestamp(rest, timestamp_delta) do
-      header = %__MODULE__{
-        chunk_stream_id: chunk_stream_id,
-        timestamp: previous_headers[chunk_stream_id].timestamp + timestamp_delta,
-        timestamp_delta: timestamp_delta,
-        extended_timestamp?: extended_timestamp?,
-        body_size: previous_headers[chunk_stream_id].body_size,
-        type_id: previous_headers[chunk_stream_id].type_id,
-        stream_id: previous_headers[chunk_stream_id].stream_id
-      }
+    previous_header = previous_headers[chunk_stream_id]
 
-      {header, rest}
+    if previous_header == nil do
+      {:error, {:missing_previous_header, chunk_stream_id, :type_2}}
+    else
+      with {timestamp_delta, extended_timestamp?, rest} <- extract_timestamp(rest, timestamp_delta) do
+        header = %__MODULE__{
+          chunk_stream_id: chunk_stream_id,
+          timestamp: previous_header.timestamp + timestamp_delta,
+          timestamp_delta: timestamp_delta,
+          extended_timestamp?: extended_timestamp?,
+          body_size: previous_header.body_size,
+          type_id: previous_header.type_id,
+          stream_id: previous_header.stream_id
+        }
+
+        {header, rest}
+      end
     end
   end
 
@@ -162,24 +174,28 @@ defmodule Membrane.RTMP.Header do
        ) do
     previous_header = previous_headers[chunk_stream_id]
 
-    if previous_header.extended_timestamp? do
-      with {timestamp_delta, _extended_timestamp?, rest} <-
-             extract_timestamp(rest, @extended_timestamp_marker) do
+    if previous_header == nil do
+      {:error, {:missing_previous_header, chunk_stream_id, :type_3}}
+    else
+      if previous_header.extended_timestamp? do
+        with {timestamp_delta, _extended_timestamp?, rest} <-
+               extract_timestamp(rest, @extended_timestamp_marker) do
+          header = %__MODULE__{
+            previous_header
+            | timestamp: previous_header.timestamp + timestamp_delta,
+              timestamp_delta: timestamp_delta
+          }
+
+          {header, rest}
+        end
+      else
         header = %__MODULE__{
           previous_header
-          | timestamp: previous_header.timestamp + timestamp_delta,
-            timestamp_delta: timestamp_delta
+          | timestamp: previous_header.timestamp + previous_header.timestamp_delta
         }
 
         {header, rest}
       end
-    else
-      header = %__MODULE__{
-        previous_header
-        | timestamp: previous_header.timestamp + previous_header.timestamp_delta
-      }
-
-      {header, rest}
     end
   end
 
