@@ -125,7 +125,8 @@ defmodule Membrane.RTMP.Header do
     if previous_header == nil do
       {:error, {:missing_previous_header, chunk_stream_id, :type_1}}
     else
-      with {timestamp_delta, extended_timestamp?, rest} <- extract_timestamp(rest, timestamp_delta) do
+      with {timestamp_delta, extended_timestamp?, rest} <-
+             extract_timestamp(rest, timestamp_delta) do
         header = %__MODULE__{
           chunk_stream_id: chunk_stream_id,
           timestamp: previous_header.timestamp + timestamp_delta,
@@ -151,7 +152,8 @@ defmodule Membrane.RTMP.Header do
     if previous_header == nil do
       {:error, {:missing_previous_header, chunk_stream_id, :type_2}}
     else
-      with {timestamp_delta, extended_timestamp?, rest} <- extract_timestamp(rest, timestamp_delta) do
+      with {timestamp_delta, extended_timestamp?, rest} <-
+             extract_timestamp(rest, timestamp_delta) do
         header = %__MODULE__{
           chunk_stream_id: chunk_stream_id,
           timestamp: previous_header.timestamp + timestamp_delta,
