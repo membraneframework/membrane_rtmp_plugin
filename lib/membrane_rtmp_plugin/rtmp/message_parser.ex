@@ -124,8 +124,7 @@ defmodule Membrane.RTMP.MessageParser do
           "Invalid chunk stream detected. Clearing buffers to attempt recovery."
         )
 
-        {:need_more_data,
-         %__MODULE__{state | buffer: <<>>, partial_messages: %{}}}
+        {:need_more_data, %__MODULE__{state | buffer: <<>>, partial_messages: %{}}}
 
       {:complete, header, message, rest, new_partial_messages} ->
         # Complete message - update_state_with_message will handle previous_headers
@@ -214,8 +213,7 @@ defmodule Membrane.RTMP.MessageParser do
           "Invalid chunk stream detected. Clearing buffers to attempt recovery."
         )
 
-        {:need_more_data,
-         %__MODULE__{state | buffer: <<>>, partial_messages: %{}}}
+        {:need_more_data, %__MODULE__{state | buffer: <<>>, partial_messages: %{}}}
 
       {:complete, header, message, rest, new_partial_messages} ->
         # Complete message - update_state_with_message will handle previous_headers
