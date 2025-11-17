@@ -148,7 +148,13 @@ defmodule Membrane.RTMP.MessageParser do
             }
           end
 
-        {:need_more_data, new_state}
+        # Continue processing if there's more data in the buffer
+        # This handles the case where multiple chunks arrive in the same packet
+        if rest != <<>> do
+          handle_packet(<<>>, new_state)
+        else
+          {:need_more_data, new_state}
+        end
     end
   end
 
@@ -237,7 +243,13 @@ defmodule Membrane.RTMP.MessageParser do
             }
           end
 
-        {:need_more_data, new_state}
+        # Continue processing if there's more data in the buffer
+        # This handles the case where multiple chunks arrive in the same packet
+        if rest != <<>> do
+          handle_packet(<<>>, new_state)
+        else
+          {:need_more_data, new_state}
+        end
     end
   end
 
