@@ -6,12 +6,18 @@ defmodule Membrane.RTMP.MessageParser do
   alias Membrane.RTMP.{Handshake, Header, Message, Messages}
 
   @enforce_keys [:state_machine, :buffer, :chunk_size, :handshake]
-  defstruct @enforce_keys ++ [previous_headers: %{}, current_tx_id: 1]
+  defstruct @enforce_keys ++ [previous_headers: %{}, current_tx_id: 1, partial_messages: %{}]
 
   @type state_machine_t ::
           :handshake | :connecting | :connected
 
   @type packet_t :: binary()
+
+  @type partial_message :: %{
+          header: Header.t(),
+          body_chunks: [binary()],
+          bytes_received: non_neg_integer()
+        }
 
   @type t :: %__MODULE__{
           state_machine: state_machine_t(),
@@ -20,7 +26,9 @@ defmodule Membrane.RTMP.MessageParser do
           # the chunk size of incoming messages (the other side of connection)
           chunk_size: non_neg_integer(),
           current_tx_id: non_neg_integer(),
-          handshake: Handshake.State.t()
+          handshake: Handshake.State.t(),
+          # tracks partial messages per chunk stream ID to support interleaving
+          partial_messages: %{non_neg_integer() => partial_message()}
         }
 
   @doc """
@@ -39,7 +47,8 @@ defmodule Membrane.RTMP.MessageParser do
       # previous header for each of the stream chunks
       previous_headers: %{},
       chunk_size: chunk_size,
-      handshake: handshake
+      handshake: handshake,
+      partial_messages: %{}
     }
   end
 
@@ -104,14 +113,48 @@ defmodule Membrane.RTMP.MessageParser do
       ) do
     payload = buffer <> packet
 
-    case read_frame(payload, state.previous_headers, chunk_size) do
+    case read_frame(payload, state.previous_headers, chunk_size, state.partial_messages) do
       {:error, :need_more_data} ->
         {:need_more_data, %__MODULE__{state | buffer: payload}}
 
-      {header, message, rest} ->
-        state = update_state_with_message(state, header, message, rest)
+      {:error, :invalid_chunk_stream} ->
+        # Invalid chunk stream detected, likely due to corrupted data
+        # Clear buffer and partial messages to try to recover
+        Membrane.Logger.error(
+          "Invalid chunk stream detected. Clearing buffers to attempt recovery."
+        )
+
+        {:need_more_data, %__MODULE__{state | buffer: <<>>, partial_messages: %{}}}
+
+      {:complete, header, message, rest, new_partial_messages} ->
+        # Complete message - update_state_with_message will handle previous_headers
+        state =
+          update_state_with_message(state, header, message, rest)
+          |> Map.put(:partial_messages, new_partial_messages)
 
         {header, message, state}
+
+      {:partial, rest, new_partial_messages, new_previous_headers} ->
+        # Partial message - update previous_headers if needed
+        new_state =
+          if new_previous_headers == :no_change do
+            %__MODULE__{state | buffer: rest, partial_messages: new_partial_messages}
+          else
+            %__MODULE__{
+              state
+              | buffer: rest,
+                partial_messages: new_partial_messages,
+                previous_headers: new_previous_headers
+            }
+          end
+
+        # Continue processing if there's more data in the buffer
+        # This handles the case where multiple chunks arrive in the same packet
+        if rest != <<>> do
+          handle_packet(<<>>, new_state)
+        else
+          {:need_more_data, new_state}
+        end
     end
   end
 
@@ -165,87 +208,154 @@ defmodule Membrane.RTMP.MessageParser do
       ) do
     payload = buffer <> packet
 
-    case read_frame(payload, state.previous_headers, chunk_size) do
+    case read_frame(payload, state.previous_headers, chunk_size, state.partial_messages) do
       {:error, :need_more_data} ->
         {:need_more_data, %__MODULE__{state | buffer: payload}}
 
-      {header, message, rest} ->
-        state = update_state_with_message(state, header, message, rest)
+      {:error, :invalid_chunk_stream} ->
+        # Invalid chunk stream detected, likely due to corrupted data
+        # Clear buffer and partial messages to try to recover
+        Membrane.Logger.error(
+          "Invalid chunk stream detected. Clearing buffers to attempt recovery."
+        )
+
+        {:need_more_data, %__MODULE__{state | buffer: <<>>, partial_messages: %{}}}
+
+      {:complete, header, message, rest, new_partial_messages} ->
+        # Complete message - update_state_with_message will handle previous_headers
+        state =
+          update_state_with_message(state, header, message, rest)
+          |> Map.put(:partial_messages, new_partial_messages)
 
         {header, message, state}
+
+      {:partial, rest, new_partial_messages, new_previous_headers} ->
+        # Partial message - update previous_headers if needed
+        new_state =
+          if new_previous_headers == :no_change do
+            %__MODULE__{state | buffer: rest, partial_messages: new_partial_messages}
+          else
+            %__MODULE__{
+              state
+              | buffer: rest,
+                partial_messages: new_partial_messages,
+                previous_headers: new_previous_headers
+            }
+          end
+
+        # Continue processing if there's more data in the buffer
+        # This handles the case where multiple chunks arrive in the same packet
+        if rest != <<>> do
+          handle_packet(<<>>, new_state)
+        else
+          {:need_more_data, new_state}
+        end
     end
   end
 
-  defp read_frame(packet, previous_headers, chunk_size) do
+  defp read_frame(packet, previous_headers, chunk_size, partial_messages) do
     case Header.deserialize(packet, previous_headers) do
       {%Header{} = header, rest} ->
-        chunked_body_size = calculate_chunked_body_size(header, chunk_size)
+        # Determine if this is a continuation chunk
+        # A chunk is a continuation if we have a partial message buffered for this chunk_stream_id
+        is_continuation = Map.has_key?(partial_messages, header.chunk_stream_id)
 
-        case rest do
-          <<body::binary-size(chunked_body_size), rest::binary>> ->
-            combined_body = combine_body_chunks(body, chunk_size, header)
-
-            message = Message.deserialize_message(header.type_id, combined_body)
-
-            {header, message, rest}
-
-          _rest ->
-            {:error, :need_more_data}
+        if is_continuation do
+          # This is a continuation of an existing partial message
+          continue_partial_message(header, rest, chunk_size, partial_messages, previous_headers)
+        else
+          # This is a new message (Type 0, 1, 2, or Type 3 for a new chunk stream)
+          start_new_message(header, rest, chunk_size, partial_messages, previous_headers)
         end
+
+      {:error, {:missing_previous_header, chunk_stream_id, header_type}} ->
+        Membrane.Logger.warning(
+          "Received #{header_type} header for unknown chunk_stream_id: #{chunk_stream_id}. " <>
+            "This may indicate chunk interleaving issue or corrupted stream data. Skipping."
+        )
+
+        {:error, :invalid_chunk_stream}
 
       {:error, :need_more_data} = error ->
         error
     end
   end
 
-  defp calculate_chunked_body_size(%Header{body_size: body_size} = header, chunk_size) do
-    if body_size > chunk_size do
-      # if a message's body is greater than the chunk size then
-      # after every chunk_size's bytes there is a 0x03 one byte header that
-      # needs to be stripped and is not counted into the body_size
-      headers_to_strip = div(body_size - 1, chunk_size)
+  defp start_new_message(header, rest, chunk_size, partial_messages, previous_headers) do
+    # Calculate how many bytes to read for this chunk
+    bytes_to_read = min(header.body_size, chunk_size)
 
-      # if the initial header contains a extended timestamp then
-      # every following chunk will contain the timestamp
-      timestamps_to_strip = if header.extended_timestamp?, do: headers_to_strip * 4, else: 0
+    case rest do
+      <<chunk::binary-size(bytes_to_read), rest::binary>> ->
+        if bytes_to_read >= header.body_size do
+          # Message is complete in a single chunk
+          # Don't update previous_headers here - update_state_with_message will handle it
+          message = Message.deserialize_message(header.type_id, chunk)
+          {:complete, header, message, rest, partial_messages}
+        else
+          # Message spans multiple chunks, store as partial
+          # Also update previous_headers so Type 3 continuation headers can be deserialized
+          partial = %{
+            header: header,
+            body_chunks: [chunk],
+            bytes_received: bytes_to_read
+          }
 
-      body_size + headers_to_strip + timestamps_to_strip
-    else
-      body_size
+          new_partial_messages = Map.put(partial_messages, header.chunk_stream_id, partial)
+          new_previous_headers = Map.put(previous_headers, header.chunk_stream_id, header)
+          {:partial, rest, new_partial_messages, new_previous_headers}
+        end
+
+      _rest ->
+        {:error, :need_more_data}
     end
   end
 
-  # message's size can exceed the defined chunk size
-  # in this case the message gets divided into
-  # a sequence of smaller packets separated by the a header type 3 byte
-  # (the first 2 bits has to be 0b11)
-  defp combine_body_chunks(body, chunk_size, header) do
-    if byte_size(body) <= chunk_size do
-      body
+  defp continue_partial_message(header, rest, chunk_size, partial_messages, _previous_headers) do
+    partial = Map.get(partial_messages, header.chunk_stream_id)
+
+    if partial == nil do
+      # This shouldn't happen - Type 3 header for unknown chunk_stream_id
+      # This will be caught by the missing_previous_header error
+      {:error, :invalid_chunk_stream}
     else
-      do_combine_body_chunks(body, chunk_size, header, [])
-    end
-  end
+      # Calculate remaining bytes for this message
+      remaining_bytes = partial.header.body_size - partial.bytes_received
+      bytes_to_read = min(remaining_bytes, chunk_size)
 
-  defp do_combine_body_chunks(body, chunk_size, header, acc) do
-    case body do
-      <<body::binary-size(chunk_size), 0b11::2, _chunk_stream_id::6, timestamp::32, rest::binary>>
-      when header.extended_timestamp? and timestamp == header.timestamp ->
-        do_combine_body_chunks(rest, chunk_size, header, [acc, body])
+      case rest do
+        <<chunk::binary-size(bytes_to_read), rest::binary>> ->
+          new_bytes_received = partial.bytes_received + bytes_to_read
+          new_body_chunks = [partial.body_chunks, chunk]
 
-      # cut out the header byte (staring with 0b11)
-      <<body::binary-size(chunk_size), 0b11::2, _chunk_stream_id::6, rest::binary>> ->
-        do_combine_body_chunks(rest, chunk_size, header, [acc, body])
+          if new_bytes_received >= partial.header.body_size do
+            # Message is now complete
+            # Don't update previous_headers here - update_state_with_message will handle it
+            complete_body = IO.iodata_to_binary(new_body_chunks)
+            message = Message.deserialize_message(partial.header.type_id, complete_body)
+            new_partial_messages = Map.delete(partial_messages, header.chunk_stream_id)
 
-      <<_body::binary-size(chunk_size), header_type::2, _chunk_stream_id::6, _rest::binary>> ->
-        Membrane.Logger.warning(
-          "Unexpected header type when combining body chunks: #{header_type}"
-        )
+            # Use the original header from when the message started
+            {:complete, partial.header, message, rest, new_partial_messages}
+          else
+            # Still partial, continue buffering
+            # Keep previous_headers as is (already has the header from first chunk)
+            updated_partial = %{
+              partial
+              | body_chunks: new_body_chunks,
+                bytes_received: new_bytes_received
+            }
 
-        IO.iodata_to_binary([acc, body])
+            new_partial_messages =
+              Map.put(partial_messages, header.chunk_stream_id, updated_partial)
 
-      body ->
-        IO.iodata_to_binary([acc, body])
+            # Return :no_change for previous_headers to indicate no update needed
+            {:partial, rest, new_partial_messages, :no_change}
+          end
+
+        _rest ->
+          {:error, :need_more_data}
+      end
     end
   end
 
