@@ -254,7 +254,11 @@ defmodule Membrane.RTMP.MessageHandler do
     }
   end
 
-  defp get_additional_media_events(rtmp_header, additional_media, %{header_sent?: true} = state) do
+  defp get_additional_media_events(
+         %Membrane.RTMP.Header{} = rtmp_header,
+         additional_media,
+         %{header_sent?: true} = state
+       ) do
     # NOTE: we are replacing the type_id from 18 to 8 (script data to audio data) as it carries the
     # additional audio track
     data = additional_media.media
@@ -275,7 +279,7 @@ defmodule Membrane.RTMP.MessageHandler do
     Map.update!(state, :events, &[event | &1])
   end
 
-  defp get_additional_media_events(rtmp_header, additional_media, state) do
+  defp get_additional_media_events(%Membrane.RTMP.Header{} = rtmp_header, additional_media, state) do
     data = additional_media.media
 
     header = %Membrane.RTMP.Header{rtmp_header | type_id: 8, body_size: byte_size(data)}

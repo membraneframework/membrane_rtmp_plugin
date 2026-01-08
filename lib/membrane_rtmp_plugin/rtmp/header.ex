@@ -127,7 +127,7 @@ defmodule Membrane.RTMP.Header do
         <<@header_type_3::bitstring, chunk_stream_id::6, rest::binary>>,
         previous_headers
       ) do
-    previous_header = previous_headers[chunk_stream_id]
+    %__MODULE__{} = previous_header = previous_headers[chunk_stream_id]
 
     if previous_header.extended_timestamp? do
       with {timestamp_delta, _extended_timestamp?, rest} <-

@@ -100,7 +100,7 @@ defmodule Membrane.RTMP.MessageParser do
 
   def handle_packet(
         packet,
-        %{state_machine: :connected, buffer: buffer, chunk_size: chunk_size} = state
+        %__MODULE__{state_machine: :connected, buffer: buffer, chunk_size: chunk_size} = state
       ) do
     payload = buffer <> packet
 
@@ -117,7 +117,7 @@ defmodule Membrane.RTMP.MessageParser do
 
   def handle_packet(
         packet,
-        %{state_machine: :handshake, buffer: buffer, handshake: handshake} = state
+        %__MODULE__{state_machine: :handshake, buffer: buffer, handshake: handshake} = state
       ) do
     payload = buffer <> packet
 
@@ -161,7 +161,7 @@ defmodule Membrane.RTMP.MessageParser do
 
   def handle_packet(
         packet,
-        %{state_machine: :connecting, buffer: buffer, chunk_size: chunk_size} = state
+        %__MODULE__{state_machine: :connecting, buffer: buffer, chunk_size: chunk_size} = state
       ) do
     payload = buffer <> packet
 
@@ -269,7 +269,7 @@ defmodule Membrane.RTMP.MessageParser do
 
   defp fsm_transition(:handshake), do: :connecting
 
-  defp update_state_with_message(state, header, message, rest) do
+  defp update_state_with_message(%__MODULE__{} = state, header, message, rest) do
     updated_headers = Map.put(state.previous_headers, header.chunk_stream_id, header)
 
     %__MODULE__{
