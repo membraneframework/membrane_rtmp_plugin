@@ -340,11 +340,11 @@ defmodule Membrane.RTMP.MessageHandler do
   end
 
   @compile {:inline, socket_module: 1}
-  def socket_module(socket) when is_tuple(socket) and elem(socket, 0) == :sslsocket do
+  defp socket_module(socket) when is_tuple(socket) and elem(socket, 0) == :sslsocket do
     :ssl
   end
 
-  def socket_module(_socket) do
+  defp socket_module(_socket) do
     :gen_tcp
   end
 end
