@@ -90,9 +90,13 @@ UNIFEX_TERM init_video_stream(UnifexEnv *env, State *state, int width,
 
   bool ready = is_ready(state);
   if (ready && !state->header_written) {
-    if (avformat_write_header(state->output_ctx, NULL) < 0) {
+    AVDictionary *options = NULL;
+    av_dict_set(&options, "flvflags", "no_duration_filesize", 0);
+    if (avformat_write_header(state->output_ctx, &options) < 0) {
+      av_dict_free(&options);
       return unifex_raise(env, "Failed writing header");
     }
+    av_dict_free(&options);
     state->header_written = true;
   }
   return init_video_stream_result_ok(env, ready, state);
@@ -132,9 +136,13 @@ UNIFEX_TERM init_audio_stream(UnifexEnv *env, State *state, int channels,
 
   bool ready = is_ready(state);
   if (ready && !state->header_written) {
-    if (avformat_write_header(state->output_ctx, NULL) < 0) {
+    AVDictionary *options = NULL;
+    av_dict_set(&options, "flvflags", "no_duration_filesize", 0);
+    if (avformat_write_header(state->output_ctx, &options) < 0) {
+      av_dict_free(&options);
       return unifex_raise(env, "Failed writing header");
     }
+    av_dict_free(&options);
     state->header_written = true;
   }
   return init_audio_stream_result_ok(env, ready, state);
