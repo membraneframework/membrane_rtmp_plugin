@@ -15,6 +15,11 @@ defmodule Membrane.RTMP.Messages.Anonymous do
         }
 
   @impl true
+  def from_data(["@" <> event, properties]) do
+    from_data([event, properties])
+  end
+
+  @impl true
   def from_data([name, tx_id | properties]) when is_binary(name) do
     %__MODULE__{name: name, tx_id: tx_id, properties: properties}
   end

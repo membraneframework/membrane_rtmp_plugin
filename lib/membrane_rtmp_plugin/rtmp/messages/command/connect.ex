@@ -52,10 +52,10 @@ defmodule Membrane.RTMP.Messages.Connect do
 
   @attributes_to_keys Map.new(@keys_to_attributes, fn {key, attribute} -> {attribute, key} end)
 
-  @name "connect"
+  @names ["connect", "@connect"]
 
   @impl true
-  def from_data([@name, tx_id, properties]) do
+  def from_data([name, tx_id, properties]) when name in @names do
     # We take keys according to RFC, but preserve all extra ones
     # https://github.com/melpon/rfc/blob/master/rtmp.md#7211-connect
     {rfc, extra} = Map.split(properties, Map.keys(@attributes_to_keys))

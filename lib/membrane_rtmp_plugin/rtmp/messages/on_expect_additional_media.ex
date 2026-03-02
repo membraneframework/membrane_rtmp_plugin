@@ -27,8 +27,10 @@ defmodule Membrane.RTMP.Messages.OnExpectAdditionalMedia do
           processing_intents: [String.t()]
         }
 
+  @names ["onExpectAdditionalMedia", "@onExpectAdditionalMedia"]
+
   @impl true
-  def from_data(["@setDataFrame", "onExpectAdditionalMedia", properties]) do
+  def from_data(["@setDataFrame", name, properties]) when name in @names do
     new(properties)
   end
 

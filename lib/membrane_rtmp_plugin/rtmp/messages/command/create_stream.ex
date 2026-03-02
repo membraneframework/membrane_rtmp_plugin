@@ -11,10 +11,10 @@ defmodule Membrane.RTMP.Messages.CreateStream do
           tx_id: non_neg_integer()
         }
 
-  @name "createStream"
+  @names ["createStream", "@createStream"]
 
   @impl true
-  def from_data([@name, tx_id, :null]) do
+  def from_data([name, tx_id, :null]) when name in @names do
     %__MODULE__{tx_id: tx_id}
   end
 
