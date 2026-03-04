@@ -57,6 +57,11 @@ defmodule Membrane.RTMP.Messages.SetDataFrame do
     OnExpectAdditionalMedia.from_data(data)
   end
 
+  @impl true
+  def from_data(["@setDataFrame", "@" <> event, properties]) do
+    from_data(["@setDataFrame", event, properties])
+  end
+
   @spec new([{String.t(), any()}]) :: t()
   def new(options) do
     params =
