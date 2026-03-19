@@ -323,39 +323,44 @@ defmodule Membrane.RTMP.MessageParser do
       remaining_bytes = partial.header.body_size - partial.bytes_received
       bytes_to_read = min(remaining_bytes, chunk_size)
 
-      case rest do
-        <<chunk::binary-size(bytes_to_read), rest::binary>> ->
-          new_bytes_received = partial.bytes_received + bytes_to_read
-          new_body_chunks = [partial.body_chunks, chunk]
+      do_continue_partial_message(header, rest, bytes_to_read, partial, partial_messages)
+    end
+  end
 
-          if new_bytes_received >= partial.header.body_size do
-            # Message is now complete
-            # Don't update previous_headers here - update_state_with_message will handle it
-            complete_body = IO.iodata_to_binary(new_body_chunks)
-            message = Message.deserialize_message(partial.header.type_id, complete_body)
-            new_partial_messages = Map.delete(partial_messages, header.chunk_stream_id)
+  defp do_continue_partial_message(header, rest, bytes_to_read, partial, partial_messages) do
+    case rest do
+      <<chunk::binary-size(bytes_to_read), rest::binary>> ->
+        complete_partial_chunk(header, chunk, rest, partial, partial_messages)
 
-            # Use the original header from when the message started
-            {:complete, partial.header, message, rest, new_partial_messages}
-          else
-            # Still partial, continue buffering
-            # Keep previous_headers as is (already has the header from first chunk)
-            updated_partial = %{
-              partial
-              | body_chunks: new_body_chunks,
-                bytes_received: new_bytes_received
-            }
+      _rest ->
+        {:error, :need_more_data}
+    end
+  end
 
-            new_partial_messages =
-              Map.put(partial_messages, header.chunk_stream_id, updated_partial)
+  defp complete_partial_chunk(header, chunk, rest, partial, partial_messages) do
+    new_bytes_received = partial.bytes_received + byte_size(chunk)
+    new_body_chunks = [partial.body_chunks, chunk]
 
-            # Return :no_change for previous_headers to indicate no update needed
-            {:partial, rest, new_partial_messages, :no_change}
-          end
+    if new_bytes_received >= partial.header.body_size do
+      # Message is now complete
+      complete_body = IO.iodata_to_binary(new_body_chunks)
+      message = Message.deserialize_message(partial.header.type_id, complete_body)
+      new_partial_messages = Map.delete(partial_messages, header.chunk_stream_id)
 
-        _rest ->
-          {:error, :need_more_data}
-      end
+      # Use the original header from when the message started
+      {:complete, partial.header, message, rest, new_partial_messages}
+    else
+      # Still partial, continue buffering
+      updated_partial = %{
+        partial
+        | body_chunks: new_body_chunks,
+          bytes_received: new_bytes_received
+      }
+
+      new_partial_messages =
+        Map.put(partial_messages, header.chunk_stream_id, updated_partial)
+
+      {:partial, rest, new_partial_messages, :no_change}
     end
   end
 
