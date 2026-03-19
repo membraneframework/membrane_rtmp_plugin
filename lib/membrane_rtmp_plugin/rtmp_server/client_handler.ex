@@ -117,7 +117,7 @@ defmodule Membrane.RTMPServer.ClientHandler do
     events = [:connection_closed]
     state = Enum.reduce(events, state, &handle_event/2)
 
-    {:noreply, state}
+    {:stop, :normal, state}
   end
 
   @impl true
@@ -130,7 +130,7 @@ defmodule Membrane.RTMPServer.ClientHandler do
     events = [:connection_closed]
     state = Enum.reduce(events, state, &handle_event/2)
 
-    {:noreply, state}
+    {:stop, :normal, state}
   end
 
   @impl true
@@ -153,7 +153,7 @@ defmodule Membrane.RTMPServer.ClientHandler do
       :gen_tcp.close(state.socket)
     end
 
-    {:noreply, state}
+    {:stop, :normal, state}
   end
 
   @impl true
