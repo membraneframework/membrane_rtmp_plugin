@@ -13,8 +13,10 @@ defmodule Membrane.RTMP.Messages.AdditionalMedia do
           media: binary()
         }
 
+  @names ["additionalMedia", "@additionalMedia"]
+
   @impl true
-  def from_data(["additionalMedia", %{"id" => id, "media" => media}]) do
+  def from_data([name, %{"id" => id, "media" => media}]) when name in @names do
     %__MODULE__{id: id, media: media}
   end
 

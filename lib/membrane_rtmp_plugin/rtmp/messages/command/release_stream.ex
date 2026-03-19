@@ -15,10 +15,10 @@ defmodule Membrane.RTMP.Messages.ReleaseStream do
           tx_id: non_neg_integer()
         }
 
-  @name "releaseStream"
+  @names ["releaseStream", "@releaseStream"]
 
   @impl true
-  def from_data([@name, tx_id, :null, stream_key]) do
+  def from_data([name, tx_id, :null, stream_key]) when name in @names do
     %__MODULE__{tx_id: tx_id, stream_key: stream_key}
   end
 

@@ -276,6 +276,12 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
     use FFmpex.Options
     Logger.debug("Starting ffmpeg")
 
+    flv_flag = %FFmpex.Option{
+      name: "-flvflags",
+      argument: "no_duration_filesize",
+      contexts: [:output]
+    }
+
     command =
       FFmpex.new_command()
       |> add_global_option(option_y())
@@ -283,6 +289,7 @@ defmodule Membrane.RTMP.SourceBin.IntegrationTest do
       |> add_file_option(option_re())
       |> add_output_file(stream_url)
       |> add_file_option(option_f("flv"))
+      |> add_file_option(flv_flag)
       |> add_file_option(option_vcodec("copy"))
       |> add_file_option(option_acodec("copy"))
       |> maybe_add_file_timestamps_offset(opts)

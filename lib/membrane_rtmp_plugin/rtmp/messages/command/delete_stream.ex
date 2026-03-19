@@ -14,10 +14,10 @@ defmodule Membrane.RTMP.Messages.DeleteStream do
           stream_id: non_neg_integer()
         }
 
-  @name "deleteStream"
+  @names ["deleteStream", "@deleteStream"]
 
   @impl true
-  def from_data([@name, tx_id, :null, stream_id]) do
+  def from_data([name, tx_id, :null, stream_id]) when name in @names do
     %__MODULE__{tx_id: tx_id, stream_id: stream_id}
   end
 

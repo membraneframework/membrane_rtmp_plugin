@@ -75,8 +75,7 @@ defmodule Membrane.RTMP.Sink do
 
     options = %{options | tracks: Enum.uniq(options.tracks)}
 
-    unless length(options.tracks) > 0 and
-             Enum.all?(options.tracks, &Kernel.in(&1, [:audio, :video])) do
+    if Enum.any?(options.tracks, &(&1 not in [:audio, :video])) do
       raise ArgumentError, "All track have to be either :audio or :video"
     end
 

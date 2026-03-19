@@ -35,8 +35,10 @@ defmodule Membrane.RTMP.Messages.OnMetaData do
           audio_data_rate: number()
         }
 
+  @names ["onMetaData", "@onMetaData"]
+
   @impl true
-  def from_data(["onMetaData", properties]) do
+  def from_data([name, properties]) when name in @names do
     new(properties)
   end
 
