@@ -174,30 +174,30 @@ defmodule Membrane.RTMP.Header do
          <<rest::binary>>,
          previous_headers
        ) do
-    previous_header = previous_headers[chunk_stream_id]
+    case previous_headers[chunk_stream_id] do
+      nil ->
+        {:error, {:missing_previous_header, chunk_stream_id, :type_3}}
 
-    if previous_header == nil do
-      {:error, {:missing_previous_header, chunk_stream_id, :type_3}}
-    else
-      if previous_header.extended_timestamp? do
-        with {timestamp_delta, _extended_timestamp?, rest} <-
-               extract_timestamp(rest, @extended_timestamp_marker) do
+      %__MODULE__{} = previous_header ->
+        if previous_header.extended_timestamp? do
+          with {timestamp_delta, _extended_timestamp?, rest} <-
+                 extract_timestamp(rest, @extended_timestamp_marker) do
+            header = %__MODULE__{
+              previous_header
+              | timestamp: previous_header.timestamp + timestamp_delta,
+                timestamp_delta: timestamp_delta
+            }
+
+            {header, rest}
+          end
+        else
           header = %__MODULE__{
             previous_header
-            | timestamp: previous_header.timestamp + timestamp_delta,
-              timestamp_delta: timestamp_delta
+            | timestamp: previous_header.timestamp + previous_header.timestamp_delta
           }
 
           {header, rest}
         end
-      else
-        header = %__MODULE__{
-          previous_header
-          | timestamp: previous_header.timestamp + previous_header.timestamp_delta
-        }
-
-        {header, rest}
-      end
     end
   end
 
