@@ -176,7 +176,7 @@ defmodule Membrane.RTMP.Source do
   def handle_info(
         {:client_ref, client_ref, app, stream_key},
         _ctx,
-        %{mode: :builtin_server} = state
+        %{mode: :builtin_server, client_ref: nil} = state
       )
       when app == state.app and stream_key == state.stream_key do
     {[setup: :complete], %{state | client_ref: client_ref}}
@@ -187,7 +187,20 @@ defmodule Membrane.RTMP.Source do
         {:client_ref, _client_ref, app, stream_key},
         _ctx,
         %{mode: :builtin_server} = state
+      )
+      when app == state.app and stream_key == state.stream_key do
+    # Duplicate connection on same app/stream_key - ignore it
+    Logger.warning("Duplicate client connection detected on /#{app}/#{stream_key}, ignoring")
+    {[], state}
+  end
+
+  @impl true
+  def handle_info(
+        {:client_ref, _client_ref, app, stream_key},
+        _ctx,
+        %{mode: :builtin_server} = state
       ) do
+    # Connection on wrong app/stream_key
     Logger.warning("Unexpected client connected on /#{app}/#{stream_key}")
     {[], state}
   end

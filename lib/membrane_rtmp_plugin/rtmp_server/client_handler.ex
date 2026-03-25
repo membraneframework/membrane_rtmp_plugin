@@ -117,7 +117,7 @@ defmodule Membrane.RTMPServer.ClientHandler do
     events = [:connection_closed]
     state = Enum.reduce(events, state, &handle_event/2)
 
-    {:noreply, state}
+    {:stop, :normal, state}
   end
 
   @impl true
@@ -130,7 +130,7 @@ defmodule Membrane.RTMPServer.ClientHandler do
     events = [:connection_closed]
     state = Enum.reduce(events, state, &handle_event/2)
 
-    {:noreply, state}
+    {:stop, :normal, state}
   end
 
   @impl true
@@ -151,9 +151,10 @@ defmodule Membrane.RTMPServer.ClientHandler do
     if not state.published? do
       Logger.warning("No demand made for client /#{app}/#{stream_key}, terminating connection.")
       :gen_tcp.close(state.socket)
+      {:stop, :normal, state}
+    else
+      {:noreply, state}
     end
-
-    {:noreply, state}
   end
 
   @impl true
