@@ -151,9 +151,10 @@ defmodule Membrane.RTMPServer.ClientHandler do
     if not state.published? do
       Logger.warning("No demand made for client /#{app}/#{stream_key}, terminating connection.")
       :gen_tcp.close(state.socket)
+      {:stop, :normal, state}
+    else
+      {:noreply, state}
     end
-
-    {:stop, :normal, state}
   end
 
   @impl true
