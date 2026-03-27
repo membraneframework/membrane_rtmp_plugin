@@ -56,7 +56,11 @@ defmodule Membrane.RTMP.Header do
   * `0b10` - same as above plus derives `type_id` and `body_size`
   * `0b11` - all values are derived from the previous header with the same `chunk_stream_id`
   """
-  @spec deserialize(binary(), t() | nil) :: {t(), rest :: binary()} | {:error, :need_more_data}
+  @type deserialize_error_t ::
+          :need_more_data
+          | {:missing_previous_header, chunk_stream_id :: non_neg_integer(), fmt :: atom()}
+
+  @spec deserialize(binary(), t() | nil) :: {t(), rest :: binary()} | {:error, deserialize_error_t()}
 
   def deserialize(<<header_type::2, rest::bitstring>>, previous_headers) do
     # chunk basic header is made of the fmt and chunk_stream_id fields.
