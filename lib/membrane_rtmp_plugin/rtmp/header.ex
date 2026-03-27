@@ -60,7 +60,8 @@ defmodule Membrane.RTMP.Header do
           :need_more_data
           | {:missing_previous_header, chunk_stream_id :: non_neg_integer(), fmt :: atom()}
 
-  @spec deserialize(binary(), t() | nil) :: {t(), rest :: binary()} | {:error, deserialize_error_t()}
+  @spec deserialize(binary(), t() | nil) ::
+          {t(), rest :: binary()} | {:error, deserialize_error_t()}
 
   def deserialize(<<header_type::2, rest::bitstring>>, previous_headers) do
     # chunk basic header is made of the fmt and chunk_stream_id fields.
