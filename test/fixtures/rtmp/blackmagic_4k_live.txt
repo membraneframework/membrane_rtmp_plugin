@@ -1,0 +1,14 @@
+Source: Blackmagic Web Presenter 4K at 192.168.20.45
+Capture date: 2026-03-27
+Capture method: RTMP proxy/dumper on local port 2135 forwarding to a local RTMP listener on port 2935
+Fixture file: blackmagic_4k_live.chunks.bin
+Format: sequence of client->server post-handshake TCP reads, each stored as <little-32 length><chunk bytes>
+
+Why this fixture exists:
+- It captures a real 4K RTMP session from a Blackmagic Web Presenter.
+- It is stored with original TCP read boundaries, which matters for reproducing the parser behavior.
+- It is intentionally much smaller than storing a full media recording; the fixture is ~800 KB.
+
+Observed behavior:
+- current branch: replaying all reads leaves an empty parser buffer
+- origin/master: replaying the same reads leaves 12298 bytes buffered
