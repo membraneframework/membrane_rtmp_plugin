@@ -181,25 +181,7 @@ defmodule Membrane.RTMP.Header do
        ) do
     case previous_headers[chunk_stream_id] do
       %__MODULE__{} = previous_header ->
-        if previous_header.extended_timestamp? do
-          with {timestamp_delta, _extended_timestamp?, rest} <-
-                 extract_timestamp(rest, @extended_timestamp_marker) do
-            header = %__MODULE__{
-              previous_header
-              | timestamp: previous_header.timestamp + timestamp_delta,
-                timestamp_delta: timestamp_delta
-            }
-
-            {header, rest}
-          end
-        else
-          header = %__MODULE__{
-            previous_header
-            | timestamp: previous_header.timestamp + previous_header.timestamp_delta
-          }
-
-          {header, rest}
-        end
+        deserialize_type_3_header(previous_header, rest)
 
       _nil ->
         {:error, {:missing_previous_header, chunk_stream_id, :type_3}}
@@ -208,6 +190,28 @@ defmodule Membrane.RTMP.Header do
 
   defp deserialize_message_header(_basic_header, _data, _prev_header),
     do: {:error, :need_more_data}
+
+  defp deserialize_type_3_header(%__MODULE__{extended_timestamp?: true} = previous_header, rest) do
+    with {timestamp_delta, _extended_timestamp?, rest} <-
+           extract_timestamp(rest, @extended_timestamp_marker) do
+      header = %__MODULE__{
+        previous_header
+        | timestamp: previous_header.timestamp + timestamp_delta,
+          timestamp_delta: timestamp_delta
+      }
+
+      {header, rest}
+    end
+  end
+
+  defp deserialize_type_3_header(previous_header, rest) do
+    header = %{
+      previous_header
+      | timestamp: previous_header.timestamp + previous_header.timestamp_delta
+    }
+
+    {header, rest}
+  end
 
   @spec serialize(t()) :: binary()
   def serialize(%__MODULE__{chunk_stream_id: chunk_stream_id} = header)

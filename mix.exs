@@ -1,7 +1,7 @@
 defmodule Membrane.RTMP.Mixfile do
   use Mix.Project
 
-  @version "0.29.3"
+  @version "0.29.4"
   @github_url "https://github.com/membraneframework/membrane_rtmp_plugin"
 
   def project do
@@ -52,9 +52,9 @@ defmodule Membrane.RTMP.Mixfile do
       {:ffmpex, "~> 0.11.0", only: :test},
       {:membrane_stream_plugin, "~> 0.4.0", only: :test},
       # development
-      {:ex_doc, "~> 0.28", only: :dev, runtime: false},
-      {:dialyxir, "~> 1.1", only: :dev, runtime: false},
-      {:credo, "~> 1.6", only: :dev, runtime: false}
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
+      {:dialyxir, ">= 0.0.0", only: :dev, runtime: false},
+      {:credo, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
 
@@ -65,6 +65,7 @@ defmodule Membrane.RTMP.Mixfile do
 
     if System.get_env("CI") == "true" do
       # Store PLTs in cacheable directory for CI
+      File.mkdir_p!(Path.join([__DIR__, "priv", "plts"]))
       [plt_local_path: "priv/plts", plt_core_path: "priv/plts"] ++ opts
     else
       opts
