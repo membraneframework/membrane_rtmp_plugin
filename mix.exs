@@ -24,7 +24,7 @@ defmodule Membrane.RTMP.Mixfile do
       source_url: @github_url,
       homepage_url: "https://membraneframework.org",
       docs: docs(),
-      aliases: [docs: ["docs", &prepend_llms_links/1]]
+      aliases: [docs: ["docs", &append_llms_links/1]]
     ]
   end
 
@@ -100,7 +100,7 @@ defmodule Membrane.RTMP.Mixfile do
     ]
   end
 
-  defp prepend_llms_links(_) do
+  defp append_llms_links(_args) do
     output_dir = docs()[:output] || "doc"
     path = Path.join(output_dir, "llms.txt")
 
