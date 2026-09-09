@@ -12,12 +12,46 @@ defmodule Membrane.RTMP.Sink do
 
   require Membrane.{H264, Logger}
 
-  alias __MODULE__.{Native, State}
+  alias __MODULE__.Native
   alias Membrane.{AAC, Buffer, H264}
 
   @supported_protocols ["rtmp://", "rtmps://"]
   @connection_attempt_interval 500
   @type track_type :: :audio | :video
+
+  defmodule State do
+    @moduledoc false
+
+    alias Membrane.{Buffer, Pad}
+
+    @enforce_keys [
+      :rtmp_url,
+      :max_attempts,
+      :tracks,
+      :reset_timestamps,
+      :frame_buffer,
+      :forward_mode?
+    ]
+    defstruct @enforce_keys ++ [attempts: 0, native: nil, ready?: false, video_base_dts: nil]
+
+    @type t :: %__MODULE__{
+            rtmp_url: String.t(),
+            max_attempts: pos_integer() | :infinity,
+            tracks: [Membrane.RTMP.Sink.track_type()],
+            reset_timestamps: boolean(),
+            attempts: non_neg_integer(),
+            native: reference() | nil,
+            # Keys here are the pad names.
+            frame_buffer: %{Pad.ref() => Buffer.t() | nil},
+            ready?: boolean(),
+            # Activated when one of the source inputs gets closed. Interleaving is
+            # disabled, frame buffer is flushed and from that point buffers on the
+            # remaining pad are simply forwarded to the output.
+            # Always on if a single track is connected
+            forward_mode?: boolean(),
+            video_base_dts: Membrane.Time.t() | nil
+          }
+  end
 
   def_input_pad :audio,
     availability: :on_request,
