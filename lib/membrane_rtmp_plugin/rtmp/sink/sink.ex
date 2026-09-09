@@ -97,7 +97,7 @@ defmodule Membrane.RTMP.Sink do
         # Always on if a single track is connected
         forward_mode?: single_track?,
         video_base_dts: nil,
-        reset_timestampts: options.reset_timestamps
+        reset_timestamps: options.reset_timestamps
       })
 
     {[], state}
