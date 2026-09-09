@@ -70,10 +70,10 @@ defmodule Membrane.RTMP.Message do
   @spec chunk_payload(binary(), non_neg_integer(), non_neg_integer(), iolist()) :: iolist()
   def chunk_payload(payload, chunk_stream_id, chunk_size, acc \\ []) do
     case {payload, acc} do
-      {<<chunk::binary-size(chunk_size), rest::binary>>, []} ->
+      {<<chunk::binary-size(^chunk_size), rest::binary>>, []} ->
         chunk_payload(rest, chunk_stream_id, chunk_size, [chunk])
 
-      {<<chunk::binary-size(chunk_size), rest::binary>>, acc} ->
+      {<<chunk::binary-size(^chunk_size), rest::binary>>, acc} ->
         chunk_payload(rest, chunk_stream_id, chunk_size, [
           acc,
           chunk_separator(chunk_stream_id),

@@ -12,7 +12,7 @@ defmodule Membrane.RTMP.Sink do
 
   require Membrane.{H264, Logger}
 
-  alias __MODULE__.Native
+  alias __MODULE__.{Native, State}
   alias Membrane.{AAC, Buffer, H264}
 
   @supported_protocols ["rtmp://", "rtmps://"]
@@ -82,23 +82,14 @@ defmodule Membrane.RTMP.Sink do
     single_track? = length(options.tracks) == 1
     frame_buffer = Enum.map(options.tracks, &{Pad.ref(&1, 0), nil}) |> Enum.into(%{})
 
-    state =
-      options
-      |> Map.from_struct()
-      |> Map.merge(%{
-        attempts: 0,
-        native: nil,
-        # Keys here are the pad names.
-        frame_buffer: frame_buffer,
-        ready?: false,
-        # Activated when one of the source inputs gets closed. Interleaving is
-        # disabled, frame buffer is flushed and from that point buffers on the
-        # remaining pad are simply forwarded to the output.
-        # Always on if a single track is connected
-        forward_mode?: single_track?,
-        video_base_dts: nil,
-        reset_timestamps: options.reset_timestamps
-      })
+    state = %State{
+      rtmp_url: options.rtmp_url,
+      max_attempts: options.max_attempts,
+      tracks: options.tracks,
+      reset_timestamps: options.reset_timestamps,
+      frame_buffer: frame_buffer,
+      forward_mode?: single_track?
+    }
 
     {[], state}
   end
@@ -110,10 +101,8 @@ defmodule Membrane.RTMP.Sink do
 
     {:ok, native} = Native.create(state.rtmp_url, audio?, video?)
 
-    state
-    |> Map.put(:native, native)
-    |> try_connect()
-    |> then(&{[], &1})
+    state = try_connect(%{state | native: native})
+    {[], state}
   end
 
   @impl true
@@ -255,8 +244,8 @@ defmodule Membrane.RTMP.Sink do
   end
 
   defp fill_frame_buffer(state, pad, buffer) do
-    if get_in(state, [:frame_buffer, pad]) == nil do
-      put_in(state, [:frame_buffer, pad], buffer)
+    if state.frame_buffer[pad] == nil do
+      put_frame(state, pad, buffer)
     else
       raise "attempted to overwrite frame buffer on pad #{inspect(pad)}"
     end
@@ -283,7 +272,7 @@ defmodule Membrane.RTMP.Sink do
     state =
       state
       |> write_frame(pad, buffer)
-      |> put_in([:frame_buffer, pad], nil)
+      |> put_frame(pad, nil)
 
     {build_demand(state), state}
   end
@@ -299,8 +288,12 @@ defmodule Membrane.RTMP.Sink do
     Enum.reduce(pads_with_buffer, state, fn {pad, buffer}, state ->
       state
       |> write_frame(pad, buffer)
-      |> put_in([:frame_buffer, pad], nil)
+      |> put_frame(pad, nil)
     end)
+  end
+
+  defp put_frame(state, pad, buffer) do
+    %{state | frame_buffer: Map.put(state.frame_buffer, pad, buffer)}
   end
 
   defp write_frame(state, Pad.ref(:audio, 0), buffer) do
@@ -308,7 +301,7 @@ defmodule Membrane.RTMP.Sink do
 
     case Native.write_audio_frame(state.native, buffer.payload, buffer_pts) do
       {:ok, native} ->
-        Map.put(state, :native, native)
+        %{state | native: native}
 
       {:error, reason} ->
         raise "writing audio frame failed with reason: #{inspect(reason)}"
@@ -326,7 +319,7 @@ defmodule Membrane.RTMP.Sink do
            buffer.metadata.h264.key_frame?
          ) do
       {:ok, native} ->
-        Map.put(state, :native, native)
+        %{state | native: native}
 
       {:error, reason} ->
         raise "writing video frame failed with reason: #{inspect(reason)}"
@@ -344,7 +337,7 @@ defmodule Membrane.RTMP.Sink do
   end
 
   defp correct_timings(dts, pts, state) do
-    {base_dts, state} = Bunch.Map.get_updated!(state, :video_base_dts, &(&1 || dts))
-    {{dts - base_dts, pts - base_dts}, state}
+    base_dts = state.video_base_dts || dts
+    {{dts - base_dts, pts - base_dts}, %{state | video_base_dts: base_dts}}
   end
 end

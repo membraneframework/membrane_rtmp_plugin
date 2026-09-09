@@ -167,7 +167,7 @@ defmodule Membrane.RTMP.MessageParser do
     step_size = Handshake.expects_bytes(handshake)
 
     case payload do
-      <<step_data::binary-size(step_size), rest::binary>> ->
+      <<step_data::binary-size(^step_size), rest::binary>> ->
         case Handshake.handle_step(step_data, handshake) do
           {:continue_handshake, step, handshake} ->
             # continue with the handshake
@@ -286,7 +286,7 @@ defmodule Membrane.RTMP.MessageParser do
     bytes_to_read = min(header.body_size, chunk_size)
 
     case rest do
-      <<chunk::binary-size(bytes_to_read), rest::binary>> ->
+      <<chunk::binary-size(^bytes_to_read), rest::binary>> ->
         if bytes_to_read >= header.body_size do
           # Message is complete in a single chunk
           # Don't update previous_headers here - update_state_with_message will handle it
@@ -329,7 +329,7 @@ defmodule Membrane.RTMP.MessageParser do
 
   defp do_continue_partial_message(header, rest, bytes_to_read, partial, partial_messages) do
     case rest do
-      <<chunk::binary-size(bytes_to_read), rest::binary>> ->
+      <<chunk::binary-size(^bytes_to_read), rest::binary>> ->
         complete_partial_chunk(header, chunk, rest, partial, partial_messages)
 
       _rest ->

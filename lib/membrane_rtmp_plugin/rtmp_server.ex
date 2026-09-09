@@ -42,8 +42,6 @@ defmodule Membrane.RTMPServer do
   """
   use GenServer
 
-  require Logger
-
   alias Membrane.RTMPServer.ClientHandler
 
   @typedoc """
