@@ -66,7 +66,7 @@ defmodule Membrane.RTMP.AMF3.Parser do
   defp parse_value(<<0x07, rest::binary>>) do
     case check_value_type(rest) do
       {:value, size, rest} ->
-        <<string::binary-size(size), rest::binary>> = rest
+        <<string::binary-size(^size), rest::binary>> = rest
 
         {{:xml, string}, rest}
 
@@ -111,7 +111,7 @@ defmodule Membrane.RTMP.AMF3.Parser do
   defp parse_value(<<0x0B, rest::binary>>) do
     case check_value_type(rest) do
       {:value, size, rest} ->
-        <<string::binary-size(size), rest::binary>> = rest
+        <<string::binary-size(^size), rest::binary>> = rest
 
         {{:xml_script, string}, rest}
 
@@ -124,7 +124,7 @@ defmodule Membrane.RTMP.AMF3.Parser do
   defp parse_value(<<0x0C, rest::binary>>) do
     case check_value_type(rest) do
       {:value, size, rest} ->
-        <<bytes::binary-size(size), rest::binary>> = rest
+        <<bytes::binary-size(^size), rest::binary>> = rest
 
         {bytes, rest}
 
@@ -175,7 +175,7 @@ defmodule Membrane.RTMP.AMF3.Parser do
   defp parse_string(payload) do
     case check_value_type(payload) do
       {:value, size, rest} ->
-        <<string::binary-size(size), rest::binary>> = rest
+        <<string::binary-size(^size), rest::binary>> = rest
 
         {string, rest}
 
