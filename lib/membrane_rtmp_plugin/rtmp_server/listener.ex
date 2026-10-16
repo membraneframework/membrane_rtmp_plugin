@@ -40,6 +40,7 @@ defmodule Membrane.RTMPServer.Listener do
             use_ssl?: boolean(),
             socket_module: :gen_tcp | :ssl,
             server: pid(),
+            client_supervisor: pid(),
             port: non_neg_integer(),
             ssl_options: keyword()
           }
@@ -116,25 +117,42 @@ defmodule Membrane.RTMPServer.Listener do
           end
       end
 
-    {:ok, client_reference} =
-      GenServer.start_link(ClientHandler,
-        socket: client,
-        use_ssl?: options.use_ssl?,
-        server: options.server,
-        handle_new_client: options.handle_new_client,
-        client_timeout: options.client_timeout
-      )
+    client_handler_opts = [
+      socket: client,
+      use_ssl?: options.use_ssl?,
+      server: options.server,
+      handle_new_client: options.handle_new_client,
+      client_timeout: options.client_timeout
+    ]
 
-    case options.socket_module.controlling_process(client, client_reference) do
-      :ok ->
-        send(client_reference, :control_granted)
-
-      {:error, reason} ->
-        Logger.error(
-          "Couldn't pass control to process: #{inspect(client_reference)} due to: #{inspect(reason)}"
-        )
-    end
+    options.client_supervisor
+    |> DynamicSupervisor.start_child({ClientHandler, client_handler_opts})
+    |> handle_client_handler_start(client, options)
 
     accept_loop(socket, options)
+  end
+
+  defp handle_client_handler_start({:ok, client_reference}, client, options) do
+    client
+    |> options.socket_module.controlling_process(client_reference)
+    |> handle_control_transfer(client, client_reference, options)
+  end
+
+  defp handle_client_handler_start({:error, reason}, client, options) do
+    Logger.error("Couldn't start client handler due to: #{inspect(reason)}")
+    options.socket_module.close(client)
+  end
+
+  defp handle_control_transfer(:ok, _client, client_reference, _options) do
+    send(client_reference, :control_granted)
+  end
+
+  defp handle_control_transfer({:error, reason}, client, client_reference, options) do
+    Logger.error(
+      "Couldn't pass control to process: #{inspect(client_reference)} due to: #{inspect(reason)}"
+    )
+
+    DynamicSupervisor.terminate_child(options.client_supervisor, client_reference)
+    options.socket_module.close(client)
   end
 end
