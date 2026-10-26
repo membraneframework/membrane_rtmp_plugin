@@ -4,6 +4,7 @@ defmodule Membrane.RTMPServer.Listener do
   # Module responsible for maintaining the listening socket.
 
   use Task
+  use Bunch
   require Logger
   alias Membrane.RTMPServer.ClientHandler
 
@@ -40,6 +41,7 @@ defmodule Membrane.RTMPServer.Listener do
             use_ssl?: boolean(),
             socket_module: :gen_tcp | :ssl,
             server: pid(),
+            client_supervisor: pid(),
             port: non_neg_integer(),
             ssl_options: keyword()
           }
@@ -116,25 +118,39 @@ defmodule Membrane.RTMPServer.Listener do
           end
       end
 
-    {:ok, client_reference} =
-      GenServer.start_link(ClientHandler,
-        socket: client,
-        use_ssl?: options.use_ssl?,
-        server: options.server,
-        handle_new_client: options.handle_new_client,
-        client_timeout: options.client_timeout
-      )
+    start_client_handler(client, options)
+    accept_loop(socket, options)
+  end
 
-    case options.socket_module.controlling_process(client, client_reference) do
-      :ok ->
-        send(client_reference, :control_granted)
+  defp start_client_handler(client, options) do
+    client_handler_opts = [
+      socket: client,
+      use_ssl?: options.use_ssl?,
+      server: options.server,
+      handle_new_client: options.handle_new_client,
+      client_timeout: options.client_timeout
+    ]
 
-      {:error, reason} ->
+    withl start:
+            {:ok, client_reference} <-
+              DynamicSupervisor.start_child(
+                options.client_supervisor,
+                {ClientHandler, client_handler_opts}
+              ),
+          control: :ok <- options.socket_module.controlling_process(client, client_reference) do
+      send(client_reference, :control_granted)
+    else
+      start: {:error, reason} ->
+        Logger.error("Couldn't start client handler due to: #{inspect(reason)}")
+        options.socket_module.close(client)
+
+      control: {:error, reason} ->
         Logger.error(
           "Couldn't pass control to process: #{inspect(client_reference)} due to: #{inspect(reason)}"
         )
-    end
 
-    accept_loop(socket, options)
+        DynamicSupervisor.terminate_child(options.client_supervisor, client_reference)
+        options.socket_module.close(client)
+    end
   end
 end

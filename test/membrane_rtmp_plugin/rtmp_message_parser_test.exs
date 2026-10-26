@@ -4,6 +4,8 @@ defmodule Membrane.RTMP.MessageParserTest do
   alias Membrane.RTMP.{Handshake, MessageParser}
 
   @fixture "test/fixtures/rtmp/blackmagic_4k_live.chunks.bin"
+  @handshake_size 1536
+  @invalid_rtmp_version 0x00
 
   test "consumes a real 4K Blackmagic RTMP capture without leftover buffered data" do
     parser =
@@ -31,6 +33,14 @@ defmodule Membrane.RTMP.MessageParserTest do
                }
              } = parser.partial_messages
     end
+  end
+
+  test "returns an error instead of raising on an invalid handshake version byte" do
+    parser = MessageParser.init(Handshake.init_server())
+    malformed_c0_c1 = <<@invalid_rtmp_version, 0::size(@handshake_size * 8)>>
+
+    assert {:error, {:invalid_handshake_step, :c0_c1}} =
+             MessageParser.parse_packet_messages(malformed_c0_c1, parser)
   end
 
   defp decode_chunks(data) do

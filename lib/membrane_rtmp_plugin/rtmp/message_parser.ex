@@ -66,7 +66,7 @@ defmodule Membrane.RTMP.MessageParser do
   to receive more data to continue with emitting new messages.
   """
   @spec parse_packet_messages(packet :: binary(), message_parser :: struct(), [{any(), any()}]) ::
-          {[Message.t()], message_parser :: struct()}
+          {[Message.t()], message_parser :: struct()} | {:error, term()}
   def parse_packet_messages(packet, message_parser, messages \\ [])
 
   def parse_packet_messages(<<>>, %{buffer: <<>>} = message_parser, messages) do
@@ -75,6 +75,9 @@ defmodule Membrane.RTMP.MessageParser do
 
   def parse_packet_messages(packet, message_parser, messages) do
     case handle_packet(packet, message_parser) do
+      {:error, reason, _message_parser} ->
+        {:error, reason}
+
       {header, message, message_parser} ->
         parse_packet_messages(<<>>, message_parser, [{header, message} | messages])
 
@@ -105,6 +108,7 @@ defmodule Membrane.RTMP.MessageParser do
   @spec handle_packet(packet_t(), t()) ::
           {Handshake.Step.t() | :need_more_data | :handshake_done | binary(), t()}
           | {Header.t(), Message.t(), t()}
+          | {:error, {:invalid_handshake_step, Handshake.Step.handshake_type_t()}, t()}
   def handle_packet(packet, state)
 
   def handle_packet(
@@ -193,8 +197,8 @@ defmodule Membrane.RTMP.MessageParser do
                  state_machine: fsm_transition(:handshake)
              }}
 
-          {:error, {:invalid_handshake_step, step_type}} ->
-            raise "Invalid handshake step: #{step_type}"
+          {:error, {:invalid_handshake_step, _step_type} = reason} ->
+            {:error, reason, state}
         end
 
       _payload ->

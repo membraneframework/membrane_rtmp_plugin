@@ -7,7 +7,7 @@ defmodule Membrane.RTMPServer.ClientHandler do
   # It also containts functions responsible for maintaining the lifecycle of the
   # client connection.
 
-  use GenServer
+  use GenServer, restart: :temporary
 
   require Logger
   alias Membrane.RTMP.{Handshake, MessageHandler, MessageParser, Messages}
@@ -80,6 +80,10 @@ defmodule Membrane.RTMPServer.ClientHandler do
     send(client_reference, {:demand_data, how_many_buffers_demanded})
     :ok
   end
+
+  @doc false
+  @spec start_link(keyword()) :: GenServer.on_start()
+  def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
 
   @impl true
   def init(opts) do
@@ -164,9 +168,21 @@ defmodule Membrane.RTMPServer.ClientHandler do
   end
 
   defp handle_data(data, state) do
-    {messages, message_parser_state} =
-      MessageParser.parse_packet_messages(data, state.message_parser_state)
+    data
+    |> MessageParser.parse_packet_messages(state.message_parser_state)
+    |> handle_parse_result(state)
+  end
 
+  defp handle_parse_result({:error, reason}, state) do
+    Logger.warning(
+      "Closing RTMP client connection #{inspect(peername(state))} due to: #{inspect(reason)}"
+    )
+
+    close_socket(state)
+    {:stop, :normal, state}
+  end
+
+  defp handle_parse_result({messages, message_parser_state}, state) do
     {message_handler_state, events} =
       MessageHandler.handle_client_messages(messages, state.message_handler_state)
 
@@ -283,6 +299,12 @@ defmodule Membrane.RTMPServer.ClientHandler do
       end
     end
   end
+
+  defp close_socket(%{use_ssl?: true, socket: socket}), do: :ssl.close(socket)
+  defp close_socket(%{use_ssl?: false, socket: socket}), do: :gen_tcp.close(socket)
+
+  defp peername(%{use_ssl?: true, socket: socket}), do: :ssl.peername(socket)
+  defp peername(%{use_ssl?: false, socket: socket}), do: :inet.peername(socket)
 
   defp finish_handshake(state) when not state.published? do
     {message_handler_state, events} =

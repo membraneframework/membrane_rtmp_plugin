@@ -4,6 +4,9 @@ defmodule Membrane.RTMPServer do
   New connections remain in an incomplete RTMP handshake state, until another process makes demand for their data.
   If no data is demanded within the client_timeout period, TCP socket is closed.
 
+  Each client connection runs in a separate process under a supervisor.
+  A failure of one client connection does not stop the server or the other client connections.
+
   Options:
   - handle_new_client: An anonymous function called when a new client connects.
       It receives the client reference, `app` and `stream_key`, allowing custom processing,
@@ -106,14 +109,17 @@ defmodule Membrane.RTMPServer do
 
   @impl true
   def init(server_options) do
+    {:ok, client_supervisor} = DynamicSupervisor.start_link(strategy: :one_for_one)
+
     pid =
       Task.start_link(Membrane.RTMPServer.Listener, :run, [
-        Map.merge(server_options, %{server: self()})
+        Map.merge(server_options, %{server: self(), client_supervisor: client_supervisor})
       ])
 
     {:ok,
      %{
        listener: pid,
+       client_supervisor: client_supervisor,
        port: nil,
        to_reply: [],
        use_ssl?: server_options.use_ssl?
