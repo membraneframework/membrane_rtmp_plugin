@@ -160,24 +160,21 @@ UNIFEX_TERM write_video_frame(UnifexEnv *env, State *state,
   AVRational video_stream_time_base =
       state->output_ctx->streams[state->video_stream_index]->time_base;
   AVPacket *packet = av_packet_alloc();
-
-  uint8_t *data = (uint8_t *)av_malloc(frame->size);
-  memcpy(data, frame->data, frame->size);
-  av_packet_from_data(packet, data, frame->size);
-
   UNIFEX_TERM write_frame_result;
+
+  // av_new_packet adds the padding FFmpeg's bitstream filters may read
+  if (!packet || av_new_packet(packet, frame->size) < 0) {
+    write_frame_result =
+        unifex_raise(env, "Failed allocating video frame data");
+    goto end;
+  }
+  memcpy(packet->data, frame->data, frame->size);
 
   if (is_key_frame) {
     packet->flags |= AV_PKT_FLAG_KEY;
   }
 
   packet->stream_index = state->video_stream_index;
-
-  if (!packet->data) {
-    write_frame_result =
-        unifex_raise(env, "Failed allocating video frame data");
-    goto end;
-  }
 
   int64_t dts_scaled =
       av_rescale_q(dts, MEMBRANE_TIME_BASE, video_stream_time_base);
@@ -214,20 +211,17 @@ UNIFEX_TERM write_audio_frame(UnifexEnv *env, State *state,
   AVRational audio_stream_time_base =
       state->output_ctx->streams[state->audio_stream_index]->time_base;
   AVPacket *packet = av_packet_alloc();
-
-  uint8_t *data = (uint8_t *)av_malloc(frame->size);
-  memcpy(data, frame->data, frame->size);
-  av_packet_from_data(packet, data, frame->size);
-
   UNIFEX_TERM write_frame_result;
 
-  packet->stream_index = state->audio_stream_index;
-
-  if (!packet->data) {
+  // av_new_packet adds the padding FFmpeg's bitstream filters may read
+  if (!packet || av_new_packet(packet, frame->size) < 0) {
     write_frame_result =
         unifex_raise(env, "Failed allocating audio frame data.");
     goto end;
   }
+  memcpy(packet->data, frame->data, frame->size);
+
+  packet->stream_index = state->audio_stream_index;
 
   int64_t pts_scaled =
       av_rescale_q(pts, MEMBRANE_TIME_BASE, audio_stream_time_base);
