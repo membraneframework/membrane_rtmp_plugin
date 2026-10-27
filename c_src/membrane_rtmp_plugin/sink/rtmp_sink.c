@@ -28,7 +28,14 @@ end:
   return create_result;
 }
 
+static bool is_closed(State *state) {
+  return state->closed || !state->output_ctx;
+}
+
 UNIFEX_TERM try_connect(UnifexEnv *env, State *state) {
+  if (is_closed(state)) {
+    return try_connect_result_error(env, "Stream is closed");
+  }
   const char *rtmp_url = state->output_ctx->url;
   if (!(state->output_ctx->oformat->flags & AVFMT_NOFILE)) {
     int av_err = avio_open(&state->output_ctx->pb, rtmp_url, AVIO_FLAG_WRITE);
@@ -52,6 +59,7 @@ UNIFEX_TERM flush_and_close_stream(UnifexEnv *env, State *state) {
   }
   avio_close(state->output_ctx->pb);
   avformat_free_context(state->output_ctx);
+  state->output_ctx = NULL;
   state->closed = true;
   return finalize_stream_result_ok(env);
 }
@@ -64,6 +72,9 @@ UNIFEX_TERM finalize_stream(UnifexEnv *env, State *state) {
 UNIFEX_TERM init_video_stream(UnifexEnv *env, State *state, int width,
                               int height, UnifexPayload *avc_config) {
   AVStream *video_stream;
+  if (is_closed(state)) {
+    return unifex_raise(env, "Stream is closed");
+  }
   if (state->video_stream_index != -1) {
     return init_video_stream_result_error_stream_format_resent(env);
   }
@@ -105,6 +116,9 @@ UNIFEX_TERM init_video_stream(UnifexEnv *env, State *state, int width,
 UNIFEX_TERM init_audio_stream(UnifexEnv *env, State *state, int channels,
                               int sample_rate, UnifexPayload *aac_config) {
   AVStream *audio_stream;
+  if (is_closed(state)) {
+    return unifex_raise(env, "Stream is closed");
+  }
   if (state->audio_stream_index != -1) {
     return init_audio_stream_result_error_stream_format_resent(env);
   }
@@ -151,10 +165,16 @@ UNIFEX_TERM init_audio_stream(UnifexEnv *env, State *state, int channels,
 UNIFEX_TERM write_video_frame(UnifexEnv *env, State *state,
                               UnifexPayload *frame, int64_t dts, int64_t pts,
                               int is_key_frame) {
+  if (is_closed(state)) {
+    return write_video_frame_result_error(env, "Stream is closed");
+  }
   if (state->video_stream_index == -1) {
     return write_video_frame_result_error(
         env,
         "Video stream is not initialized. Stream format has not been received");
+  }
+  if (!state->header_written) {
+    return write_video_frame_result_error(env, "Stream is not ready");
   }
 
   AVRational video_stream_time_base =
@@ -205,10 +225,16 @@ end:
 
 UNIFEX_TERM write_audio_frame(UnifexEnv *env, State *state,
                               UnifexPayload *frame, int64_t pts) {
+  if (is_closed(state)) {
+    return write_audio_frame_result_error(env, "Stream is closed");
+  }
   if (state->audio_stream_index == -1) {
     return write_audio_frame_result_error(
         env, "Audio stream has not been initialized. Stream format has not "
              "been received");
+  }
+  if (!state->header_written) {
+    return write_audio_frame_result_error(env, "Stream is not ready");
   }
 
   AVRational audio_stream_time_base =
