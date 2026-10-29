@@ -62,7 +62,8 @@ UNIFEX_TERM finalize_stream(UnifexEnv *env, State *state) {
 }
 
 UNIFEX_TERM init_video_stream(UnifexEnv *env, State *state, int width,
-                              int height, UnifexPayload *avc_config) {
+                              int height, int64_t bitrate,
+                              UnifexPayload *avc_config) {
   AVStream *video_stream;
   if (state->video_stream_index != -1) {
     return init_video_stream_result_error_stream_format_resent(env);
@@ -78,6 +79,7 @@ UNIFEX_TERM init_video_stream(UnifexEnv *env, State *state, int width,
   video_stream->codecpar->codec_id = AV_CODEC_ID_H264;
   video_stream->codecpar->width = width;
   video_stream->codecpar->height = height;
+  video_stream->codecpar->bit_rate = bitrate;
 
   video_stream->codecpar->extradata_size = avc_config->size;
   video_stream->codecpar->extradata =
@@ -103,7 +105,8 @@ UNIFEX_TERM init_video_stream(UnifexEnv *env, State *state, int width,
 }
 
 UNIFEX_TERM init_audio_stream(UnifexEnv *env, State *state, int channels,
-                              int sample_rate, UnifexPayload *aac_config) {
+                              int sample_rate, int64_t bitrate,
+                              UnifexPayload *aac_config) {
   AVStream *audio_stream;
   if (state->audio_stream_index != -1) {
     return init_audio_stream_result_error_stream_format_resent(env);
@@ -124,6 +127,7 @@ UNIFEX_TERM init_audio_stream(UnifexEnv *env, State *state, int channels,
   audio_stream->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
   audio_stream->codecpar->codec_id = AV_CODEC_ID_AAC;
   audio_stream->codecpar->sample_rate = sample_rate;
+  audio_stream->codecpar->bit_rate = bitrate;
   audio_stream->codecpar->ch_layout = *channel_layout;
   audio_stream->codecpar->extradata_size = aac_config->size;
   audio_stream->codecpar->extradata =

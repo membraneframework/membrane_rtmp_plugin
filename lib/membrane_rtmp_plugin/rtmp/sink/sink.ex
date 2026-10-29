@@ -29,6 +29,8 @@ defmodule Membrane.RTMP.Sink do
       :max_attempts,
       :tracks,
       :reset_timestamps,
+      :video_bitrate,
+      :audio_bitrate,
       :frame_buffer,
       :forward_mode?
     ]
@@ -39,6 +41,8 @@ defmodule Membrane.RTMP.Sink do
             max_attempts: pos_integer() | :infinity,
             tracks: [Membrane.RTMP.Sink.track_type()],
             reset_timestamps: boolean(),
+            video_bitrate: non_neg_integer(),
+            audio_bitrate: non_neg_integer(),
             attempts: non_neg_integer(),
             native: reference() | nil,
             # Keys here are the pad names.
@@ -94,6 +98,22 @@ defmodule Membrane.RTMP.Sink do
                 If enabled, this feature adjusts the timing of outgoing FLV packets so that they begin from zero.
                 Leaves it untouched otherwise.
                 """
+              ],
+              video_bitrate: [
+                spec: non_neg_integer(),
+                default: 0,
+                description: """
+                Video bitrate in bits per second, advertised as `videodatarate` in the FLV metadata.
+                `0` leaves it undeclared.
+                """
+              ],
+              audio_bitrate: [
+                spec: non_neg_integer(),
+                default: 0,
+                description: """
+                Audio bitrate in bits per second, advertised as `audiodatarate` in the FLV metadata.
+                `0` leaves it undeclared.
+                """
               ]
 
   @impl true
@@ -121,6 +141,8 @@ defmodule Membrane.RTMP.Sink do
       max_attempts: options.max_attempts,
       tracks: options.tracks,
       reset_timestamps: options.reset_timestamps,
+      video_bitrate: options.video_bitrate,
+      audio_bitrate: options.audio_bitrate,
       frame_buffer: frame_buffer,
       forward_mode?: single_track?
     }
@@ -160,7 +182,7 @@ defmodule Membrane.RTMP.Sink do
         _ctx,
         state
       ) do
-    case Native.init_video_stream(state.native, width, height, dcr) do
+    case Native.init_video_stream(state.native, width, height, state.video_bitrate, dcr) do
       {:ok, ready?, native} ->
         Membrane.Logger.debug("Correctly initialized video stream.")
         {[], %{state | native: native, ready?: ready?}}
@@ -188,6 +210,7 @@ defmodule Membrane.RTMP.Sink do
            state.native,
            stream_format.channels,
            stream_format.sample_rate,
+           state.audio_bitrate,
            aac_config
          ) do
       {:ok, ready?, native} ->
