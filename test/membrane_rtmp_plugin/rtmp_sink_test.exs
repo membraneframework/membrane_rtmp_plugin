@@ -66,6 +66,34 @@ defmodule Membrane.RTMP.SinkTest do
     test_stream_correctly_received(flv_output_file, @reference_flv_video_path, [:video])
   end
 
+  @tag :tmp_dir
+  test "Declares the configured bitrates in the FLV metadata", %{
+    flv_output_file: flv_output_file
+  } do
+    rtmp_server = Task.async(fn -> start_rtmp_server(flv_output_file) end)
+
+    sink_pipeline_pid =
+      start_sink_pipeline(@rtmp_server_url, [:audio, :video],
+        video_bitrate: 4_500_000,
+        audio_bitrate: 128_000
+      )
+
+    assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:video, 0), 5_000)
+    assert_end_of_stream(sink_pipeline_pid, :rtmp_sink, Pad.ref(:audio, 0))
+    :ok = Pipeline.terminate(sink_pipeline_pid)
+    assert :ok = Task.await(rtmp_server)
+
+    flv = File.read!(flv_output_file)
+    assert amf_number(flv, "videodatarate") == 4_500_000 / 1024
+    assert amf_number(flv, "audiodatarate") == 128_000 / 1024
+  end
+
+  defp amf_number(flv, key) do
+    {pos, len} = :binary.match(flv, key)
+    <<0, value::float-64-big>> = binary_part(flv, pos + len, 9)
+    value
+  end
+
   defp test_stream_correctly_received(flv_output, fixture, tracks) do
     rtmp_server = Task.async(fn -> start_rtmp_server(flv_output) end)
 
@@ -119,17 +147,19 @@ defmodule Membrane.RTMP.SinkTest do
     Pipeline.start_link_supervised!(options)
   end
 
-  defp start_sink_pipeline(rtmp_url, tracks) do
+  defp start_sink_pipeline(rtmp_url, tracks, sink_opts \\ []) do
     import Membrane.ChildrenSpec
 
     options = [
       spec:
         [
-          child(:rtmp_sink, %Membrane.RTMP.Sink{
-            rtmp_url: rtmp_url,
-            tracks: tracks,
-            max_attempts: 5
-          })
+          child(
+            :rtmp_sink,
+            struct!(
+              Membrane.RTMP.Sink,
+              [rtmp_url: rtmp_url, tracks: tracks, max_attempts: 5] ++ sink_opts
+            )
+          )
         ] ++
           get_audio_elements(tracks) ++
           get_video_elements(tracks),
