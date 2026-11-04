@@ -43,16 +43,28 @@ UNIFEX_TERM try_connect(UnifexEnv *env, State *state) {
   return try_connect_result_ok(env);
 }
 
+static void close_output(State *state) {
+  if (!state->output_ctx || state->closed) {
+    return;
+  }
+  if (state->output_ctx->pb) {
+    avio_closep(&state->output_ctx->pb);
+  }
+  avformat_free_context(state->output_ctx);
+  state->output_ctx = NULL;
+  state->closed = true;
+}
+
 UNIFEX_TERM flush_and_close_stream(UnifexEnv *env, State *state) {
   if (!state->output_ctx || state->closed || !is_ready(state)) {
+    close_output(state);
     return finalize_stream_result_ok(env);
   }
-  if (av_write_trailer(state->output_ctx)) {
+  int trailer_err = av_write_trailer(state->output_ctx);
+  close_output(state);
+  if (trailer_err) {
     return unifex_raise(env, "Failed writing stream trailer");
   }
-  avio_close(state->output_ctx->pb);
-  avformat_free_context(state->output_ctx);
-  state->closed = true;
   return finalize_stream_result_ok(env);
 }
 
@@ -155,7 +167,7 @@ UNIFEX_TERM init_audio_stream(UnifexEnv *env, State *state, int channels,
 UNIFEX_TERM write_video_frame(UnifexEnv *env, State *state,
                               UnifexPayload *frame, int64_t dts, int64_t pts,
                               int is_key_frame) {
-  if (state->video_stream_index == -1) {
+  if (!state->output_ctx || state->video_stream_index == -1) {
     return write_video_frame_result_error(
         env,
         "Video stream is not initialized. Stream format has not been received");
@@ -209,7 +221,7 @@ end:
 
 UNIFEX_TERM write_audio_frame(UnifexEnv *env, State *state,
                               UnifexPayload *frame, int64_t pts) {
-  if (state->audio_stream_index == -1) {
+  if (!state->output_ctx || state->audio_stream_index == -1) {
     return write_audio_frame_result_error(
         env, "Audio stream has not been initialized. Stream format has not "
              "been received");
@@ -271,8 +283,10 @@ void handle_init_state(State *state) {
 
 void handle_destroy_state(UnifexEnv *env, State *state) {
   UNIFEX_UNUSED(env);
-  if (!state->closed)
-    flush_and_close_stream(env, state);
+  if (state->output_ctx && !state->closed && is_ready(state)) {
+    av_write_trailer(state->output_ctx);
+  }
+  close_output(state);
 }
 
 bool is_ready(State *state) {
