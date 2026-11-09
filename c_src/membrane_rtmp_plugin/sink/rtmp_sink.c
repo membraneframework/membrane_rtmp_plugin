@@ -19,7 +19,7 @@ UNIFEX_TERM create(UnifexEnv *env, char *rtmp_url, int audio_present,
   avformat_alloc_output_context2(&state->output_ctx, NULL, "flv", rtmp_url);
   if (!state->output_ctx) {
     create_result =
-        create_result_error(env, "Failed to initialize output context");
+        create_result_error_alloc_failed(env);
     goto end;
   }
   create_result = create_result_ok(env, state);
@@ -30,7 +30,7 @@ end:
 
 UNIFEX_TERM try_connect(UnifexEnv *env, State *state) {
   if (!state->output_ctx) {
-    return try_connect_result_error(env, "Stream is closed");
+    return try_connect_result_error_closed(env);
   }
   const char *rtmp_url = state->output_ctx->url;
   if (!(state->output_ctx->oformat->flags & AVFMT_NOFILE)) {
@@ -80,7 +80,7 @@ UNIFEX_TERM init_video_stream(UnifexEnv *env, State *state, int width,
                               UnifexPayload *avc_config) {
   AVStream *video_stream;
   if (!state->output_ctx) {
-    return init_video_stream_result_error(env, "Stream is closed");
+    return init_video_stream_result_error_closed(env);
   }
   if (state->video_stream_index != -1) {
     return init_video_stream_result_error_stream_format_resent(env);
@@ -110,7 +110,7 @@ UNIFEX_TERM init_video_stream(UnifexEnv *env, State *state, int width,
   bool ready = is_ready(state);
   if (ready && !state->header_written) {
     if (!state->output_ctx->pb) {
-      return init_video_stream_result_error(env, "Stream is not connected");
+      return init_video_stream_result_error_not_connected(env);
     }
     AVDictionary *options = NULL;
     av_dict_set(&options, "flvflags", "no_duration_filesize", 0);
@@ -129,7 +129,7 @@ UNIFEX_TERM init_audio_stream(UnifexEnv *env, State *state, int channels,
                               UnifexPayload *aac_config) {
   AVStream *audio_stream;
   if (!state->output_ctx) {
-    return init_audio_stream_result_error(env, "Stream is closed");
+    return init_audio_stream_result_error_closed(env);
   }
   if (state->audio_stream_index != -1) {
     return init_audio_stream_result_error_stream_format_resent(env);
@@ -164,7 +164,7 @@ UNIFEX_TERM init_audio_stream(UnifexEnv *env, State *state, int channels,
   bool ready = is_ready(state);
   if (ready && !state->header_written) {
     if (!state->output_ctx->pb) {
-      return init_audio_stream_result_error(env, "Stream is not connected");
+      return init_audio_stream_result_error_not_connected(env);
     }
     AVDictionary *options = NULL;
     av_dict_set(&options, "flvflags", "no_duration_filesize", 0);
@@ -181,13 +181,14 @@ UNIFEX_TERM init_audio_stream(UnifexEnv *env, State *state, int channels,
 UNIFEX_TERM write_video_frame(UnifexEnv *env, State *state,
                               UnifexPayload *frame, int64_t dts, int64_t pts,
                               int is_key_frame) {
-  if (!state->output_ctx || state->video_stream_index == -1) {
-    return write_video_frame_result_error(
-        env,
-        "Video stream is not initialized. Stream format has not been received");
+  if (!state->output_ctx) {
+    return write_video_frame_result_error_closed(env);
+  }
+  if (state->video_stream_index == -1) {
+    return write_video_frame_result_error_not_initialized(env);
   }
   if (!state->header_written) {
-    return write_video_frame_result_error(env, "Stream is not ready");
+    return write_video_frame_result_error_not_ready(env);
   }
 
   AVRational video_stream_time_base =
@@ -238,13 +239,14 @@ end:
 
 UNIFEX_TERM write_audio_frame(UnifexEnv *env, State *state,
                               UnifexPayload *frame, int64_t pts) {
-  if (!state->output_ctx || state->audio_stream_index == -1) {
-    return write_audio_frame_result_error(
-        env, "Audio stream has not been initialized. Stream format has not "
-             "been received");
+  if (!state->output_ctx) {
+    return write_audio_frame_result_error_closed(env);
+  }
+  if (state->audio_stream_index == -1) {
+    return write_audio_frame_result_error_not_initialized(env);
   }
   if (!state->header_written) {
-    return write_audio_frame_result_error(env, "Stream is not ready");
+    return write_audio_frame_result_error_not_ready(env);
   }
 
   AVRational audio_stream_time_base =
