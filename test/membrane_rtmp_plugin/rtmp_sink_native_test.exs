@@ -11,10 +11,10 @@ defmodule Membrane.RTMP.Sink.NativeTest do
     assert {:error, _reason} = Native.write_audio_frame(native, <<0>>, 0)
   end
 
-  test "initializing the last stream before connecting raises instead of crashing" do
+  test "initializing the last stream before connecting returns an error" do
     assert {:ok, native} = Native.create("rtmp://localhost:1/app/key", false, true)
 
-    assert_raise ErlangError, fn -> Native.init_video_stream(native, 640, 480, 0, <<>>) end
+    assert {:error, _reason} = Native.init_video_stream(native, 640, 480, 0, <<>>)
   end
 
   test "using the stream after it is closed returns an error" do
@@ -24,6 +24,6 @@ defmodule Membrane.RTMP.Sink.NativeTest do
 
     assert {:error, _reason} = Native.try_connect(native)
     assert {:error, _reason} = Native.write_video_frame(native, <<0>>, 0, 0, true)
-    assert_raise ErlangError, fn -> Native.init_audio_stream(native, 2, 44_100, 0, <<>>) end
+    assert {:error, _reason} = Native.init_audio_stream(native, 2, 44_100, 0, <<>>)
   end
 end

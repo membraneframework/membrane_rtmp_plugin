@@ -22,7 +22,9 @@ spec init_video_stream(
        bitrate :: int64,
        avc_config :: payload
      ) ::
-       {:ok :: label, ready :: bool, state} | {:error :: label, :stream_format_resent :: label}
+       {:ok :: label, ready :: bool, state}
+       | {:error :: label, :stream_format_resent :: label}
+       | {:error :: label, reason :: string}
 
 spec write_video_frame(state, frame :: payload, dts :: int64, pts :: int64, is_key_frame :: bool) ::
        {:ok :: label, state} | {:error :: label, reason :: string}
@@ -34,7 +36,9 @@ spec init_audio_stream(
        bitrate :: int64,
        aac_config :: payload
      ) ::
-       {:ok :: label, ready :: bool, state} | {:error :: label, :stream_format_resent :: label}
+       {:ok :: label, ready :: bool, state}
+       | {:error :: label, :stream_format_resent :: label}
+       | {:error :: label, reason :: string}
 
 spec write_audio_frame(state, frame :: payload, pts :: int64) ::
        {:ok :: label, state} | {:error :: label, reason :: string}

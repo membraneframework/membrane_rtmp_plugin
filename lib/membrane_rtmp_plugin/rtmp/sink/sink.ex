@@ -193,6 +193,9 @@ defmodule Membrane.RTMP.Sink do
         )
 
         {[], state}
+
+      {:error, reason} ->
+        raise "initializing video stream failed with reason: #{inspect(reason)}"
     end
   end
 
@@ -223,6 +226,9 @@ defmodule Membrane.RTMP.Sink do
         )
 
         {[], state}
+
+      {:error, reason} ->
+        raise "initializing audio stream failed with reason: #{inspect(reason)}"
     end
   end
 

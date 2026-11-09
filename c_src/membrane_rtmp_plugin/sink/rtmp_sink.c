@@ -80,7 +80,7 @@ UNIFEX_TERM init_video_stream(UnifexEnv *env, State *state, int width,
                               UnifexPayload *avc_config) {
   AVStream *video_stream;
   if (!state->output_ctx) {
-    return unifex_raise(env, "Stream is closed");
+    return init_video_stream_result_error(env, "Stream is closed");
   }
   if (state->video_stream_index != -1) {
     return init_video_stream_result_error_stream_format_resent(env);
@@ -110,7 +110,7 @@ UNIFEX_TERM init_video_stream(UnifexEnv *env, State *state, int width,
   bool ready = is_ready(state);
   if (ready && !state->header_written) {
     if (!state->output_ctx->pb) {
-      return unifex_raise(env, "Stream is not connected");
+      return init_video_stream_result_error(env, "Stream is not connected");
     }
     AVDictionary *options = NULL;
     av_dict_set(&options, "flvflags", "no_duration_filesize", 0);
@@ -129,7 +129,7 @@ UNIFEX_TERM init_audio_stream(UnifexEnv *env, State *state, int channels,
                               UnifexPayload *aac_config) {
   AVStream *audio_stream;
   if (!state->output_ctx) {
-    return unifex_raise(env, "Stream is closed");
+    return init_audio_stream_result_error(env, "Stream is closed");
   }
   if (state->audio_stream_index != -1) {
     return init_audio_stream_result_error_stream_format_resent(env);
@@ -164,7 +164,7 @@ UNIFEX_TERM init_audio_stream(UnifexEnv *env, State *state, int channels,
   bool ready = is_ready(state);
   if (ready && !state->header_written) {
     if (!state->output_ctx->pb) {
-      return unifex_raise(env, "Stream is not connected");
+      return init_audio_stream_result_error(env, "Stream is not connected");
     }
     AVDictionary *options = NULL;
     av_dict_set(&options, "flvflags", "no_duration_filesize", 0);
