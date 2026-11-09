@@ -47,7 +47,7 @@ UNIFEX_TERM try_connect(UnifexEnv *env, State *state) {
 }
 
 static void close_output(State *state) {
-  if (!state->output_ctx || state->closed) {
+  if (!state->output_ctx) {
     return;
   }
   if (state->output_ctx->pb) {
@@ -55,11 +55,10 @@ static void close_output(State *state) {
   }
   avformat_free_context(state->output_ctx);
   state->output_ctx = NULL;
-  state->closed = true;
 }
 
 UNIFEX_TERM flush_and_close_stream(UnifexEnv *env, State *state) {
-  if (!state->output_ctx || state->closed || !state->header_written) {
+  if (!state->output_ctx || !state->header_written) {
     close_output(state);
     return finalize_stream_result_ok(env);
   }
@@ -297,14 +296,13 @@ void handle_init_state(State *state) {
   state->current_audio_pts = 0;
 
   state->header_written = false;
-  state->closed = false;
 
   state->output_ctx = NULL;
 }
 
 void handle_destroy_state(UnifexEnv *env, State *state) {
   UNIFEX_UNUSED(env);
-  if (state->output_ctx && !state->closed && state->header_written) {
+  if (state->output_ctx && state->header_written) {
     av_write_trailer(state->output_ctx);
   }
   close_output(state);
