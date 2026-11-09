@@ -63,7 +63,7 @@ UNIFEX_TERM flush_and_close_stream(UnifexEnv *env, State *state) {
   int trailer_err = av_write_trailer(state->output_ctx);
   close_output(state);
   if (trailer_err) {
-    return unifex_raise(env, "Failed writing stream trailer");
+    return finalize_stream_result_error_write_trailer_failed(env);
   }
   return finalize_stream_result_ok(env);
 }

@@ -14,7 +14,8 @@ spec try_connect(state) ::
        | {:error :: label, :closed :: label}
        | {:error :: label, reason :: string}
 
-spec finalize_stream(state) :: :ok :: label
+spec finalize_stream(state) ::
+       (:ok :: label) | {:error :: label, :write_trailer_failed :: label}
 
 spec init_video_stream(
        state,
