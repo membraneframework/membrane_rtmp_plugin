@@ -193,6 +193,9 @@ defmodule Membrane.RTMP.Sink do
         )
 
         {[], state}
+
+      {:error, reason} ->
+        raise "initializing video stream failed with reason: #{inspect(reason)}"
     end
   end
 
@@ -223,6 +226,9 @@ defmodule Membrane.RTMP.Sink do
         )
 
         {[], state}
+
+      {:error, reason} ->
+        raise "initializing audio stream failed with reason: #{inspect(reason)}"
     end
   end
 
@@ -245,7 +251,14 @@ defmodule Membrane.RTMP.Sink do
   def handle_end_of_stream(Pad.ref(type, 0), _ctx, state) do
     cond do
       state.forward_mode? ->
-        Native.finalize_stream(state.native)
+        case Native.finalize_stream(state.native) do
+          :ok ->
+            :ok
+
+          {:error, reason} ->
+            Membrane.Logger.warning("Finalizing stream failed: #{inspect(reason)}")
+        end
+
         {[], state}
 
       state.ready? ->

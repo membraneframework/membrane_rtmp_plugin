@@ -12,7 +12,6 @@ struct State {
 
   bool audio_present;
   bool video_present;
-  bool closed;
 
   int video_stream_index;
   int64_t current_video_dts;
